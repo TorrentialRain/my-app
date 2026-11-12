@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>My App</title>
+  <meta name="theme-color" content="#0b0b0f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="My App">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <h1 id="screen-title">Home</h1>
+    </header>
+
+    <main class="screens">
+      <!-- Each <section> is one screen. Put real content inside these later. -->
+      <section class="screen active" id="screen-home" data-title="Home">
+        <div class="card">
+          <h2>Welcome</h2>
+          <p>This is the empty shell. The real stuff goes here later.</p>
+        </div>
+        <div class="card placeholder">Placeholder</div>
+        <div class="card placeholder">Placeholder</div>
+      </section>
+
+      <section class="screen" id="screen-stuff" data-title="Stuff">
+        <div class="card placeholder">Placeholder</div>
+        <div class="card placeholder">Placeholder</div>
+        <div class="card placeholder">Placeholder</div>
+      </section>
+
+      <section class="screen" id="screen-settings" data-title="Settings">
+        <div class="list">
+          <div class="row"><span>Placeholder setting</span><span class="chev">›</span></div>
+          <div class="row"><span>Placeholder setting</span><span class="chev">›</span></div>
+          <div class="row"><span>Placeholder setting</span><span class="chev">›</span></div>
+        </div>
+        <p class="footnote">My App · shell v1</p>
+      </section>
+    </main>
+
+    <nav class="tabbar" aria-label="Tabs">
+      <button class="tab active" data-screen="home" aria-label="Home">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>
+        <span>Home</span>
+      </button>
+      <button class="tab" data-screen="stuff" aria-label="Stuff">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>
+        <span>Stuff</span>
+      </button>
+      <button class="tab" data-screen="settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="16" cy="7" r="2.5"/><circle cx="8" cy="17" r="2.5"/></svg>
+        <span>Settings</span>
+      </button>
+    </nav>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
