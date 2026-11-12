@@ -15,7 +15,21 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div id="app">
+  <!-- Sign-on screen. Covers the whole app until the right username + password are entered. -->
+  <div id="lock" class="lock">
+    <form id="lock-form" class="lock-card" autocomplete="on">
+      <img src="icons/icon-180.png" alt="" class="lock-icon">
+      <h1 id="lock-title">Sign in</h1>
+      <p id="lock-hint" class="lock-hint"></p>
+      <input id="lock-user" name="username" type="text" placeholder="Username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+      <input id="lock-pass" name="password" type="password" placeholder="Password" autocomplete="current-password" required>
+      <input id="lock-pass2" name="password2" type="password" placeholder="Password again" autocomplete="new-password" hidden>
+      <p id="lock-error" class="lock-error" role="alert"></p>
+      <button id="lock-go" type="submit">Sign in</button>
+    </form>
+  </div>
+
+  <div id="app" hidden>
     <header class="topbar">
       <h1 id="screen-title">Home</h1>
     </header>
@@ -41,9 +55,9 @@
         <div class="list">
           <div class="row"><span>Placeholder setting</span><span class="chev">›</span></div>
           <div class="row"><span>Placeholder setting</span><span class="chev">›</span></div>
-          <div class="row"><span>Placeholder setting</span><span class="chev">›</span></div>
+          <div class="row" id="lock-now" role="button"><span>Lock app</span><span class="chev">›</span></div>
         </div>
-        <p class="footnote">My App · shell v1</p>
+        <p class="footnote">My App · shell v2</p>
       </section>
     </main>
 
@@ -62,6 +76,7 @@
       </button>
     </nav>
   </div>
+  <script src="vault.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -106,3 +106,49 @@ html, body {
 }
 .tab svg { width: 26px; height: 26px; fill: currentColor; }
 .tab.active { color: var(--accent); }
+
+/* Sign-on screen */
+#app[hidden] { display: none; }
+.lock {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(env(safe-area-inset-top) + 24px) 28px calc(env(safe-area-inset-bottom) + 24px);
+  background: var(--bg);
+}
+.lock[hidden] { display: none; }
+.lock-card { width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 12px; text-align: center; }
+.lock-icon { width: 84px; height: 84px; border-radius: 20px; margin: 0 auto 6px; }
+.lock-card h1 { margin: 0; font-size: 26px; letter-spacing: -0.3px; }
+.lock-hint { margin: 0 0 4px; color: var(--muted); font-size: 14px; line-height: 1.4; min-height: 0; }
+.lock-hint:empty { display: none; }
+.lock-card input {
+  width: 100%;
+  padding: 14px 16px;
+  font: inherit;
+  font-size: 17px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  outline: none;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.lock-card input:focus { border-color: var(--accent); }
+.lock-card input[hidden] { display: none; }
+.lock-error { margin: 0; color: #ff6b6b; font-size: 14px; min-height: 18px; }
+.lock-card button {
+  padding: 14px;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: 0;
+  border-radius: 12px;
+}
+.lock-card button:disabled { opacity: 0.6; }

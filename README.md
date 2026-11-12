@@ -6,9 +6,14 @@ An empty app shell for iPhone. It's a web app that gets added to the home screen
 
 - `index.html` — the screens and the bottom tab bar
 - `styles.css` — the dark mode look
-- `app.js` — tab switching
+- `app.js` — tab switching and the sign-on screen
+- `vault.js` — saves the app's data on the device, scrambled with your username + password
 - `sw.js` — offline support
 - `manifest.webmanifest` + `icons/` — app name and icon
+
+## Privacy
+
+The code here is an empty frame. Your sign-on and everything you save stay on your own device and are never written into this repo.
 
 ## Put it on an iPhone
 
