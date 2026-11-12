@@ -1,11 +1,12 @@
 // Offline support. Tries the internet first (so updates show up right away),
 // and falls back to the saved copy when there's no connection.
-const CACHE = 'my-app-v1';
+const CACHE = 'my-app-v2';
 const FILES = [
   './',
   'index.html',
   'styles.css',
   'app.js',
+  'vault.js',
   'manifest.webmanifest',
   'icons/icon-180.png',
   'icons/icon-192.png',
