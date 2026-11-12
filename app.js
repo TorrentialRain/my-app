@@ -48,7 +48,12 @@ lockForm.addEventListener('submit', async (e) => {
   lockGo.disabled = true;
   try {
     if (!Vault.exists()) {
-      if (pass !== lockPass2.value) { lockError.textContent = 'The two passwords do not match.'; return; }
+      if (pass !== lockPass2.value) {
+        lockError.textContent = 'The two passwords do not match.';
+        lockPass.value = '';
+        lockPass2.value = '';
+        return;
+      }
       await Vault.create(user, pass);
     } else if (!(await Vault.open(user, pass))) {
       lockError.textContent = 'Wrong username or password.';
@@ -77,6 +82,6 @@ showLock();
 // Offline support
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
   });
 }
