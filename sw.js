@@ -1,6 +1,8 @@
 // Offline support. Tries the internet first (so updates show up right away),
 // and falls back to the saved copy when there's no connection.
-const CACHE = 'my-app-v2';
+// 'no-cache' makes the phone double-check with the server every time, so it
+// never mixes a new page with old styles or old code.
+const CACHE = 'my-app-v3';
 const FILES = [
   './',
   'index.html',
@@ -30,7 +32,7 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: 'no-cache' })
       .then((res) => {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(e.request, copy));
