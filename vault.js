@@ -39,6 +39,21 @@
     localStorage.setItem(STORE_KEY, JSON.stringify(stored));
   }
 
+  // Tiny helper around the browser's built-in database (IndexedDB).
+  function idb(mode, work) {
+    return new Promise((resolve, reject) => {
+      const open = indexedDB.open('hub-items', 1);
+      open.onupgradeneeded = () => open.result.createObjectStore('items');
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const tx = open.result.transaction('items', mode);
+        const req = work(tx.objectStore('items'));
+        tx.oncomplete = () => { open.result.close(); resolve(req ? req.result : undefined); };
+        tx.onerror = () => { open.result.close(); reject(tx.error); };
+      };
+    });
+  }
+
   const Vault = {
     // Has a sign-on been set up on this device yet?
     exists() { return localStorage.getItem(STORE_KEY) !== null; },
@@ -70,6 +85,29 @@
     },
 
     lock() { key = null; data = null; },
+
+    // Bigger things (copies of data box files) are kept one by one in the
+    // browser's database, each scrambled with the same key.
+    async saveItem(name, value) {
+      if (!key) throw new Error('Vault is locked');
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const box = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(JSON.stringify(value)));
+      await idb('readwrite', (st) => st.put({ iv, box }, name));
+    },
+
+    async loadItem(name) {
+      if (!key) throw new Error('Vault is locked');
+      const rec = await idb('readonly', (st) => st.get(name));
+      if (!rec) return undefined;
+      try {
+        const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: rec.iv }, key, rec.box);
+        return JSON.parse(dec.decode(plain));
+      } catch (e) {
+        return undefined;
+      }
+    },
+
+    async removeItem(name) { await idb('readwrite', (st) => st.delete(name)); },
 
     get(name) { return data ? data[name] : undefined; },
 

@@ -9,7 +9,12 @@ function show(name) {
   const current = document.getElementById('screen-' + name);
   title.textContent = current.dataset.title;
   document.querySelector('.screens').scrollTop = 0;
+  const hubShowing = name === 'home' && hubLoaded;
+  document.getElementById('app').classList.toggle('hub-on', hubShowing);
+  document.getElementById('hub-frame').hidden = !hubShowing;
 }
+
+let hubLoaded = false;
 
 tabs.forEach((t) => t.addEventListener('click', () => show(t.dataset.screen)));
 
@@ -65,7 +70,7 @@ lockForm.addEventListener('submit', async (e) => {
     lock.hidden = true;
     appEl.hidden = false;
     show('home');
-    refreshBox();
+    startApp();
   } catch (err) {
     lockError.textContent = 'Something went wrong. Close the app and try again.';
   } finally {
@@ -74,56 +79,76 @@ lockForm.addEventListener('submit', async (e) => {
 });
 
 document.getElementById('lock-now').addEventListener('click', () => {
+  closeHub();
   Vault.lock();
   showLock();
 });
 
-// Data box card on Home: connect this device, see the status, try a test save.
+// ---- Data box (Settings) and the Hub (first tab) ----
 const boxStatus = document.getElementById('box-status');
 const boxForm = document.getElementById('box-form');
 const boxKey = document.getElementById('box-key');
 const boxError = document.getElementById('box-error');
-const boxTest = document.getElementById('box-test');
 const boxConnect = document.getElementById('box-connect');
+const syncStatus = document.getElementById('sync-status');
+const hubFrame = document.getElementById('hub-frame');
+const hubMsg = document.getElementById('hub-msg');
+const importStatus = document.getElementById('import-status');
 
 function clock(ms) {
   return new Date(ms).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
-function deviceName() {
-  const ua = navigator.userAgent;
-  if (/iPhone/.test(ua)) return 'iPhone';
-  if (/iPad/.test(ua)) return 'iPad';
-  if (/Windows/.test(ua)) return 'Windows PC';
-  if (/Mac/.test(ua)) return 'Mac';
-  if (/Android/.test(ua)) return 'Android';
-  return 'Other device';
+function refreshBox() {
+  boxError.textContent = '';
+  const on = Store.isConnected();
+  boxForm.hidden = on;
+  boxStatus.textContent = on
+    ? 'Connected on this device.'
+    : 'Not connected on this device yet. Paste the key you made on GitHub for my-app-data.';
+  refreshSync();
 }
 
-async function refreshBox() {
-  boxError.textContent = '';
+function refreshSync() {
+  if (!Store.isConnected()) { syncStatus.textContent = ''; return; }
+  const n = HubDB.waiting();
+  const problem = HubDB.problem();
+  if (problem) syncStatus.textContent = 'Could not save: ' + problem;
+  else if (n) syncStatus.textContent = n + (n === 1 ? ' change is' : ' changes are') + ' waiting to be sent' + (Store.isOnline() === false ? ' (no signal).' : '.');
+  else syncStatus.textContent = Store.isOnline() === false ? 'No signal. Showing what was saved on this device.' : 'Everything is saved.';
+}
+window.addEventListener('hubdb', refreshSync);
+
+function closeHub() {
+  hubLoaded = false;
+  hubFrame.removeAttribute('srcdoc');
+  HubDB.stop();
+  show('home');
+}
+
+// Load the Hub's pages from the data box and show them.
+async function openHub() {
   if (!Store.isConnected()) {
-    boxStatus.textContent = 'Not connected on this device yet. Paste the key you made on GitHub for my-app-data.';
-    boxForm.hidden = false;
-    boxTest.hidden = true;
+    hubMsg.textContent = 'Connect the data box in Settings first.';
     return;
   }
-  boxForm.hidden = true;
-  boxTest.hidden = false;
-  boxStatus.textContent = 'Connected. Checking…';
+  hubMsg.textContent = 'Loading…';
   try {
-    await Store.read('meta/app.json');
-    const devices = await Store.read('meta/devices.json');
-    const last = devices && devices.length ? devices[devices.length - 1] : null;
-    if (Store.isOnline()) {
-      boxStatus.textContent = 'Connected.' + (last ? ' Last test save: ' + last.device + ', ' + clock(Date.parse(last.at)) + '.' : ' No test save yet.');
-    } else {
-      boxStatus.textContent = 'Connected, but no signal right now. Showing what was saved on this device ' + clock(Store.lastFetched('meta/app.json')) + '.';
-    }
+    const html = await Store.readText('app/hub.html');
+    if (!html) { hubMsg.textContent = 'The data box does not have the Hub pages yet.'; return; }
+    await HubDB.start();
+    // The pages ask "window.claude" for their database; point that at this app instead.
+    hubFrame.srcdoc = html.replace(/<body>/i, (m) => m + '<script>window.claude = window.parent.AppClaude;<\/script>');
+    hubLoaded = true;
+    show('home');
   } catch (e) {
-    boxStatus.textContent = 'Connected, but the data box could not be read.';
-    boxError.textContent = e.message;
+    hubMsg.textContent = 'Could not load the Hub. ' + e.message;
   }
+}
+
+function startApp() {
+  refreshBox();
+  openHub();
 }
 
 boxForm.addEventListener('submit', async (e) => {
@@ -133,7 +158,9 @@ boxForm.addEventListener('submit', async (e) => {
   try {
     await Store.connect(boxKey.value);
     boxKey.value = '';
-    await refreshBox();
+    refreshBox();
+    show('home');
+    openHub();
   } catch (err) {
     boxError.textContent = err.message;
   } finally {
@@ -141,27 +168,31 @@ boxForm.addEventListener('submit', async (e) => {
   }
 });
 
-boxTest.addEventListener('click', async () => {
-  boxError.textContent = '';
-  boxTest.disabled = true;
-  try {
-    await Store.write('meta/devices.json', (old) => {
-      const list = Array.isArray(old) ? old : [];
-      list.push({ device: deviceName(), at: new Date().toISOString() });
-      return list.slice(-10);
-    }, 'App: test save from ' + deviceName());
-    await refreshBox();
-  } catch (err) {
-    boxError.textContent = err.message;
-  } finally {
-    boxTest.disabled = false;
-  }
+document.getElementById('box-forget').addEventListener('click', async () => {
+  closeHub();
+  await Store.disconnect();
+  hubMsg.textContent = 'Connect the data box in Settings first.';
+  show('settings');
+  refreshBox();
 });
 
-document.getElementById('box-forget').addEventListener('click', async () => {
-  await Store.disconnect();
-  show('home');
-  refreshBox();
+// Import from Hub: pick the export file saved from the Hub, and its data replaces what is in the data box.
+document.getElementById('import-file').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    const parsed = JSON.parse(await file.text());
+    if (!parsed || parsed.kind !== 'hub-export' || !parsed.docs) throw new Error('That file is not a Hub export.');
+    const count = Object.keys(parsed.docs).length;
+    importStatus.textContent = 'Importing ' + count + ' items…';
+    const files = await HubDB.importAll(parsed.docs, (name, i, total) => {
+      importStatus.textContent = 'Importing ' + name + ' (' + i + ' of ' + total + ')…';
+    });
+    importStatus.textContent = 'Imported ' + count + ' items into ' + files + ' files, ' + clock(Date.now()) + '.';
+  } catch (err) {
+    importStatus.textContent = 'Import failed. ' + err.message;
+  }
 });
 
 showLock();

@@ -13,7 +13,7 @@
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="icon" type="image/png" href="icons/icon-192.png">
   <style>[hidden]{display:none!important}</style>
-  <link rel="stylesheet" href="styles.css?v=4">
+  <link rel="stylesheet" href="styles.css?v=5">
 </head>
 <body>
   <!-- Sign-on screen. Covers the whole app until the right username + password are entered. -->
@@ -32,12 +32,21 @@
 
   <div id="app" hidden>
     <header class="topbar">
-      <h1 id="screen-title">Home</h1>
+      <h1 id="screen-title">Hub</h1>
     </header>
 
+    <!-- The Hub itself. Its pages are loaded from the private data box, not from this repo. -->
+    <iframe id="hub-frame" title="Hub" hidden></iframe>
+
     <main class="screens">
-      <!-- Each <section> is one screen. Put real content inside these later. -->
-      <section class="screen active" id="screen-home" data-title="Home">
+      <section class="screen active" id="screen-home" data-title="Hub">
+        <div class="card">
+          <h2 id="hub-msg-title">Hub</h2>
+          <p id="hub-msg">Loading…</p>
+        </div>
+      </section>
+
+      <section class="screen" id="screen-settings" data-title="Settings">
         <div class="card" id="box-card">
           <h2>Data box</h2>
           <p id="box-status">Checking…</p>
@@ -46,37 +55,22 @@
             <button type="submit" id="box-connect">Connect</button>
           </form>
           <p id="box-error" class="lock-error" role="alert"></p>
-          <button type="button" id="box-test" class="box-btn" hidden>Test save</button>
+          <p id="sync-status" class="footnote left"></p>
         </div>
-        <div class="card placeholder">Placeholder</div>
-        <div class="card placeholder">Placeholder</div>
-      </section>
-
-      <section class="screen" id="screen-stuff" data-title="Stuff">
-        <div class="card placeholder">Placeholder</div>
-        <div class="card placeholder">Placeholder</div>
-        <div class="card placeholder">Placeholder</div>
-      </section>
-
-      <section class="screen" id="screen-settings" data-title="Settings">
         <div class="list">
-          <div class="row"><span>Placeholder setting</span><span class="chev">›</span></div>
-          <div class="row"><span>Placeholder setting</span><span class="chev">›</span></div>
+          <label class="row" id="import-row"><span>Import from Hub</span><span class="chev">›</span><input id="import-file" type="file" accept="application/json,.json" hidden></label>
           <div class="row" id="box-forget" role="button"><span>Disconnect data box</span><span class="chev">›</span></div>
           <div class="row" id="lock-now" role="button"><span>Lock app</span><span class="chev">›</span></div>
         </div>
-        <p class="footnote">My App · shell v4</p>
+        <p id="import-status" class="footnote"></p>
+        <p class="footnote">My App · shell v5</p>
       </section>
     </main>
 
     <nav class="tabbar" aria-label="Tabs">
-      <button class="tab active" data-screen="home" aria-label="Home">
+      <button class="tab active" data-screen="home" aria-label="Hub">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>
-        <span>Home</span>
-      </button>
-      <button class="tab" data-screen="stuff" aria-label="Stuff">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>
-        <span>Stuff</span>
+        <span>Hub</span>
       </button>
       <button class="tab" data-screen="settings" aria-label="Settings">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="16" cy="7" r="2.5"/><circle cx="8" cy="17" r="2.5"/></svg>
@@ -84,8 +78,9 @@
       </button>
     </nav>
   </div>
-  <script src="vault.js?v=4"></script>
-  <script src="store.js?v=4"></script>
-  <script src="app.js?v=4"></script>
+  <script src="vault.js?v=5"></script>
+  <script src="store.js?v=5"></script>
+  <script src="hubdb.js?v=5"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>

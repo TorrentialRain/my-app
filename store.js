@@ -59,16 +59,37 @@
   }
 
   // Fetch one file straight from the data box. Returns { data, sha } or null if missing.
-  async function fetchFile(path, useKey) {
+  // `asText` hands back the file as plain text instead of reading it as JSON.
+  async function fetchFile(path, useKey, asText) {
     const res = await call('GET', path, null, useKey);
     if (res.status === 404) return null;
     if (!res.ok) throw fail('server', 'The data box answered with an error (' + res.status + ').');
     const j = await res.json();
-    return { data: JSON.parse(fromB64(j.content)), sha: j.sha };
+    const text = fromB64(j.content);
+    return { data: asText ? text : JSON.parse(text), sha: j.sha };
   }
 
+  // Keep a copy on this device for when there is no signal.
+  const fetchedAt = {};
   async function remember(path, file) {
-    await Vault.set('cache:' + path, file ? { data: file.data, sha: file.sha, at: Date.now() } : { missing: true, at: Date.now() });
+    fetchedAt[path] = Date.now();
+    try {
+      await Vault.saveItem('file:' + path, file ? { data: file.data, sha: file.sha, at: fetchedAt[path] } : { missing: true, at: fetchedAt[path] });
+    } catch (e) { /* a full or blocked device database must never stop the app */ }
+  }
+
+  async function readAny(path, asText) {
+    try {
+      const file = await fetchFile(path, null, asText);
+      await remember(path, file);
+      return file ? file.data : undefined;
+    } catch (e) {
+      if (e.code !== 'offline') throw e;
+      const kept = await Vault.loadItem('file:' + path).catch(() => undefined);
+      if (kept === undefined) throw e;
+      fetchedAt[path] = kept.at;
+      return kept.missing ? undefined : kept.data;
+    }
   }
 
   const Store = {
@@ -88,25 +109,14 @@
 
     async disconnect() { await Vault.set('databox', null); },
 
-    // Read a file. With no signal it hands back the copy kept on this device.
-    async read(path) {
-      try {
-        const file = await fetchFile(path);
-        await remember(path, file);
-        return file ? file.data : undefined;
-      } catch (e) {
-        if (e.code !== 'offline') throw e;
-        const kept = Vault.get('cache:' + path);
-        if (kept === undefined) throw e;
-        return kept.missing ? undefined : kept.data;
-      }
-    },
+    // Read a JSON file. With no signal it hands back the copy kept on this device.
+    read(path) { return readAny(path, false); },
+
+    // Same, for a plain text file (like the app's pages).
+    readText(path) { return readAny(path, true); },
 
     // When was this file last fetched on this device? (milliseconds, or null)
-    lastFetched(path) {
-      const kept = Vault.get('cache:' + path);
-      return kept ? kept.at : null;
-    },
+    lastFetched(path) { return fetchedAt[path] || null; },
 
     // Save a file. `change` gets the newest data and returns what to save.
     async write(path, change, note) {
