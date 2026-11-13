@@ -2,13 +2,14 @@
 // and falls back to the saved copy when there's no connection.
 // 'no-cache' makes the phone double-check with the server every time, so it
 // never mixes a new page with old styles or old code.
-const CACHE = 'my-app-v3';
+const CACHE = 'my-app-v4';
 const FILES = [
   './',
   'index.html',
   'styles.css',
   'app.js',
   'vault.js',
+  'store.js',
   'manifest.webmanifest',
   'icons/icon-180.png',
   'icons/icon-192.png',
@@ -31,6 +32,8 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  // Only the app's own files. Calls to the data box go straight out, never through here.
+  if (new URL(e.request.url).origin !== self.location.origin) return;
   e.respondWith(
     fetch(e.request, { cache: 'no-cache' })
       .then((res) => {
