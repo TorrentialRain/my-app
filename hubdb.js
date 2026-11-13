@@ -197,9 +197,55 @@
     },
   };
 
-  // What the Hub's pages ask for. Only the database exists outside Claude;
-  // the pages already know how to cope when the other pieces are missing.
-  const AppClaude = { use: async (name) => (name === 'db' ? db : null) };
+  // ---- Calendar stand-in ----
+  // Inside Claude the Plan tab read Google Calendar live. Here a robot copies the
+  // events into the data box (collection "calendar", one entry per calendar) and
+  // the Plan tab reads them from there.
+  function calendarResult(input) {
+    const entry = state('calendar').docs[input.calendarId];
+    const all = entry && Array.isArray(entry.events) ? entry.events : [];
+    const from = String(input.startTime || '').slice(0, 10);
+    const to = String(input.endTime || '').slice(0, 10);
+    const dayOf = (t) => (t && (t.date || String(t.dateTime || '').slice(0, 10))) || '';
+    const events = all.filter((e) => {
+      const first = dayOf(e.start);
+      const last = dayOf(e.end) || first;
+      return (!to || first < to) && (!from || last >= from);
+    });
+    const at = entry && entry.fetchedAt ? Date.parse(entry.fetchedAt) : 0;
+    return { payload: { events: clone(events) }, cache: { storedAt: at || Date.now() } };
+  }
+
+  const mcp = {
+    async callTool(server, tool, input) {
+      if (tool === 'list_events') { await ready('calendar'); return calendarResult(input || {}); }
+      const e = new Error('Calendar changes go through the robot, not this app.');
+      e.code = 'unavailable';
+      throw e;
+    },
+    watchTool(server, tool, input, cb) {
+      if (tool !== 'list_events') return () => {};
+      return listen('calendar', () => null, () => cb({ type: 'data', result: calendarResult(input || {}) }),
+        () => cb({ type: 'error', error: { code: 'server_unavailable' } }));
+    },
+    async invalidate() { await checkAll(); },
+  };
+
+  // ---- Requests: things the app asks the robot to do at the next sync ----
+  // (Inside Claude, "Add an event" asked Claude on the spot. Here the note waits.)
+  const requests = {
+    async add(req) {
+      const ref = collRef('requests').doc();
+      await ref.set(Object.assign({ status: 'waiting', at: new Date().toISOString() }, clone(req)));
+      return ref.id;
+    },
+    async cancel(id) { await docRef('requests/' + id).update({ status: 'cancelled', cancelledAt: new Date().toISOString() }); },
+  };
+
+  // What the Hub's pages ask for. The pages already know how to cope when a
+  // piece is missing (asking for anything else gets "not available").
+  const kit = { db, mcp, requests };
+  const AppClaude = { use: async (name) => kit[name] || null };
 
   window.HubDB = HubDB;
   window.AppClaude = AppClaude;

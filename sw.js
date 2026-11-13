@@ -2,7 +2,7 @@
 // and falls back to the saved copy when there's no connection.
 // 'no-cache' makes the phone double-check with the server every time, so it
 // never mixes a new page with old styles or old code.
-const CACHE = 'my-app-v5';
+const CACHE = 'my-app-v6';
 const FILES = [
   './',
   'index.html',
