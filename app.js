@@ -1,4 +1,19 @@
 // The app is the Hub, full screen, with Settings over it.
+
+// A page inside a frame can't see the phone's safe areas (the notch and the
+// home bar), so measure them out here and hand them to the Hub as CSS values.
+function passSafeAreas() {
+  const frame = document.getElementById('hub-frame');
+  const doc = frame.contentDocument;
+  if (!doc || !doc.documentElement) return;
+  const mine = getComputedStyle(document.getElementById('app'));
+  ['--sat', '--sar', '--sab', '--sal'].forEach((name) => {
+    doc.documentElement.style.setProperty(name, mine.getPropertyValue(name).trim() || '0px');
+  });
+}
+window.addEventListener('resize', passSafeAreas);
+window.addEventListener('orientationchange', () => setTimeout(passSafeAreas, 250));
+
 const sheet = document.getElementById('sheet');
 const gear = document.getElementById('gear');
 
@@ -146,9 +161,11 @@ async function openHub() {
     await HubDB.start();
     // The pages ask "window.claude" for their database; point that at this app instead.
     hubFrame.srcdoc = html.replace(/<body>/i, (m) => m + '<script>window.claude = window.parent.AppClaude;<\/script>');
+    hubFrame.addEventListener('load', passSafeAreas);
     hubLoaded = true;
     hubFrame.hidden = false;
     hubWait.hidden = true;
+    passSafeAreas();
   } catch (e) {
     hubMsg.textContent = 'Could not load the Hub. ' + e.message;
   }
