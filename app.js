@@ -65,6 +65,7 @@ lockForm.addEventListener('submit', async (e) => {
     lock.hidden = true;
     appEl.hidden = false;
     show('home');
+    refreshBox();
   } catch (err) {
     lockError.textContent = 'Something went wrong. Close the app and try again.';
   } finally {
@@ -75,6 +76,92 @@ lockForm.addEventListener('submit', async (e) => {
 document.getElementById('lock-now').addEventListener('click', () => {
   Vault.lock();
   showLock();
+});
+
+// Data box card on Home: connect this device, see the status, try a test save.
+const boxStatus = document.getElementById('box-status');
+const boxForm = document.getElementById('box-form');
+const boxKey = document.getElementById('box-key');
+const boxError = document.getElementById('box-error');
+const boxTest = document.getElementById('box-test');
+const boxConnect = document.getElementById('box-connect');
+
+function clock(ms) {
+  return new Date(ms).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+function deviceName() {
+  const ua = navigator.userAgent;
+  if (/iPhone/.test(ua)) return 'iPhone';
+  if (/iPad/.test(ua)) return 'iPad';
+  if (/Windows/.test(ua)) return 'Windows PC';
+  if (/Mac/.test(ua)) return 'Mac';
+  if (/Android/.test(ua)) return 'Android';
+  return 'Other device';
+}
+
+async function refreshBox() {
+  boxError.textContent = '';
+  if (!Store.isConnected()) {
+    boxStatus.textContent = 'Not connected on this device yet. Paste the key you made on GitHub for my-app-data.';
+    boxForm.hidden = false;
+    boxTest.hidden = true;
+    return;
+  }
+  boxForm.hidden = true;
+  boxTest.hidden = false;
+  boxStatus.textContent = 'Connected. Checking…';
+  try {
+    await Store.read('meta/app.json');
+    const devices = await Store.read('meta/devices.json');
+    const last = devices && devices.length ? devices[devices.length - 1] : null;
+    if (Store.isOnline()) {
+      boxStatus.textContent = 'Connected.' + (last ? ' Last test save: ' + last.device + ', ' + clock(Date.parse(last.at)) + '.' : ' No test save yet.');
+    } else {
+      boxStatus.textContent = 'Connected, but no signal right now. Showing what was saved on this device ' + clock(Store.lastFetched('meta/app.json')) + '.';
+    }
+  } catch (e) {
+    boxStatus.textContent = 'Connected, but the data box could not be read.';
+    boxError.textContent = e.message;
+  }
+}
+
+boxForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  boxError.textContent = '';
+  boxConnect.disabled = true;
+  try {
+    await Store.connect(boxKey.value);
+    boxKey.value = '';
+    await refreshBox();
+  } catch (err) {
+    boxError.textContent = err.message;
+  } finally {
+    boxConnect.disabled = false;
+  }
+});
+
+boxTest.addEventListener('click', async () => {
+  boxError.textContent = '';
+  boxTest.disabled = true;
+  try {
+    await Store.write('meta/devices.json', (old) => {
+      const list = Array.isArray(old) ? old : [];
+      list.push({ device: deviceName(), at: new Date().toISOString() });
+      return list.slice(-10);
+    }, 'App: test save from ' + deviceName());
+    await refreshBox();
+  } catch (err) {
+    boxError.textContent = err.message;
+  } finally {
+    boxTest.disabled = false;
+  }
+});
+
+document.getElementById('box-forget').addEventListener('click', async () => {
+  await Store.disconnect();
+  show('home');
+  refreshBox();
 });
 
 showLock();

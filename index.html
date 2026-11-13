@@ -13,7 +13,7 @@
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="icon" type="image/png" href="icons/icon-192.png">
   <style>[hidden]{display:none!important}</style>
-  <link rel="stylesheet" href="styles.css?v=3">
+  <link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
   <!-- Sign-on screen. Covers the whole app until the right username + password are entered. -->
@@ -38,9 +38,15 @@
     <main class="screens">
       <!-- Each <section> is one screen. Put real content inside these later. -->
       <section class="screen active" id="screen-home" data-title="Home">
-        <div class="card">
-          <h2>Welcome</h2>
-          <p>This is the empty shell. The real stuff goes here later.</p>
+        <div class="card" id="box-card">
+          <h2>Data box</h2>
+          <p id="box-status">Checking…</p>
+          <form id="box-form" class="box-form" hidden>
+            <input id="box-key" type="password" placeholder="Paste your data box key" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
+            <button type="submit" id="box-connect">Connect</button>
+          </form>
+          <p id="box-error" class="lock-error" role="alert"></p>
+          <button type="button" id="box-test" class="box-btn" hidden>Test save</button>
         </div>
         <div class="card placeholder">Placeholder</div>
         <div class="card placeholder">Placeholder</div>
@@ -56,9 +62,10 @@
         <div class="list">
           <div class="row"><span>Placeholder setting</span><span class="chev">›</span></div>
           <div class="row"><span>Placeholder setting</span><span class="chev">›</span></div>
+          <div class="row" id="box-forget" role="button"><span>Disconnect data box</span><span class="chev">›</span></div>
           <div class="row" id="lock-now" role="button"><span>Lock app</span><span class="chev">›</span></div>
         </div>
-        <p class="footnote">My App · shell v3</p>
+        <p class="footnote">My App · shell v4</p>
       </section>
     </main>
 
@@ -77,7 +84,8 @@
       </button>
     </nav>
   </div>
-  <script src="vault.js?v=3"></script>
-  <script src="app.js?v=3"></script>
+  <script src="vault.js?v=4"></script>
+  <script src="store.js?v=4"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>
