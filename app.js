@@ -1,22 +1,19 @@
-// Tab switching: tapping a tab shows its screen and updates the big title.
-const tabs = document.querySelectorAll('.tab');
-const screens = document.querySelectorAll('.screen');
-const title = document.getElementById('screen-title');
+// The app is the Hub, full screen, with Settings over it.
+const sheet = document.getElementById('sheet');
+const gear = document.getElementById('gear');
 
-function show(name) {
-  screens.forEach((s) => s.classList.toggle('active', s.id === 'screen-' + name));
-  tabs.forEach((t) => t.classList.toggle('active', t.dataset.screen === name));
-  const current = document.getElementById('screen-' + name);
-  title.textContent = current.dataset.title;
-  document.querySelector('.screens').scrollTop = 0;
-  const hubShowing = name === 'home' && hubLoaded;
-  document.getElementById('app').classList.toggle('hub-on', hubShowing);
-  document.getElementById('hub-frame').hidden = !hubShowing;
+function openSettings() {
+  sheet.hidden = false;
+  gear.setAttribute('aria-expanded', 'true');
+  refreshBox();
+}
+
+function closeSettings() {
+  sheet.hidden = true;
+  gear.setAttribute('aria-expanded', 'false');
 }
 
 let hubLoaded = false;
-
-tabs.forEach((t) => t.addEventListener('click', () => show(t.dataset.screen)));
 
 // Sign-on screen. The app stays hidden until the Vault opens.
 const lock = document.getElementById('lock');
@@ -43,6 +40,7 @@ function showLock() {
   lockPass2.value = '';
   appEl.hidden = true;
   lock.hidden = false;
+  closeSettings();
 }
 
 lockForm.addEventListener('submit', async (e) => {
@@ -69,7 +67,6 @@ lockForm.addEventListener('submit', async (e) => {
     lockPass2.value = '';
     lock.hidden = true;
     appEl.hidden = false;
-    show('home');
     startApp();
   } catch (err) {
     lockError.textContent = 'Something went wrong. Close the app and try again.';
@@ -80,11 +77,16 @@ lockForm.addEventListener('submit', async (e) => {
 
 document.getElementById('lock-now').addEventListener('click', () => {
   closeHub();
+  closeSettings();
   Vault.lock();
   showLock();
 });
 
-// ---- Data box (Settings) and the Hub (first tab) ----
+gear.addEventListener('click', openSettings);
+document.getElementById('sheet-close').addEventListener('click', closeSettings);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !sheet.hidden) closeSettings(); });
+
+// ---- Data box and the Hub ----
 const boxStatus = document.getElementById('box-status');
 const boxForm = document.getElementById('box-form');
 const boxKey = document.getElementById('box-key');
@@ -92,6 +94,7 @@ const boxError = document.getElementById('box-error');
 const boxConnect = document.getElementById('box-connect');
 const syncStatus = document.getElementById('sync-status');
 const hubFrame = document.getElementById('hub-frame');
+const hubWait = document.getElementById('hub-wait');
 const hubMsg = document.getElementById('hub-msg');
 const importStatus = document.getElementById('import-status');
 
@@ -121,15 +124,19 @@ window.addEventListener('hubdb', refreshSync);
 
 function closeHub() {
   hubLoaded = false;
+  hubFrame.hidden = true;
   hubFrame.removeAttribute('srcdoc');
+  hubWait.hidden = false;
+  gear.hidden = true;
   HubDB.stop();
-  show('home');
 }
 
 // Load the Hub's pages from the data box and show them.
 async function openHub() {
+  gear.hidden = false;
   if (!Store.isConnected()) {
     hubMsg.textContent = 'Connect the data box in Settings first.';
+    openSettings();
     return;
   }
   hubMsg.textContent = 'Loading…';
@@ -140,13 +147,15 @@ async function openHub() {
     // The pages ask "window.claude" for their database; point that at this app instead.
     hubFrame.srcdoc = html.replace(/<body>/i, (m) => m + '<script>window.claude = window.parent.AppClaude;<\/script>');
     hubLoaded = true;
-    show('home');
+    hubFrame.hidden = false;
+    hubWait.hidden = true;
   } catch (e) {
     hubMsg.textContent = 'Could not load the Hub. ' + e.message;
   }
 }
 
 function startApp() {
+  closeSettings();
   refreshBox();
   openHub();
 }
@@ -159,7 +168,7 @@ boxForm.addEventListener('submit', async (e) => {
     await Store.connect(boxKey.value);
     boxKey.value = '';
     refreshBox();
-    show('home');
+    closeSettings();
     openHub();
   } catch (err) {
     boxError.textContent = err.message;
@@ -170,10 +179,10 @@ boxForm.addEventListener('submit', async (e) => {
 
 document.getElementById('box-forget').addEventListener('click', async () => {
   closeHub();
+  gear.hidden = false;
   await Store.disconnect();
   hubMsg.textContent = 'Connect the data box in Settings first.';
-  show('settings');
-  refreshBox();
+  openSettings();
 });
 
 // Back up now: save everything in the data box as one file on this device.
