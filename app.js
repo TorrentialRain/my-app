@@ -176,7 +176,35 @@ document.getElementById('box-forget').addEventListener('click', async () => {
   refreshBox();
 });
 
-// Import from Hub: pick the export file saved from the Hub, and its data replaces what is in the data box.
+// Back up now: save everything in the data box as one file on this device.
+document.getElementById('backup-now').addEventListener('click', async () => {
+  if (!Store.isConnected()) { importStatus.textContent = 'Connect the data box first.'; return; }
+  importStatus.textContent = 'Gathering your data…';
+  try {
+    const all = await HubDB.exportAll();
+    const d = new Date();
+    const name = 'app-backup-' + d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + '.json';
+    const file = new File([JSON.stringify(all)], name, { type: 'application/json' });
+    const count = Object.keys(all.docs).length;
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      // On iPhone this opens the share sheet: pick "Save to Files".
+      await navigator.share({ files: [file] });
+    } else {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(file);
+      a.download = name;
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    }
+    importStatus.textContent = 'Backup made: ' + name + ' (' + count + ' items).';
+  } catch (err) {
+    importStatus.textContent = err && err.name === 'AbortError' ? 'Backup cancelled.' : 'Backup failed. ' + (err && err.message ? err.message : '');
+  }
+});
+
+// Import: pick a backup file, or the export file saved from the Hub, and its data replaces what is in the data box.
 document.getElementById('import-file').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   e.target.value = '';
@@ -185,6 +213,12 @@ document.getElementById('import-file').addEventListener('change', async (e) => {
     const parsed = JSON.parse(await file.text());
     if (!parsed || parsed.kind !== 'hub-export' || !parsed.docs) throw new Error('That file is not a Hub export.');
     const count = Object.keys(parsed.docs).length;
+    const from = parsed.source === 'app-backup' ? 'backup' : 'Hub export';
+    const when = parsed.exportedAt ? clock(Date.parse(parsed.exportedAt)) : 'an unknown time';
+    if (!window.confirm('Replace what is in the data box with this ' + from + ' from ' + when + '? (' + count + ' items)')) {
+      importStatus.textContent = 'Import cancelled.';
+      return;
+    }
     importStatus.textContent = 'Importing ' + count + ' items…';
     const files = await HubDB.importAll(parsed.docs, (name, i, total) => {
       importStatus.textContent = 'Importing ' + name + ' (' + i + ' of ' + total + ')…';
