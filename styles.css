@@ -182,3 +182,13 @@ html, body {
 .box-btn { margin-top: 12px; width: 100%; }
 .box-form button:disabled, .box-btn:disabled { opacity: 0.6; }
 #box-error:empty { display: none; }
+
+/* The Hub fills the screen above the tab bar when it is showing */
+#hub-frame { flex: 1; width: 100%; border: 0; background: #e4e4e1; min-height: 0; }
+#hub-frame[hidden] { display: none; }
+#app.hub-on .topbar, #app.hub-on .screens { display: none; }
+.footnote.left { text-align: left; margin: 10px 0 0; }
+.footnote:empty { display: none; }
+.list + .footnote { margin-top: 14px; }
+#screen-settings .card { margin-bottom: 12px; }
+.row { cursor: pointer; }
