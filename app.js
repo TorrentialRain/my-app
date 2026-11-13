@@ -1,22 +1,19 @@
-// Tab switching: tapping a tab shows its screen and updates the big title.
-const tabs = document.querySelectorAll('.tab');
-const screens = document.querySelectorAll('.screen');
-const title = document.getElementById('screen-title');
+// The app is the Hub, full screen, with Settings over it.
+const sheet = document.getElementById('sheet');
+const gear = document.getElementById('gear');
 
-function show(name) {
-  screens.forEach((s) => s.classList.toggle('active', s.id === 'screen-' + name));
-  tabs.forEach((t) => t.classList.toggle('active', t.dataset.screen === name));
-  const current = document.getElementById('screen-' + name);
-  title.textContent = current.dataset.title;
-  document.querySelector('.screens').scrollTop = 0;
-  const hubShowing = name === 'home' && hubLoaded;
-  document.getElementById('app').classList.toggle('hub-on', hubShowing);
-  document.getElementById('hub-frame').hidden = !hubShowing;
+function openSettings() {
+  sheet.hidden = false;
+  gear.setAttribute('aria-expanded', 'true');
+  refreshBox();
+}
+
+function closeSettings() {
+  sheet.hidden = true;
+  gear.setAttribute('aria-expanded', 'false');
 }
 
 let hubLoaded = false;
-
-tabs.forEach((t) => t.addEventListener('click', () => show(t.dataset.screen)));
 
 // Sign-on screen. The app stays hidden until the Vault opens.
 const lock = document.getElementById('lock');
@@ -43,6 +40,7 @@ function showLock() {
   lockPass2.value = '';
   appEl.hidden = true;
   lock.hidden = false;
+  closeSettings();
 }
 
 lockForm.addEventListener('submit', async (e) => {
@@ -69,7 +67,6 @@ lockForm.addEventListener('submit', async (e) => {
     lockPass2.value = '';
     lock.hidden = true;
     appEl.hidden = false;
-    show('home');
     startApp();
   } catch (err) {
     lockError.textContent = 'Something went wrong. Close the app and try again.';
@@ -80,11 +77,16 @@ lockForm.addEventListener('submit', async (e) => {
 
 document.getElementById('lock-now').addEventListener('click', () => {
   closeHub();
+  closeSettings();
   Vault.lock();
   showLock();
 });
 
-// ---- Data box (Settings) and the Hub (first tab) ----
+gear.addEventListener('click', openSettings);
+document.getElementById('sheet-close').addEventListener('click', closeSettings);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !sheet.hidden) closeSettings(); });
+
+// ---- Data box and the Hub ----
 const boxStatus = document.getElementById('box-status');
 const boxForm = document.getElementById('box-form');
 const boxKey = document.getElementById('box-key');
@@ -92,6 +94,7 @@ const boxError = document.getElementById('box-error');
 const boxConnect = document.getElementById('box-connect');
 const syncStatus = document.getElementById('sync-status');
 const hubFrame = document.getElementById('hub-frame');
+const hubWait = document.getElementById('hub-wait');
 const hubMsg = document.getElementById('hub-msg');
 const importStatus = document.getElementById('import-status');
 
@@ -121,15 +124,19 @@ window.addEventListener('hubdb', refreshSync);
 
 function closeHub() {
   hubLoaded = false;
+  hubFrame.hidden = true;
   hubFrame.removeAttribute('srcdoc');
+  hubWait.hidden = false;
+  gear.hidden = true;
   HubDB.stop();
-  show('home');
 }
 
 // Load the Hub's pages from the data box and show them.
 async function openHub() {
+  gear.hidden = false;
   if (!Store.isConnected()) {
     hubMsg.textContent = 'Connect the data box in Settings first.';
+    openSettings();
     return;
   }
   hubMsg.textContent = 'Loading…';
@@ -140,13 +147,15 @@ async function openHub() {
     // The pages ask "window.claude" for their database; point that at this app instead.
     hubFrame.srcdoc = html.replace(/<body>/i, (m) => m + '<script>window.claude = window.parent.AppClaude;<\/script>');
     hubLoaded = true;
-    show('home');
+    hubFrame.hidden = false;
+    hubWait.hidden = true;
   } catch (e) {
     hubMsg.textContent = 'Could not load the Hub. ' + e.message;
   }
 }
 
 function startApp() {
+  closeSettings();
   refreshBox();
   openHub();
 }
@@ -159,7 +168,7 @@ boxForm.addEventListener('submit', async (e) => {
     await Store.connect(boxKey.value);
     boxKey.value = '';
     refreshBox();
-    show('home');
+    closeSettings();
     openHub();
   } catch (err) {
     boxError.textContent = err.message;
@@ -170,13 +179,41 @@ boxForm.addEventListener('submit', async (e) => {
 
 document.getElementById('box-forget').addEventListener('click', async () => {
   closeHub();
+  gear.hidden = false;
   await Store.disconnect();
   hubMsg.textContent = 'Connect the data box in Settings first.';
-  show('settings');
-  refreshBox();
+  openSettings();
 });
 
-// Import from Hub: pick the export file saved from the Hub, and its data replaces what is in the data box.
+// Back up now: save everything in the data box as one file on this device.
+document.getElementById('backup-now').addEventListener('click', async () => {
+  if (!Store.isConnected()) { importStatus.textContent = 'Connect the data box first.'; return; }
+  importStatus.textContent = 'Gathering your data…';
+  try {
+    const all = await HubDB.exportAll();
+    const d = new Date();
+    const name = 'app-backup-' + d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + '.json';
+    const file = new File([JSON.stringify(all)], name, { type: 'application/json' });
+    const count = Object.keys(all.docs).length;
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      // On iPhone this opens the share sheet: pick "Save to Files".
+      await navigator.share({ files: [file] });
+    } else {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(file);
+      a.download = name;
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    }
+    importStatus.textContent = 'Backup made: ' + name + ' (' + count + ' items).';
+  } catch (err) {
+    importStatus.textContent = err && err.name === 'AbortError' ? 'Backup cancelled.' : 'Backup failed. ' + (err && err.message ? err.message : '');
+  }
+});
+
+// Import: pick a backup file, or the export file saved from the Hub, and its data replaces what is in the data box.
 document.getElementById('import-file').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   e.target.value = '';
@@ -185,6 +222,12 @@ document.getElementById('import-file').addEventListener('change', async (e) => {
     const parsed = JSON.parse(await file.text());
     if (!parsed || parsed.kind !== 'hub-export' || !parsed.docs) throw new Error('That file is not a Hub export.');
     const count = Object.keys(parsed.docs).length;
+    const from = parsed.source === 'app-backup' ? 'backup' : 'Hub export';
+    const when = parsed.exportedAt ? clock(Date.parse(parsed.exportedAt)) : 'an unknown time';
+    if (!window.confirm('Replace what is in the data box with this ' + from + ' from ' + when + '? (' + count + ' items)')) {
+      importStatus.textContent = 'Import cancelled.';
+      return;
+    }
     importStatus.textContent = 'Importing ' + count + ' items…';
     const files = await HubDB.importAll(parsed.docs, (name, i, total) => {
       importStatus.textContent = 'Importing ' + name + ' (' + i + ' of ' + total + ')…';

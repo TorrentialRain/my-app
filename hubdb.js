@@ -175,7 +175,19 @@
     checkNow: checkAll,
     waiting() { let n = 0; colls.forEach((st) => { n += st.pending.length; }); return n; },
     problem() { return lastProblem; },
-    // Replace whole collections at once (used by "Import from Hub").
+    // Gather everything in the data box into one object (used by "Back up now").
+    // Same shape as a Hub export, so a backup can be put back with Import.
+    async exportAll() {
+      const names = ['tasks', 'board', 'suggestions', 'memory', 'courses', 'rules', 'meta', 'brief', 'fin', 'fin/config/months', 'calendar', 'requests'];
+      const docs = {};
+      for (const coll of names) {
+        const file = (await Store.read(fileFor(coll))) || {};
+        Object.keys(file).forEach((id) => { docs[coll + '/' + id] = file[id]; });
+      }
+      return { kind: 'hub-export', source: 'app-backup', exportedAt: new Date().toISOString(), docs };
+    },
+
+    // Replace whole collections at once (used by Import).
     async importAll(flatDocs, onStep) {
       const groups = {};
       Object.keys(flatDocs).forEach((path) => {

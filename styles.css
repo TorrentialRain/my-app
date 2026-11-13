@@ -23,33 +23,9 @@ html, body {
 }
 
 #app {
-  display: flex;
-  flex-direction: column;
-  height: 100dvh;
+  position: fixed;
+  inset: 0;
 }
-
-/* Top bar */
-.topbar {
-  padding: calc(env(safe-area-inset-top) + 12px) 20px 10px;
-  background: var(--bg);
-}
-.topbar h1 {
-  margin: 0;
-  font-size: 34px;
-  font-weight: 700;
-  letter-spacing: -0.5px;
-}
-
-/* Screens */
-.screens {
-  flex: 1;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  padding: 8px 16px 24px;
-}
-.screen { display: none; }
-.screen.active { display: block; animation: fade 0.18s ease; }
-@keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
 .card {
   background: var(--surface);
@@ -59,16 +35,6 @@ html, body {
 }
 .card h2 { margin: 0 0 6px; font-size: 20px; }
 .card p { margin: 0; color: var(--muted); line-height: 1.4; }
-.card.placeholder {
-  height: 110px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--muted);
-  background: transparent;
-  border: 1.5px dashed var(--line);
-}
-
 .list { background: var(--surface); border-radius: 16px; overflow: hidden; }
 .row {
   display: flex;
@@ -81,31 +47,6 @@ html, body {
 .row:active { background: var(--surface-2); }
 .chev { color: var(--muted); font-size: 20px; }
 .footnote { text-align: center; color: var(--muted); font-size: 13px; margin-top: 18px; }
-
-/* Bottom tab bar */
-.tabbar {
-  display: flex;
-  background: rgba(18, 18, 24, 0.92);
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
-  border-top: 1px solid var(--line);
-  padding: 6px 0 calc(env(safe-area-inset-bottom) + 6px);
-}
-.tab {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  padding: 6px 0;
-  background: none;
-  border: 0;
-  color: var(--muted);
-  font: inherit;
-  font-size: 11px;
-}
-.tab svg { width: 26px; height: 26px; fill: currentColor; }
-.tab.active { color: var(--accent); }
 
 /* Sign-on screen */
 #app[hidden] { display: none; }
@@ -183,12 +124,93 @@ html, body {
 .box-form button:disabled, .box-btn:disabled { opacity: 0.6; }
 #box-error:empty { display: none; }
 
-/* The Hub fills the screen above the tab bar when it is showing */
-#hub-frame { flex: 1; width: 100%; border: 0; background: #e4e4e1; min-height: 0; }
+/* The Hub fills the whole screen; it draws its own safe-area padding. */
+#hub-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #e4e4e1;
+}
 #hub-frame[hidden] { display: none; }
-#app.hub-on .topbar, #app.hub-on .screens { display: none; }
+
+/* Shown while the Hub loads, or when it can't be */
+.hub-wait {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  text-align: center;
+  color: var(--muted);
+  background: var(--bg);
+}
+.hub-wait[hidden] { display: none; }
+.hub-wait p { margin: 0; font-size: 16px; line-height: 1.45; }
+
+/* Small round Settings button */
+#gear {
+  position: absolute;
+  right: calc(env(safe-area-inset-right) + 18px);
+  bottom: calc(env(safe-area-inset-bottom) + 18px);
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  color: #4a4845;
+  background: rgba(255, 255, 255, 0.82);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 10px rgba(40, 40, 40, 0.22);
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+#gear:active { opacity: 1; }
+#gear svg { width: 21px; height: 21px; fill: currentColor; }
+#gear[hidden] { display: none; }
+
+/* Settings, full screen over the Hub */
+.sheet {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  animation: rise 0.2s ease;
+}
+.sheet[hidden] { display: none; }
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.sheet-top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: calc(env(safe-area-inset-top) + 12px) 20px 10px;
+}
+.sheet-top h1 { margin: 0; font-size: 30px; font-weight: 700; letter-spacing: -0.5px; }
+#sheet-close {
+  padding: 8px 4px;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--accent);
+  background: none;
+  border: 0;
+}
+.sheet-body {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 8px 16px calc(env(safe-area-inset-bottom) + 32px);
+}
+.sheet-body .card { margin-bottom: 12px; }
 .footnote.left { text-align: left; margin: 10px 0 0; }
 .footnote:empty { display: none; }
 .list + .footnote { margin-top: 14px; }
-#screen-settings .card { margin-bottom: 12px; }
 .row { cursor: pointer; }
