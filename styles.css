@@ -13,7 +13,7 @@
 html, body {
   margin: 0;
   height: 100%;
-  background: var(--bg);
+  background: #353535; /* the Hub's charcoal, in case the screen shows past the app's edge */
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
   -webkit-font-smoothing: antialiased;

@@ -40,6 +40,26 @@ const lockPass2 = document.getElementById('lock-pass2');
 const lockError = document.getElementById('lock-error');
 const lockGo = document.getElementById('lock-go');
 
+// iPhone home-screen apps can come up a little shorter than the screen, which
+// left a black strip under the Hub. Stretch the app and the sign-on screen to
+// the whole screen when that happens.
+function fitScreen() {
+  const standalone = navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+  let h = window.innerHeight;
+  if (standalone && window.screen) {
+    const full = window.innerWidth > window.innerHeight
+      ? Math.min(screen.width, screen.height)
+      : Math.max(screen.width, screen.height);
+    if (full > h && full - h <= 100) h = full;
+  }
+  const height = h > window.innerHeight ? h + 'px' : '';
+  appEl.style.height = height;
+  lock.style.height = height;
+}
+fitScreen();
+window.addEventListener('resize', fitScreen);
+window.addEventListener('orientationchange', () => setTimeout(fitScreen, 250));
+
 function showLock() {
   const firstTime = !Vault.exists();
   document.getElementById('lock-title').textContent = firstTime ? 'Create your sign-on' : 'Sign in';
