@@ -102,6 +102,42 @@
 
     lock() { key = null; data = null; },
 
+    // Change password: check the current one, then re-scramble everything (the saved app data
+    // and every item in the browser's database) under a key made from the new one.
+    // Returns false if the current username + password are wrong.
+    async changePassword(username, oldPassword, newPassword) {
+      const stored = JSON.parse(localStorage.getItem(STORE_KEY));
+      const oldKey = await makeKey(username, oldPassword, fromB64(stored.salt));
+      let plain;
+      try {
+        plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(stored.iv) }, oldKey, fromB64(stored.box));
+      } catch (e) {
+        return false;
+      }
+      // Unscramble every item first, so nothing is half-changed if one can't be read.
+      const names = await idb('readonly', (st) => st.getAllKeys());
+      const items = {};
+      for (const name of names || []) {
+        const rec = await idb('readonly', (st) => st.get(name));
+        try {
+          const p = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: rec.iv }, oldKey, rec.box);
+          items[name] = JSON.parse(dec.decode(p));
+        } catch (e) { /* unreadable leftover: skip it */ }
+      }
+      // Build the new saved copy completely before swapping it in, in one step.
+      const salt = crypto.getRandomValues(new Uint8Array(16));
+      const newKey = await makeKey(username, newPassword, salt);
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const box = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, newKey, plain);
+      localStorage.setItem(STORE_KEY, JSON.stringify({ salt: toB64(salt), iv: toB64(iv), box: toB64(box) }));
+      key = newKey;
+      data = JSON.parse(dec.decode(plain));
+      for (const name of Object.keys(items)) await this.saveItem(name, items[name]);
+      // "Stay signed in" / Face ID keep the key itself, so swap in the new one.
+      if (localStorage.getItem(REMEMBER) === '1') await this.remember();
+      return true;
+    },
+
     // "Stay signed in": the secret key itself (not the password) is kept on this device in the
     // browser's database, so the app can open again without the password. The key can't be read
     // out of the browser, only used. forget() throws it away (Lock app does this).

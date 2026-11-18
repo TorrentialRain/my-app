@@ -15,7 +15,7 @@
   <style>[hidden]{display:none!important}</style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Outfit:wght@500;600;700&display=swap">
-  <link rel="stylesheet" href="styles.css?v=10">
+  <link rel="stylesheet" href="styles.css?v=11">
 </head>
 <body>
   <!-- Sign-in cover (Josh's Nov 17, 2026 pick: dark, with the JF label card in red). It covers the whole app until the
@@ -80,6 +80,15 @@
           </form>
           <p id="box-error" class="lock-error" role="alert"></p>
           <p id="sync-status" class="footnote left"></p>
+          <button type="button" id="pw-open" class="box-btn ghost" aria-expanded="false">Change password</button>
+          <form id="pw-form" class="box-form" hidden>
+            <input id="pw-user" name="username" type="text" placeholder="Username" aria-label="Username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+            <input id="pw-old" name="current-password" type="password" placeholder="Current password" aria-label="Current password" autocomplete="current-password" required>
+            <input id="pw-new" name="new-password" type="password" placeholder="New password" aria-label="New password" autocomplete="new-password" required>
+            <input id="pw-new2" name="new-password2" type="password" placeholder="New password again" aria-label="New password again" autocomplete="new-password" required>
+            <button type="submit" id="pw-go">Save new password</button>
+          </form>
+          <p id="pw-msg" class="lock-error" role="alert"></p>
         </div>
         <div class="list">
           <div class="row" id="backup-now" role="button"><span>Back up now</span><span class="chev">›</span></div>
@@ -89,13 +98,13 @@
           <div class="row" id="lock-now" role="button"><span>Lock app (sign out)</span><span class="chev">›</span></div>
         </div>
         <p id="import-status" class="footnote"></p>
-        <p class="footnote">My App · shell v10</p>
+        <p class="footnote">My App · shell v11</p>
       </div>
     </div>
   </div>
-  <script src="vault.js?v=10"></script>
-  <script src="store.js?v=10"></script>
-  <script src="hubdb.js?v=10"></script>
-  <script src="app.js?v=10"></script>
+  <script src="vault.js?v=11"></script>
+  <script src="store.js?v=11"></script>
+  <script src="hubdb.js?v=11"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>

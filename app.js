@@ -340,6 +340,48 @@ boxForm.addEventListener('submit', async (e) => {
   }
 });
 
+// Change password (Settings > Data box card).
+const pwOpen = document.getElementById('pw-open');
+const pwForm = document.getElementById('pw-form');
+const pwMsg = document.getElementById('pw-msg');
+pwOpen.addEventListener('click', () => {
+  const show = pwForm.hidden;
+  pwForm.hidden = !show;
+  pwOpen.setAttribute('aria-expanded', String(show));
+  pwMsg.textContent = '';
+  pwMsg.classList.remove('ok');
+  if (show) document.getElementById('pw-user').focus();
+});
+pwForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  pwMsg.classList.remove('ok');
+  pwMsg.textContent = '';
+  const user = document.getElementById('pw-user').value.trim();
+  const oldPw = document.getElementById('pw-old');
+  const newPw = document.getElementById('pw-new');
+  const newPw2 = document.getElementById('pw-new2');
+  if (newPw.value !== newPw2.value) { pwMsg.textContent = 'The two new passwords do not match.'; newPw.value = ''; newPw2.value = ''; return; }
+  if (newPw.value === oldPw.value) { pwMsg.textContent = 'The new password is the same as the current one.'; return; }
+  const go = document.getElementById('pw-go');
+  go.disabled = true;
+  try {
+    if (!(await Vault.changePassword(user, oldPw.value, newPw.value))) {
+      pwMsg.textContent = 'Wrong username or current password.';
+      oldPw.value = '';
+      return;
+    }
+    pwForm.reset();
+    pwForm.hidden = true;
+    pwOpen.setAttribute('aria-expanded', 'false');
+    pwMsg.classList.add('ok');
+    pwMsg.textContent = 'Password changed. Use the new one next time you sign in.';
+  } catch (err) {
+    pwMsg.textContent = 'Something went wrong, so nothing was changed. Try again.';
+  } finally {
+    go.disabled = false;
+  }
+});
+
 document.getElementById('box-forget').addEventListener('click', async () => {
   closeHub();
   gear.hidden = false;

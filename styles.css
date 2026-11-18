@@ -162,6 +162,10 @@ html, body {
 .box-btn { margin-top: 12px; width: 100%; }
 .box-form button:disabled, .box-btn:disabled { opacity: 0.6; }
 #box-error:empty { display: none; }
+.box-btn.ghost { background: var(--surface-2); color: var(--text); }
+#pw-msg { margin-top: 10px; }
+#pw-msg:empty { display: none; }
+#pw-msg.ok { color: #44CC7F; }
 
 /* The Hub fills the whole screen; it draws its own safe-area padding. */
 #hub-frame {
