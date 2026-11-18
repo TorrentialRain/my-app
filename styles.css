@@ -53,51 +53,85 @@ html, body {
 .chev { color: var(--muted); font-size: 20px; }
 .footnote { text-align: center; color: var(--muted); font-size: 13px; margin-top: 18px; }
 
-/* Sign-on screen */
+/* Sign-in cover (see index.html). Dark page, the JF label card near the top, the form pinned to the bottom. */
 #app[hidden] { display: none; }
 .lock {
   position: fixed;
   inset: 0;
   z-index: 10;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: calc(env(safe-area-inset-top) + 24px) 28px calc(env(safe-area-inset-bottom) + 24px);
-  background: var(--bg);
+  padding: calc(env(safe-area-inset-top) + 56px) 22px calc(env(safe-area-inset-bottom) + 34px);
+  background: #0c0c0f;
+  overflow-y: auto;
+  transition: opacity .3s ease;
 }
 .lock[hidden] { display: none; }
-.lock-card { width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 12px; text-align: center; }
-.lock-icon { width: 84px; height: 84px; border-radius: 20px; margin: 0 auto 6px; }
-.lock-card h1 { margin: 0; font-size: 26px; letter-spacing: -0.3px; }
-.lock-hint { margin: 0 0 4px; color: var(--muted); font-size: 14px; line-height: 1.4; min-height: 0; }
+.lock.gone { opacity: 0; pointer-events: none; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); margin: 0; }
+.cv-card {
+  flex: none;
+  background: #1c1c1f;
+  border: 1px solid #2a2a2f;
+  border-radius: 34px;
+  padding: 28px 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-family: "Outfit", -apple-system, sans-serif;
+}
+.cv-time { font-weight: 500; font-size: 40px; letter-spacing: -.02em; color: #f3f3f5; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.cv-time small { font-size: 17px; color: #a9a9b1; margin-left: 4px; letter-spacing: 0; }
+.cv-mono {
+  font-weight: 700; font-size: 150px; line-height: .9; letter-spacing: -.06em; margin: 6px 0 2px; padding-right: .06em;
+  background: linear-gradient(170deg, #ff8a6b 0%, #ff4d3d 40%, #d62828 70%, #9e1b1b 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.cv-date { font-weight: 600; font-size: 17px; color: #a9a9b1; }
+.lock-form { margin-top: auto; padding-top: 24px; width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 12px; transition: transform .25s ease, opacity .25s ease; }
+.lock-form[hidden] { display: none; }
+.lock.leaving .lock-form { transform: translateY(40px); opacity: 0; }
+.lock-hint { margin: 0 0 2px; color: #a9a9b1; font-size: 14px; line-height: 1.4; text-align: center; font-family: "Atkinson Hyperlegible", -apple-system, sans-serif; }
 .lock-hint:empty { display: none; }
-.lock-card input {
+.lock-form input[type="text"], .lock-form input[type="password"] {
   width: 100%;
   padding: 14px 16px;
-  font: inherit;
-  font-size: 17px;
-  color: var(--text);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 12px;
+  font: 600 16px "Outfit", -apple-system, sans-serif;
+  color: #f3f3f5;
+  background: #232327;
+  border: 1px solid transparent;
+  border-radius: 16px;
   outline: none;
   -webkit-user-select: text;
   user-select: text;
 }
-.lock-card input:focus { border-color: var(--accent); }
-.lock-card input[hidden] { display: none; }
+.lock-form input::placeholder { color: #8e8e99; }
+.lock-form input:focus { border-color: #ff4d3d; }
+.lock-form input[hidden] { display: none; }
+.stay { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 2px; font: 700 16px "Atkinson Hyperlegible", -apple-system, sans-serif; color: #f3f3f5; cursor: pointer; position: relative; }
+.stay input { position: absolute; opacity: 0; width: 50px; height: 30px; right: 2px; margin: 0; cursor: pointer; }
+.stay .sw { flex: none; width: 50px; height: 30px; border-radius: 999px; background: #3a3a40; position: relative; transition: background .2s; }
+.stay .sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform .2s; }
+.stay input:checked + .sw { background: #e53935; }
+.stay input:checked + .sw::after { transform: translateX(20px); }
+.stay input:focus-visible + .sw { outline: 2px solid #ff8a6b; outline-offset: 2px; }
 .lock-error { margin: 0; color: #ff6b6b; font-size: 14px; min-height: 18px; }
-.lock-card button {
-  padding: 14px;
-  font: inherit;
-  font-size: 17px;
-  font-weight: 600;
-  color: #fff;
-  background: var(--accent);
+.lock .lock-error { min-height: 0; text-align: center; }
+.lock .lock-error:empty { display: none; }
+.lock-form button {
+  padding: 15px;
+  font: 700 17px "Atkinson Hyperlegible", -apple-system, sans-serif;
+  color: #111;
+  background: #f3f3f5;
   border: 0;
-  border-radius: 12px;
+  border-radius: 999px;
+  cursor: pointer;
 }
-.lock-card button:disabled { opacity: 0.6; }
+.lock-form button.link { background: none; color: #a9a9b1; padding: 8px; font-size: 15px; }
+.lock-form button:disabled { opacity: 0.6; }
+@media (prefers-reduced-motion: reduce) { .lock-form { transition: none; } .lock.leaving .lock-form { transform: none; } }
 
 /* Data box card */
 .box-form { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }

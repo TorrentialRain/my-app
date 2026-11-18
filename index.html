@@ -13,21 +13,41 @@
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="icon" type="image/png" href="icons/icon-192.png">
   <style>[hidden]{display:none!important}</style>
-  <link rel="stylesheet" href="styles.css?v=9">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Outfit:wght@500;600;700&display=swap">
+  <link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
-  <!-- Sign-on screen. Covers the whole app until the right username + password are entered. -->
-  <div id="lock" class="lock">
-    <form id="lock-form" class="lock-card" autocomplete="on">
-      <img src="icons/icon-180.png" alt="" class="lock-icon">
-      <h1 id="lock-title">Sign in</h1>
+  <!-- Sign-in cover (Josh's Nov 17, 2026 pick: dark, with the JF label card in red). It covers the whole app until the
+       sign-on opens. Signed in with "Stay signed in" on, it shows for about a second each time the app opens, then fades
+       into the Hub (Finance > Spending). Face ID unlocks it when the app opens fresh. -->
+  <div id="lock" class="lock" data-mode="splash">
+    <div class="cv-card">
+      <div class="cv-time"><span id="cv-hm"></span><small id="cv-ap"></small></div>
+      <div class="cv-mono" aria-label="JF">JF</div>
+      <div class="cv-date" id="cv-date"></div>
+    </div>
+    <form id="lock-form" class="lock-form" autocomplete="on" hidden>
+      <h1 id="lock-title" class="sr">Sign in</h1>
       <p id="lock-hint" class="lock-hint"></p>
-      <input id="lock-user" name="username" type="text" placeholder="Username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
-      <input id="lock-pass" name="password" type="password" placeholder="Password" autocomplete="current-password" required>
-      <input id="lock-pass2" name="password2" type="password" placeholder="Password again" autocomplete="new-password" hidden>
+      <input id="lock-user" name="username" type="text" placeholder="Username" aria-label="Username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+      <input id="lock-pass" name="password" type="password" placeholder="Password" aria-label="Password" autocomplete="current-password" required>
+      <input id="lock-pass2" name="password2" type="password" placeholder="Password again" aria-label="Password again" autocomplete="new-password" hidden>
+      <label class="stay"><span>Stay signed in</span><input id="lock-stay" type="checkbox" role="switch" checked><span class="sw" aria-hidden="true"></span></label>
       <p id="lock-error" class="lock-error" role="alert"></p>
       <button id="lock-go" type="submit">Sign in</button>
     </form>
+    <div id="lock-unlock" class="lock-form" hidden>
+      <p id="unlock-error" class="lock-error" role="alert"></p>
+      <button id="faceid-go" type="button">Unlock with Face ID</button>
+      <button id="use-pass" type="button" class="link">Use password</button>
+    </div>
+    <div id="lock-setup" class="lock-form" hidden>
+      <p class="lock-hint">Use Face ID to get back in when the app opens fresh?</p>
+      <p id="setup-error" class="lock-error" role="alert"></p>
+      <button id="faceid-setup" type="button">Use Face ID</button>
+      <button id="faceid-skip" type="button" class="link">Not now</button>
+    </div>
   </div>
 
   <div id="app" hidden>
@@ -65,16 +85,17 @@
           <div class="row" id="backup-now" role="button"><span>Back up now</span><span class="chev">›</span></div>
           <label class="row" id="import-row"><span>Import a backup or Hub export</span><span class="chev">›</span><input id="import-file" type="file" accept="application/json,.json" hidden></label>
           <div class="row" id="box-forget" role="button"><span>Disconnect data box</span><span class="chev">›</span></div>
-          <div class="row" id="lock-now" role="button"><span>Lock app</span><span class="chev">›</span></div>
+          <div class="row" id="faceid-row" role="button" hidden><span id="faceid-label">Set up Face ID</span><span class="chev">›</span></div>
+          <div class="row" id="lock-now" role="button"><span>Lock app (sign out)</span><span class="chev">›</span></div>
         </div>
         <p id="import-status" class="footnote"></p>
-        <p class="footnote">My App · shell v9</p>
+        <p class="footnote">My App · shell v10</p>
       </div>
     </div>
   </div>
-  <script src="vault.js?v=9"></script>
-  <script src="store.js?v=9"></script>
-  <script src="hubdb.js?v=9"></script>
-  <script src="app.js?v=9"></script>
+  <script src="vault.js?v=10"></script>
+  <script src="store.js?v=10"></script>
+  <script src="hubdb.js?v=10"></script>
+  <script src="app.js?v=10"></script>
 </body>
 </html>
