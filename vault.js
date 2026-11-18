@@ -54,6 +54,22 @@
     });
   }
 
+  // The remembered key lives in its own little database, apart from the app's saved files.
+  const REMEMBER = 'hub.vault.remember';
+  function kdb(mode, work) {
+    return new Promise((resolve, reject) => {
+      const open = indexedDB.open('hub-remember', 1);
+      open.onupgradeneeded = () => open.result.createObjectStore('k');
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const tx = open.result.transaction('k', mode);
+        const req = work(tx.objectStore('k'));
+        tx.oncomplete = () => { open.result.close(); resolve(req ? req.result : undefined); };
+        tx.onerror = () => { open.result.close(); reject(tx.error); };
+      };
+    });
+  }
+
   const Vault = {
     // Has a sign-on been set up on this device yet?
     exists() { return localStorage.getItem(STORE_KEY) !== null; },
@@ -85,6 +101,33 @@
     },
 
     lock() { key = null; data = null; },
+
+    // "Stay signed in": the secret key itself (not the password) is kept on this device in the
+    // browser's database, so the app can open again without the password. The key can't be read
+    // out of the browser, only used. forget() throws it away (Lock app does this).
+    hasRemembered() { return localStorage.getItem(REMEMBER) === '1' && this.exists(); },
+    async remember() {
+      if (!key) throw new Error('Vault is locked');
+      await kdb('readwrite', (st) => st.put(key, 'key'));
+      localStorage.setItem(REMEMBER, '1');
+    },
+    async forget() {
+      localStorage.removeItem(REMEMBER);
+      try { await kdb('readwrite', (st) => st.delete('key')); } catch (e) { /* nothing saved */ }
+    },
+    async openRemembered() {
+      try {
+        const k = await kdb('readonly', (st) => st.get('key'));
+        if (!k) return false;
+        const stored = JSON.parse(localStorage.getItem(STORE_KEY));
+        const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(stored.iv) }, k, fromB64(stored.box));
+        key = k;
+        data = JSON.parse(dec.decode(plain));
+        return true;
+      } catch (e) {
+        return false;
+      }
+    },
 
     // Bigger things (copies of data box files) are kept one by one in the
     // browser's database, each scrambled with the same key.
