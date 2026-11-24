@@ -162,6 +162,14 @@ async function saveRules() {
   st.before = () => { Changes.start(); }; // the new key goes in while the old key's save is on its way
   await Changes.save(st);
   expect(W1, !Changes.isReadOnly(), "an answer about the old key marked the new key as read-only");
+  // 4c. A save writes the file the way it is already written (the robot's \u2019 codes, or the old app's plain letters),
+  // so only the changed lines differ and the writers never rewrite each other's spelling.
+  const { asFileText, styleOf } = require('../data.js');
+  const sample = { a: { title: 'Bring Mom’s book — café', n: 1 } };
+  const robotText = JSON.stringify(sample, null, 2).replace(/[\u0080-\uffff]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
+  const appText = JSON.stringify(sample, null, 2) + '\n';
+  expect(W1, asFileText(sample, styleOf(robotText)) === robotText, "a save would rewrite the robot's way of writing the file");
+  expect(W1, asFileText(sample, styleOf(appText)) === appText, "a save would rewrite the old app's way of writing the file");
   // 5. A bad read (nothing came back): nothing is written.
   st = fakeStore(); Changes.start(); st.nullRead = true;
   Changes.add({ type: 'tick', taskId: 'c' });

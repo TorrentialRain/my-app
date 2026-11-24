@@ -91,6 +91,18 @@
     return fail('server', 'GitHub turned the save down (' + res.status + (said ? ': ' + said : '') + ').');
   }
 
+  // Two writers spell the same text two ways: the robot writes letters like ’ as \u2019 and leaves no blank line at
+  // the end; the old app writes ’ as-is and ends with a blank line. A save keeps whichever way the file is written now,
+  // so it changes only what changed, and the writers never rewrite each other's spelling.
+  const styleOf = (text) => ({ codes: /\\u[0-9a-fA-F]{4}/.test(text) || !/[^\x00-\x7f]/.test(text), endLine: /\n$/.test(text) });
+  const asFileText = (data, style) => {
+    const st = style || { codes: true, endLine: false };
+    let t = JSON.stringify(data, null, 2);
+    if (st.codes) t = t.replace(/[\u0080-\uffff]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
+    return st.endLine ? t + '\n' : t;
+  };
+  const styles = {}; // path -> how that file was written when last read
+
   async function call(method, path, body) {
     if (!key) throw fail('nokey', 'No data box key on this phone yet.');
     try {
@@ -143,12 +155,16 @@
       if (res.status === 401) throw fail('badkey', 'GitHub did not accept that key. It may be mistyped or expired.');
       if (!res.ok) throw fail('server', 'GitHub answered with an error (' + res.status + ').');
       const j = await res.json();
-      return { data: JSON.parse(fromB64(j.content)), version: j.sha };
+      const text = fromB64(j.content);
+      styles[path] = styleOf(text);
+      return { data: JSON.parse(text), version: j.sha };
     },
 
     // Can this key save? Asked without changing anything: it offers GitHub the file's own words back,
     // marked as an old version on purpose, so GitHub always turns the write down. How it turns it down
     // tells us: "that's not the newest version" = this key may save; "not allowed" = it can only read.
+    asFileText,
+    styleOf,
     async canSave() {
       const res = await call('GET', 'data/tasks.json');
       if (res.status === 401) throw fail('badkey', 'GitHub did not accept that key. It may be mistyped or expired.');
@@ -171,7 +187,7 @@
     async writeIfUnchanged(path, data, version, note) {
       const res = await call('PUT', path, {
         message: note || 'New Hub: update ' + path,
-        content: toB64(JSON.stringify(data, null, 2) + '\n'),
+        content: toB64(asFileText(data, styles[path])),
         branch: BRANCH,
         sha: version,
       });
@@ -199,5 +215,5 @@
   };
 
   if (typeof window !== 'undefined') { window.Data = Data; window.Summary = Summary; }
-  if (typeof module !== 'undefined') module.exports = { Summary };
+  if (typeof module !== 'undefined') module.exports = { Summary, asFileText, styleOf };
 })();
