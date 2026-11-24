@@ -1,4 +1,4 @@
-/* New Hub frame. Light and dark follow the phone. iPhone's own font. */
+/* New Hub frame. On the phone, light and dark follow the phone. On a PC it is always dark (Josh's pick, Nov 24). iPhone's own font. */
 :root {
   color-scheme: light dark;
   --bg: #f2f2f7;
@@ -20,7 +20,9 @@
   --safe-right: env(safe-area-inset-right, 0px);
   --bar-h: 50px;
 }
-@media (prefers-color-scheme: dark) {
+/* A PC is any screen 900 wide or more (the phone app is held upright, so it never gets that wide). */
+@media (min-width: 900px) { :root { color-scheme: dark; } }
+@media (prefers-color-scheme: dark), (min-width: 900px) {
   :root {
     --bg: #000000;
     --text: #ffffff;
@@ -171,7 +173,7 @@ body { position: fixed; inset: 0; overflow: hidden; }
   background: var(--plan);
   color: #fff;
 }
-@media (prefers-color-scheme: dark) { .connect button { color: #000; } }
+@media (prefers-color-scheme: dark), (min-width: 900px) { .connect button { color: #000; } }
 .connect .error { color: var(--bad); margin-top: 12px; min-height: 1em; }
 
 /* ================= TO-DO page =================
@@ -187,7 +189,7 @@ body { position: fixed; inset: 0; overflow: hidden; }
 }
 #page-todo { position: relative; padding: 0; overflow: hidden; background: var(--td-bg); color: var(--ink); }
 .card.ghost { color: var(--ink); background: var(--card); }
-@media (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: dark), (min-width: 900px) {
   #page-todo, .card.ghost {
     --td-bg: #0b0907; --card: #1e1c1a; --ink: #ffffff; --ink2: #a1a1a8; --ink3: #e5e5ea;
     --due: #34302c; --on: #ff9a3d; --on-ink: #000000; --deep: #ffb070; --field: #2c2926;
@@ -324,7 +326,7 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
   padding: 14px calc(var(--safe-right) + 20px) calc(var(--safe-bottom) + 20px) calc(var(--safe-left) + 20px);
   display: flex; flex-direction: column; gap: 12px;
 }
-@media (prefers-color-scheme: dark) { .sheet-card { --card: #1e1c1a; --ink: #ffffff; --ink2: #a1a1a8; --on: #ff9a3d; --on-ink: #000000; --field: #2c2926; } }
+@media (prefers-color-scheme: dark), (min-width: 900px) { .sheet-card { --card: #1e1c1a; --ink: #ffffff; --ink2: #a1a1a8; --on: #ff9a3d; --on-ink: #000000; --field: #2c2926; } }
 .sheet-top { display: flex; align-items: center; justify-content: space-between; }
 .sheet-top h2 { margin: 0; font-size: 22px; font-weight: 700; }
 .sheet .round { box-shadow: none; background: var(--field); color: var(--ink); }
@@ -347,7 +349,7 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
   z-index: 30; padding: 12px 16px; border-radius: 14px; background: #1c1c1e; color: #ffffff; font-size: 15px; line-height: 20px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.25);
 }
-@media (prefers-color-scheme: dark) { .toast { background: #f2f2f7; color: #000000; } }
+@media (prefers-color-scheme: dark), (min-width: 900px) { .toast { background: #f2f2f7; color: #000000; } }
 #print { display: none; }
 
 /* ---------- PC: tabs down the left (no label), buttons along the top, Done on the right, page bar on top ---------- */

@@ -1,6 +1,7 @@
 // The new Hub's check. Runs before every update (see the "New Hub check" workflow).
 // It opens the app in Safari's engine at Josh's phone size (428 x 926), with the status bar (47)
 // and the home swipe area (34) marked off, in light and dark, and on a PC screen (1440 x 900), and fails if:
+//   - the phone doesn't follow its own light or dark setting, or a PC isn't dark (a PC is always dark, Josh's pick)
 //   - the data doesn't load, or a page doesn't show
 //   - tapping the bar or swiping doesn't land on the right page, or the app doesn't reopen on the last page
 //   - anything is cut off, overlaps, or sits under the status bar, the page bar or the home swipe area
@@ -403,6 +404,14 @@ async function phoneTodo(page, scheme, size) {
   await settle(page, 200);
 }
 
+// How dark the page is: 0 is black, 255 is white. Used to check that the phone follows its setting and a PC is always dark.
+async function darkness(page) {
+  return page.evaluate(() => {
+    const read = (el) => { const m = getComputedStyle(el).backgroundColor.match(/[\d.]+/g).map(Number); return Math.round(0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]); };
+    return { body: read(document.body), todo: read(document.getElementById('page-todo')) };
+  });
+}
+
 async function run() {
   rules();
   const server = await serve();
@@ -432,6 +441,9 @@ async function run() {
     await page.tap('#connect-go');
     await page.waitForFunction(() => document.documentElement.dataset.loaded === 'yes', null, { timeout: 8000 }).catch(() => {});
     if (!(await page.locator('#connect').isHidden())) problem(scheme + ' connect', 'the Connect screen did not close');
+    const ph = await darkness(page);
+    if (scheme === 'light') expect(scheme + ' phone colors', ph.body > 200 && ph.todo > 200, 'a phone set to light should show the light colors (got ' + JSON.stringify(ph) + ')');
+    else expect(scheme + ' phone colors', ph.body < 50 && ph.todo < 50, 'a phone set to dark should show the dark colors (got ' + JSON.stringify(ph) + ')');
 
     // 3. Each page by tapping the bar.
     for (let i = 0; i < PAGES.length; i++) {
@@ -488,6 +500,8 @@ async function run() {
     expect(scheme + ' PC', layout.tabsLeft, 'the tabs should run down the left of the list');
     expect(scheme + ' PC', layout.addTop, 'the buttons should sit along the top');
     expect(scheme + ' PC', layout.fabs === 'none', 'the floating phone buttons should not show on a PC');
+    const pcd = await darkness(pp);
+    expect(scheme + ' PC colors', pcd.body < 50 && pcd.todo < 50, 'a PC should always be dark, even when set to light (got ' + JSON.stringify(pcd) + ')');
     await lookBothEnds(pp, scheme + ' PC TO-DO', pc, scheme + '-pc-todo');
     await dragCard(pp, 'a', '.tdtab[data-tab-id="waiting"]', scheme + ' PC move');
     await tapTab(pp, 'waiting');
