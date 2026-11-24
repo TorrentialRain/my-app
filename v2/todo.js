@@ -342,6 +342,7 @@
     const cameIn = again; again = false;
     if (r.saved) {
       justSaved = Date.now();
+      $('#toast').hidden = true; // an old "can't save" note no longer holds
       setTimeout(showSaving, 2600);
       if (Changes.list().length) saveSoon(300); // more changes came in while saving
     } else if (cameIn && r.why !== 'readonly' && r.why !== 'badkey' && r.why !== 'unsafe') {

@@ -372,6 +372,20 @@ async function phoneTodo(page, scheme, size) {
   expect(T, await page.locator('.td-suggest').isVisible(), 'the possible task does not show');
   await lookBothEnds(page, T, size, scheme + '-todo');
 
+  // Every tab opens and shows its list: no tab is left looking like it's still loading.
+  for (const t of Todo.TABS) {
+    await tapTab(page, t.id);
+    const st = await page.evaluate((id) => ({
+      on: !!document.querySelector('.tdtab[data-tab-id="' + id + '"][aria-current="true"]'),
+      sub: document.querySelector('.td-sub').textContent,
+      shown: document.querySelectorAll('.td-list .card').length + document.querySelectorAll('.td-list .empty').length,
+      ready: document.documentElement.dataset.todo,
+    }), t.id);
+    expect(T + ' ' + t.name + ' tab', st.on && st.ready === 'ready' && !/loading/i.test(st.sub) && st.shown > 0,
+      'the tab did not open and show its list (selected: ' + st.on + ', line: "' + st.sub + '", items: ' + st.shown + ')');
+  }
+  await tapTab(page, 'all');
+
   // Pictures stand out past the card's top edge.
   const pop = await page.evaluate(() => { const c = document.querySelector('.td-list .card'); return c.querySelector('.pic').getBoundingClientRect().top < c.getBoundingClientRect().top; });
   expect(T, pop, 'card pictures should stand past the top of their card');

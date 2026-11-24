@@ -100,6 +100,7 @@
   document.querySelectorAll('[data-change-key]').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('.sheet').forEach((s) => { s.hidden = true; });
     document.body.classList.remove('sheet-up');
+    document.getElementById('toast').hidden = true;
     askForKey('Paste the new key. It replaces the one on this phone, and anything waiting to save saves right after.', Data.source() !== null);
     connectKey.focus();
   }));
