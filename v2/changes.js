@@ -137,6 +137,10 @@
           if (!data || typeof data !== 'object' || Object.keys(next).length < Object.keys(data).length) {
             return { saved: false, why: 'unsafe', files };
           }
+          if (JSON.stringify(next) === JSON.stringify(data)) {
+            // Already in the file (an earlier save landed but its reply got lost): nothing to write.
+            pending = pending.filter((c) => !batch.includes(c)); keepWaiting(); files[path] = next; done = true; break;
+          }
           const ok = await store.writeIfUnchanged(path, next, version, 'New Hub TO-DO: ' + batch.length + ' change(s) from the phone');
           if (ok) { pending = pending.filter((c) => !batch.includes(c)); keepWaiting(); files[path] = next; done = true; }
         }

@@ -657,7 +657,9 @@ async function run() {
   // The save lands but the phone never hears back: the next save must not put it in twice.
   sctx.box.trap = () => 'lost';
   await sp.tap('.card[data-id="c"] .tick');
-  await sp.waitForSelector('.td-pending[data-state="waiting"]', { timeout: 5000 }).catch(() => {});
+  await sp.waitForFunction(() => /^server/.test(document.querySelector('.td-pending').dataset.why || ''), null, { timeout: 6000 })
+    .catch(() => problem(S, 'the lost reply was not noticed'));
+  expect(S, (await sp.locator('.td-pending').textContent()).includes('1 change waiting to save'), 'after a lost reply the change should still show as waiting');
   await sp.tap('.card[data-id="m"] .tick');
   await waitSaved(S + ' after a lost reply');
   file = sctx.box.files['data/tasks.json'];
