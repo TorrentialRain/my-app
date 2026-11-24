@@ -150,6 +150,7 @@ function inspect({ W, H, TOP, BOTTOM }) {
   const pastTop = (el) => { const s = sc(el); return !!s && s.scrollTop > 1; };
   const notAtBottom = (el) => { const s = sc(el); return !!s && s.scrollTop + s.clientHeight < s.scrollHeight - 1; };
   const floats = (el) => el.closest('[data-floats]');
+  const inBar = (el) => el.closest('.bar');
   const bar = document.querySelector('.bar').getBoundingClientRect();
   const barOnTop = bar.top < H / 2;
   for (const el of items) {
@@ -170,7 +171,9 @@ function inspect({ W, H, TOP, BOTTOM }) {
     const a = items[i], b = items[j];
     if (a.contains(b) || b.contains(a)) continue;
     if (a.closest('#toast') || b.closest('#toast')) continue;
-    if ((floats(a) && notAtBottom(b)) || (floats(b) && notAtBottom(a))) continue;
+    // Cards scrolling past pinned things (the floating buttons, the page bar) are judged at the list's ends.
+    const passing = (x, y) => ((floats(x) || (inBar(x) && !barOnTop)) && notAtBottom(y)) || (inBar(x) && barOnTop && pastTop(y));
+    if (passing(a, b) || passing(b, a)) continue;
     const p = rect(a), q = rect(b);
     const x = Math.min(p.right, q.right) - Math.max(p.left, q.left);
     const y = Math.min(p.bottom, q.bottom) - Math.max(p.top, q.top);
@@ -253,6 +256,8 @@ async function dragCard(page, id, toSel, where, toTopEdge) {
   const from = await page.locator(`.td-list .card[data-id="${id}"] .t`).boundingBox();
   const to = await page.locator(toSel).first().boundingBox();
   if (!from || !to) { problem(where, 'could not find the card or the drop spot'); return; }
+  const vh = page.viewportSize().height;
+  if (from.y < 0 || from.y > vh - 120 || to.y < 0 || to.y > vh) { problem(where, 'the card or the drop spot is off screen, so the check could not drag it'); return; }
   const fx = from.x + 20, fy = from.y + 8;
   await page.mouse.move(fx, fy);
   await page.mouse.down();
@@ -334,12 +339,17 @@ async function phoneTodo(page, scheme, size) {
   // Drag: reorder, move to a tab, and trash.
   await dragCard(page, 'c', '.td-list .card[data-id="b"]', T + ' reorder', true);
   expect(T + ' reorder', (await cardIds(page))[0] === 'c', 'dragging a card to the top did not keep it there: ' + await cardIds(page));
-  await dragCard(page, 'l', '.tdtab[data-tab-id="bucket"]', T + ' move');
-  expect(T + ' move', !(await cardIds(page)).includes('l'), 'a card dropped on Bucket List stayed in All');
+  await page.evaluate(() => { document.querySelector('.td-scroll').scrollTop = 0; });
+  await settle(page, 150);
+  const mv = (await cardIds(page))[1];
+  await dragCard(page, mv, '.tdtab[data-tab-id="bucket"]', T + ' move');
+  expect(T + ' move', !(await cardIds(page)).includes(mv), 'a card dropped on Bucket List stayed in All');
   await tapTab(page, 'bucket');
-  expect(T + ' move', (await cardIds(page)).includes('l'), 'a card dropped on Bucket List is not there');
+  expect(T + ' move', (await cardIds(page)).includes(mv), 'a card dropped on Bucket List is not there');
   await tapTab(page, 'all');
-  const m = await page.locator('.td-list .card[data-id="m"] .t').boundingBox();
+  const gone = (await cardIds(page))[1];
+  const goneTitle = TASKS[gone] ? TASKS[gone].title : '?';
+  const m = await page.locator(`.td-list .card[data-id="${gone}"] .t`).boundingBox();
   await page.mouse.move(m.x + 20, m.y + 8); await page.mouse.down(); await page.waitForTimeout(420);
   await page.mouse.move(m.x + 30, m.y + 40, { steps: 4 });
   await page.waitForTimeout(100);
@@ -348,7 +358,7 @@ async function phoneTodo(page, scheme, size) {
   const tr = await page.locator('.td-trash').boundingBox();
   if (tr) await page.mouse.move(tr.x + tr.width / 2, tr.y + tr.height / 2, { steps: 10 });
   await page.waitForTimeout(80); await page.mouse.up(); await settle(page, 250);
-  expect(T + ' trash', !(await cardIds(page)).includes('m'), 'a card dropped on the trash stayed');
+  expect(T + ' trash', !(await cardIds(page)).includes(gone), 'a card dropped on the trash stayed');
 
   // ?, the menu, the Archive, Settings, the waiting list.
   await page.tap('.td-fabs [data-open="sheet-questions"]');
@@ -365,7 +375,7 @@ async function phoneTodo(page, scheme, size) {
   await settle(page, 250);
   const arch = await page.locator('#archive-list').textContent();
   expect(T + ' Archive', arch.includes('Old finished one') && arch.includes('A deleted one'), 'the Archive is missing finished or deleted tasks');
-  expect(T + ' Archive', arch.includes('Bring the Genki book'), 'a task trashed on screen should show in the Archive');
+  expect(T + ' Archive', arch.includes(goneTitle), 'a task trashed on screen should show in the Archive');
   await look(page, T + ' Archive', size);
   await page.screenshot({ path: path.join(OUT, scheme + '-todo-archive.png') });
   await page.tap('#sheet-archive [data-close]');
@@ -439,7 +449,7 @@ async function run() {
 
     // 6. Reopen: lands on the page used last.
     await page.tap('.tab[data-tab="finance"]');
-    await settle(page);
+    await settle(page, 1300);
     await page.reload();
     await page.addStyleTag({ content: edges });
     await page.waitForFunction(() => document.documentElement.dataset.loaded === 'yes', null, { timeout: 8000 }).catch(() => problem(scheme + ' reopen', 'the data did not load with the saved key'));

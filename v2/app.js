@@ -18,9 +18,20 @@
     });
     try { localStorage.setItem(LAST, ORDER[i]); } catch (e) { /* not remembered this time */ }
   }
+  // While a tapped page slides in, the halfway points of the slide don't count as a swipe,
+  // so the bar and the remembered page can't flip to the page it slid past.
+  let aiming = null, aimTimer;
   function go(i, smooth) {
+    aiming = i;
+    clearTimeout(aimTimer);
+    aimTimer = setTimeout(() => { aiming = null; landed(); }, 1200);
     pages.scrollTo({ left: i * pages.clientWidth, behavior: smooth && !calm.matches ? 'smooth' : 'auto' });
     mark(i);
+  }
+  function landed() {
+    const i = Math.round(pages.scrollLeft / Math.max(1, pages.clientWidth));
+    if (aiming !== null) { if (i === aiming) { aiming = null; clearTimeout(aimTimer); } return; }
+    if (i !== current && i >= 0 && i < ORDER.length) mark(i);
   }
 
   // Open on the page used last, placed before it shows so it doesn't slide in.
@@ -37,11 +48,11 @@
   let settle;
   pages.addEventListener('scroll', () => {
     clearTimeout(settle);
-    settle = setTimeout(() => {
-      const i = Math.round(pages.scrollLeft / Math.max(1, pages.clientWidth));
-      if (i !== current && i >= 0 && i < ORDER.length) mark(i);
-    }, 80);
+    settle = setTimeout(landed, 80);
   }, { passive: true });
+
+  // A finger on the pages takes over from a tap that is still sliding.
+  pages.addEventListener('touchstart', () => { aiming = null; clearTimeout(aimTimer); }, { passive: true });
 
   // While a TO-DO card is held, the pages stay put (see todo.js).
 
