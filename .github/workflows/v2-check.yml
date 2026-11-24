@@ -35,6 +35,15 @@ jobs:
           name: phone-pictures
           path: v2/check/out/
           retention-days: 30
+      - name: Keep the latest pictures on the v2-pictures branch too (where Claude can see them)
+        if: always()
+        run: |
+          [ -d v2/check/out ] || exit 0
+          cd v2/check/out
+          git init -q -b v2-pictures
+          git -c user.name="New Hub check" -c user.email="actions@github.com" add -A
+          git -c user.name="New Hub check" -c user.email="actions@github.com" commit -qm "Phone pictures from check run ${{ github.run_number }} (${{ github.sha }})"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" v2-pictures
       - name: Passed, so put it live
         if: success() && github.ref == 'refs/heads/v2-next'
         run: |
