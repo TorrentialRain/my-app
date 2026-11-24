@@ -138,7 +138,17 @@
     try {
       await Data.connect(connectKey.value);
       connectKey.value = '';
-      connect.hidden = true;
+      // Ask straight away whether this key can save, so a key that can only read is spotted here, not on the first tick.
+      let saves = null;
+      try { saves = await Data.canSave(); } catch (e) { saves = null; }
+      document.documentElement.dataset.keySaves = String(saves);
+      if (saves === false) {
+        connectWhy.textContent = 'Connected, but this key (ends in ' + Data.keyEnd() + ') can only read, so changes won\'t save.';
+        connectErr.textContent = 'On GitHub, open this key and set Contents to "Read and write" for my-app-data, then paste it here again. Each phone or computer keeps its own key.';
+        connectCancel.hidden = false;
+      } else {
+        connect.hidden = true;
+      }
       await load();
     } catch (e) {
       connectErr.textContent = e.message;

@@ -14,7 +14,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="../icons/icon-180.png">
   <link rel="icon" type="image/png" href="../icons/icon-192.png">
-  <link rel="stylesheet" href="app.css?v=6">
+  <link rel="stylesheet" href="app.css?v=7">
 </head>
 <body>
   <!-- The new Hub (rebuild). Lives beside the old app and reads the same data box.
@@ -122,7 +122,8 @@
       <div class="sheet-top"><h2 id="s-title">Settings</h2><button type="button" class="round" data-close aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
       <button type="button" class="menu-item" data-open="sheet-archive">Archive</button>
       <button type="button" class="menu-item" id="settings-change-key" data-change-key>Change key</button>
-      <p class="hint">Signed in on this phone. Changes save by themselves a moment after you make them. Backups happen by themselves.</p>
+      <p class="hint" id="settings-key"></p>
+      <p class="hint">Changes save by themselves a moment after you make them. Backups happen by themselves. Each phone or computer keeps its own key.</p>
     </div>
   </div>
   <div class="sheet" id="sheet-waiting" hidden role="dialog" aria-modal="true" aria-labelledby="w-title">
@@ -151,9 +152,9 @@
     </button>
   </nav>
 
-  <script src="data.js?v=3"></script>
-  <script src="changes.js?v=4"></script>
-  <script src="todo.js?v=5"></script>
-  <script src="app.js?v=6"></script>
+  <script src="data.js?v=4"></script>
+  <script src="changes.js?v=5"></script>
+  <script src="todo.js?v=6"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>

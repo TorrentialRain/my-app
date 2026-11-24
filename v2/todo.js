@@ -230,14 +230,15 @@
       ? '<ul class="subs">' + t.subtasks.map((st, i) => '<li><button type="button" class="sub' + (st.done ? ' did' : '') + '" data-sub="' + i + '" aria-pressed="' + !!st.done + '">' +
         '<span class="dot" aria-hidden="true">' + (st.done ? svg('check', 10) : '') + '</span><span class="n">' + esc(st.text) + '</span></button></li>').join('') + '</ul>'
       : '';
+    // Overdue shows on the date itself, in words: a lone yellow line looked like a loading bar (Nov 24).
+    const late = isOverdue(t, now);
     const meta = (due || showClass)
-      ? '<span class="meta">' + (due ? '<span class="due">' + esc(due) + '</span>' : '') + (showClass ? '<span class="due cls">' + esc(cls.name) + '</span>' : '') + '</span>'
+      ? '<span class="meta">' + (due ? '<span class="due' + (late ? ' late' : '') + '">' + (late ? 'Overdue · ' : '') + esc(due) + '</span>' : '') + (showClass ? '<span class="due cls">' + esc(cls.name) + '</span>' : '') + '</span>'
       : '';
     return '<article class="card' + (done ? ' is-done' : '') + '" data-id="' + esc(id) + '"' + (opts && opts.group != null ? ' data-group="' + opts.group + '"' : '') + '>' +
       '<span class="pic" style="--b:' + b + ';--s:' + s + '" aria-hidden="true">' + svg(pic.icon, 26, '#FFFFFF') + '</span>' +
       '<button type="button" class="tick" aria-pressed="' + done + '" aria-label="' + (done ? 'Mark not done: ' : 'Mark done: ') + esc(t.title) + '"><span>' + (done ? svg('check', 13) : '') + '</span></button>' +
       '<div class="body"><span class="t">' + esc(t.title) + '</span>' +
-      (isOverdue(t, now) ? '<span class="od" role="img" aria-label="Overdue"></span>' : '') +
       (t.myNote ? '<span class="n">' + esc(t.myNote) + '</span>' : '') +
       subs + meta +
       (t.section === 'onhold' && tab !== 'waiting' ? '<span class="lbl">Waiting</span>' : '') +
@@ -315,7 +316,7 @@
     pendingEl.classList.toggle('is-bad', !!n && Changes.isReadOnly());
     if (n) {
       const count = n === 1 ? '1 change waiting to save' : n + ' changes waiting to save';
-      text.textContent = Changes.isReadOnly() ? count + ': this key can only read' : (savingNow ? 'Saving ' + (n === 1 ? '1 change' : n + ' changes') + '…' : count);
+      text.textContent = Changes.isReadOnly() ? count + ': the key here (ends in ' + ((dataStore && dataStore.keyEnd()) || '?') + ') can only read' : (savingNow ? 'Saving ' + (n === 1 ? '1 change' : n + ' changes') + '…' : count);
       pendingEl.hidden = false;
     } else if (Date.now() - justSaved < 2500) {
       text.textContent = 'All saved';
@@ -348,7 +349,7 @@
     } else if (cameIn && r.why !== 'readonly' && r.why !== 'badkey' && r.why !== 'unsafe') {
       saveSoon(300); // a new change came in while that try failed: try once more now, with both
     } else if (r.why === 'readonly') {
-      toast('The key on this phone can only read, so your changes are waiting here. Put in a key that can save: Menu, Settings, Change key.');
+      toast('The key here (ends in ' + (dataStore.keyEnd() || '?') + ') can only read, so your changes are waiting. Put in a key that can save: gear, Settings, Change key.');
     } else if (r.why === 'badkey') {
       toast('GitHub stopped accepting the key on this phone. Your changes are waiting here. Put in a new key: Menu, Settings, Change key.');
     } else if (r.why !== 'busy' && r.why !== 'nothing') {
@@ -442,6 +443,10 @@
     if (id === 'sheet-questions') fillQuestions();
     if (id === 'sheet-archive') fillArchive();
     if (id === 'sheet-waiting') fillWaiting();
+    if (id === 'sheet-settings' && dataStore) {
+      const end = dataStore.keyEnd();
+      $('#settings-key').textContent = end ? 'The key here ends in ' + end + (Changes.isReadOnly() ? ', and it can only read.' : '.') : 'No key here yet.';
+    }
     if (id === 'sheet-add') { $('#add-form').reset(); $('#add-where').textContent = 'Goes in: ' + tabById(tab === 'overdue' ? 'all' : tab).name; }
     openSheet(id);
   }));

@@ -156,6 +156,12 @@ async function saveRules() {
   expect(W1, r.why === 'readonly' && Changes.isReadOnly() && Changes.list().length === 1 && r2.why === 'readonly' && st.writes === before, 'a key that can only read should keep the change waiting and say so');
   Changes.start();
   expect(W1, !Changes.isReadOnly(), 'putting in a new key should try saving again');
+  // 4b. A "can only read" answer about the OLD key that arrives after the new key went in must not mark the new key.
+  st = fakeStore(); Changes.start(); st.readonly = true;
+  Changes.add({ type: 'tick', taskId: 'c' });
+  st.before = () => { Changes.start(); }; // the new key goes in while the old key's save is on its way
+  await Changes.save(st);
+  expect(W1, !Changes.isReadOnly(), "an answer about the old key marked the new key as read-only");
   // 5. A bad read (nothing came back): nothing is written.
   st = fakeStore(); Changes.start(); st.nullRead = true;
   Changes.add({ type: 'tick', taskId: 'c' });
@@ -334,6 +340,11 @@ async function openConnected(ctx, base, edges) {
   if (await page.locator('#connect').isVisible()) {
     await page.fill('#connect-key', 'sample-key');
     await page.click('#connect-go');
+    // This key can only read: the key screen says so straight away, and Not now closes it.
+    await page.waitForFunction(() => document.documentElement.dataset.keySaves, null, { timeout: 8000 }).catch(() => {});
+    const said = await page.evaluate(() => ({ saves: document.documentElement.dataset.keySaves, why: document.getElementById('connect-why').textContent, open: !document.getElementById('connect').hidden }));
+    expect('connect', said.saves === 'false' && said.open && /ends in -key\) can only read/.test(said.why), 'a key that can only read was not spotted on the key screen (' + JSON.stringify(said) + ')');
+    if (said.open) await page.click('#connect-cancel');
   }
   await page.waitForFunction(() => document.documentElement.dataset.loaded === 'yes' && document.documentElement.dataset.todo === 'ready', null, { timeout: 8000 })
     .catch(() => problem('open', 'the TO-DO page did not get ready'));
@@ -359,6 +370,37 @@ async function dragCard(page, id, toSel, where, toTopEdge) {
   await settle(page, 250);
 }
 
+// Every tab opens and shows its list, and the "Only overdue" switch works on each: nothing is left looking like it's still loading.
+async function everyTab(page, T) {
+  for (const t of Todo.TABS) {
+    await tapTab(page, t.id);
+    const read = () => page.evaluate((id) => ({
+      on: !!document.querySelector('.tdtab[data-tab-id="' + id + '"][aria-current="true"]'),
+      sub: document.querySelector('.td-sub').textContent,
+      cards: document.querySelectorAll('.td-list .card').length,
+      late: document.querySelectorAll('.td-list .card .due.late').length,
+      shown: document.querySelectorAll('.td-list .card').length + document.querySelectorAll('.td-list .empty').length,
+      ready: document.documentElement.dataset.todo,
+    }), t.id);
+    const st = await read();
+    expect(T + ' ' + t.name + ' tab', st.on && st.ready === 'ready' && !/loading/i.test(st.sub) && st.shown > 0,
+      'the tab did not open and show its list (selected: ' + st.on + ', line: "' + st.sub + '", items: ' + st.shown + ')');
+    if (t.id === 'overdue') {
+      expect(T + ' Overdue tab', st.cards > 0 && st.late === st.cards, 'every card on the Overdue tab should say Overdue on its date (' + st.late + ' of ' + st.cards + ')');
+      continue;
+    }
+    const sw = page.locator('.only');
+    if (!(await sw.isVisible())) { problem(T + ' ' + t.name + ' tab', 'the Only overdue switch is missing'); continue; }
+    await sw.click();
+    await settle(page, 250);
+    const on = await read();
+    expect(T + ' ' + t.name + ' tab, Only overdue', (await sw.getAttribute('aria-pressed')) === 'true' && on.ready === 'ready' && on.shown > 0 && on.late === on.cards,
+      'the Only overdue switch did not filter the list (cards: ' + on.cards + ', overdue: ' + on.late + ')');
+    await sw.click();
+    await settle(page, 250);
+  }
+}
+
 // ---- 2. The whole TO-DO page, on a phone ----
 async function phoneTodo(page, scheme, size) {
   const T = scheme + ' TO-DO';
@@ -368,22 +410,12 @@ async function phoneTodo(page, scheme, size) {
   expect(T, same(await cardIds(page), ['b', 'a', 'm', 'c', 'l', 'd']), 'All shows the wrong cards: ' + await cardIds(page));
   expect(T, !(await page.locator('.td-list').textContent()).includes('Robot history'), "a card shows the robot's notes; only Josh's own note may show");
   expect(T, (await page.locator('.td-list').textContent()).includes('Check Costco first'), "Josh's own note does not show");
-  expect(T, await page.locator('.card[data-id="b"] .od').count() === 1, 'an overdue task has no yellow line');
+  expect(T, /^Overdue · /.test(await page.locator('.card[data-id="b"] .due.late').textContent().catch(() => '')), 'an overdue task\'s date does not say Overdue');
+  expect(T, await page.locator('.card[data-id="d"] .due.late').count() === 0, 'a task that is not overdue is marked Overdue');
   expect(T, await page.locator('.td-suggest').isVisible(), 'the possible task does not show');
   await lookBothEnds(page, T, size, scheme + '-todo');
 
-  // Every tab opens and shows its list: no tab is left looking like it's still loading.
-  for (const t of Todo.TABS) {
-    await tapTab(page, t.id);
-    const st = await page.evaluate((id) => ({
-      on: !!document.querySelector('.tdtab[data-tab-id="' + id + '"][aria-current="true"]'),
-      sub: document.querySelector('.td-sub').textContent,
-      shown: document.querySelectorAll('.td-list .card').length + document.querySelectorAll('.td-list .empty').length,
-      ready: document.documentElement.dataset.todo,
-    }), t.id);
-    expect(T + ' ' + t.name + ' tab', st.on && st.ready === 'ready' && !/loading/i.test(st.sub) && st.shown > 0,
-      'the tab did not open and show its list (selected: ' + st.on + ', line: "' + st.sub + '", items: ' + st.shown + ')');
-  }
+  await everyTab(page, T);
   await tapTab(page, 'all');
 
   // Pictures stand out past the card's top edge.
@@ -398,7 +430,7 @@ async function phoneTodo(page, scheme, size) {
   // The key in this part can only read: the change waits on the phone and the page says why.
   await page.waitForSelector('.td-pending[data-state="readonly"]', { timeout: 4000 }).catch(() => {});
   expect(T + ' tick', await page.locator('#toast').isVisible(), 'the "this key can only read" note did not show');
-  expect(T + ' tick', /1 change waiting to save: this key can only read/.test(await page.locator('.td-pending').textContent()), 'the waiting line should count the change and say the key can only read (got "' + (await page.locator('.td-pending').textContent()) + '")');
+  expect(T + ' tick', /1 change waiting to save: the key here \(ends in -key\) can only read/.test(await page.locator('.td-pending').textContent()), 'the waiting line should count the change and say which key can only read (got "' + (await page.locator('.td-pending').textContent()) + '")');
   await page.tap('.done-toggle');
   await settle(page, 200);
   expect(T + ' Done', (await cardIds(page, '.done-list .card')).join() === 'a,i', 'the Done folder shows the wrong tasks: ' + await cardIds(page, '.done-list .card'));
@@ -609,6 +641,10 @@ async function run() {
     const pcd = await darkness(pp);
     expect(scheme + ' PC colors', pcd.body < 50 && pcd.todo < 50, 'a PC should always be dark, even when set to light (got ' + JSON.stringify(pcd) + ')');
     await lookBothEnds(pp, scheme + ' PC TO-DO', pc, scheme + '-pc-todo');
+    await everyTab(pp, scheme + ' PC TO-DO');
+    await tapTab(pp, 'overdue');
+    await pp.screenshot({ path: path.join(OUT, scheme + '-pc-todo-overdue.png') });
+    await tapTab(pp, 'all');
     await dragCard(pp, 'a', '.tdtab[data-tab-id="waiting"]', scheme + ' PC move');
     await tapTab(pp, 'waiting');
     expect(scheme + ' PC move', (await cardIds(pp)).includes('a'), 'a card dragged onto Waiting is not there');
@@ -651,10 +687,28 @@ async function run() {
   expect(S, await sp.locator('#connect').isVisible() && await sp.locator('#connect-cancel').isVisible(), 'Change key should show the key screen with a Not now button');
   await look(sp, S + ' change key screen', phone);
   await sp.screenshot({ path: path.join(OUT, 'light-change-key.png') });
+  // Another key that can only read: the key screen says so right away and stays open.
+  await sp.fill('#connect-key', 'sample-key-two');
+  await sp.tap('#connect-go');
+  await sp.waitForFunction(() => /can only read/.test(document.getElementById('connect-why').textContent), null, { timeout: 5000 })
+    .catch(() => problem(S, 'Change key with a key that can only read did not say so on the key screen'));
+  expect(S, await sp.locator('#connect').isVisible(), 'the key screen should stay open when the new key can only read');
+  // A key that can save: never called read-only, the test of it writes nothing, and the waiting tick saves once.
+  const w0 = sctx.wrote;
   await sp.fill('#connect-key', 'saving-key');
   await sp.tap('#connect-go');
   await sp.waitForFunction(() => document.getElementById('connect').hidden, null, { timeout: 5000 }).catch(() => problem(S, 'the key screen did not close'));
+  expect(S, (await sp.evaluate(() => document.documentElement.dataset.keySaves)) === 'true', 'a key that can save was called read-only');
   await waitSaved(S + ' after a new key');
+  expect(S, sctx.wrote === w0 + 1, 'checking the key should write nothing; the waiting tick should save once (writes: ' + (sctx.wrote - w0) + ')');
+  expect(S, (await sp.locator('.td-pending').getAttribute('data-state')) !== 'readonly', 'a key that can save still shows as read-only');
+  await sp.locator('[data-open="sheet-menu"]:visible').first().tap();
+  await settle(sp, 200);
+  await sp.tap('#sheet-menu [data-open="sheet-settings"]');
+  await settle(sp, 200);
+  expect(S, /ends in -key\.$/.test(await sp.locator('#settings-key').textContent()), 'Settings should say which key is in use (got "' + (await sp.locator('#settings-key').textContent()) + '")');
+  await sp.tap('#sheet-settings [data-close]');
+  await settle(sp, 200);
   let file = sctx.box.files['data/tasks.json'];
   expect(S, file.a.status === 'done' && file.a.doneBy === 'josh', 'the tick made before the new key went in did not save');
   await sp.screenshot({ path: path.join(OUT, 'light-todo-saved.png') });

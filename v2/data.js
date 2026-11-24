@@ -54,6 +54,7 @@
   }
 
   let key = null;
+  const READONLY = 'This key can only read, so it can\'t save. On GitHub, its Contents permission for my-app-data has to be "Read and write".';
   let keySource = null;
 
   async function get(path, withKey) {
@@ -78,6 +79,17 @@
   // Text <-> the base64 GitHub sends, keeping letters like é and emoji intact.
   const toB64 = (text) => { const bytes = new TextEncoder().encode(text); let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(bin); };
   const fromB64 = (b64) => new TextDecoder().decode(Uint8Array.from(atob(String(b64).replace(/\s/g, '')), (c) => c.charCodeAt(0)));
+
+  // GitHub said no to a save. Only "this key isn't allowed to write" means the key can only read;
+  // anything else (too many tries, GitHub trouble) says what GitHub said, so it's never mistaken for a key problem.
+  async function refusal(res) {
+    let said = '';
+    try { said = String((await res.json()).message || ''); } catch (e) { /* no words */ }
+    if (res.status === 404 || /not accessible|permission|must have push|write access/i.test(said)) {
+      const e = fail('readonly', READONLY); e.said = said; return e;
+    }
+    return fail('server', 'GitHub turned the save down (' + res.status + (said ? ': ' + said : '') + ').');
+  }
 
   async function call(method, path, body) {
     if (!key) throw fail('nokey', 'No data box key on this phone yet.');
@@ -104,6 +116,8 @@
       return false;
     },
     source() { return keySource; },
+    // The key's last 4 letters, so Josh can tell which key a phone or computer is using.
+    keyEnd() { return key ? String(key).slice(-4) : ''; },
 
     // From the Connect screen: check the key can read the data box, then keep it on this phone.
     async connect(newKey) {
@@ -132,6 +146,26 @@
       return { data: JSON.parse(fromB64(j.content)), version: j.sha };
     },
 
+    // Can this key save? Asked without changing anything: it offers GitHub the file's own words back,
+    // marked as an old version on purpose, so GitHub always turns the write down. How it turns it down
+    // tells us: "that's not the newest version" = this key may save; "not allowed" = it can only read.
+    async canSave() {
+      const res = await call('GET', 'data/tasks.json');
+      if (res.status === 401) throw fail('badkey', 'GitHub did not accept that key. It may be mistyped or expired.');
+      if (!res.ok) throw fail('server', 'GitHub answered with an error (' + res.status + ').');
+      const j = await res.json();
+      const put = await call('PUT', 'data/tasks.json', {
+        message: 'New Hub: can this key save? (never saved)',
+        content: String(j.content).replace(/\s/g, ''),
+        branch: BRANCH,
+        sha: '0000000000000000000000000000000000000000',
+      });
+      if (put.status === 409 || put.status === 422) return true;
+      if (put.status === 403 || put.status === 404) { const e = await refusal(put); if (e.code === 'readonly') return false; throw e; }
+      if (put.status === 401) throw fail('badkey', 'GitHub did not accept that key. It may be mistyped or expired.');
+      throw fail('server', 'GitHub answered with an error (' + put.status + ').');
+    },
+
     // Write a file only if it is still the version read. Returns false if someone changed it since.
     // Written the same way the old app writes, so the two never fight over spacing.
     async writeIfUnchanged(path, data, version, note) {
@@ -144,7 +178,7 @@
       if (res.ok) return true;
       if (res.status === 409 || res.status === 422) return false;
       if (res.status === 401) throw fail('badkey', 'GitHub did not accept that key. It may be mistyped or expired.');
-      if (res.status === 403 || res.status === 404) throw fail('readonly', 'The key on this phone can only read, so it can\'t save.');
+      if (res.status === 403 || res.status === 404) throw await refusal(res);
       throw fail('server', 'GitHub answered with an error (' + res.status + ').');
     },
   };

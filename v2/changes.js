@@ -116,7 +116,9 @@
   // Save: newest copy, put the changes in, write only if nobody changed it since.
   // Returns { saved, why, files } where files holds what was written, so the page can show it.
   let readOnly = false;
+  let era = 0; // goes up when a new key goes in, so an answer about the old key can't mark the new one
   async function save(store) {
+    const mine = era;
     if (!SAVING) return { saved: false, why: 'off' };
     if (readOnly) return { saved: false, why: 'readonly' };
     if (saving || !pending.length) return { saved: false, why: saving ? 'busy' : 'nothing' };
@@ -148,7 +150,7 @@
       }
       return { saved: true, files };
     } catch (e) {
-      if (e && e.code === 'readonly') readOnly = true;
+      if (e && e.code === 'readonly' && mine === era) readOnly = true;
       return { saved: false, why: (e && e.code) || 'error', error: e, files };
     } finally {
       saving = false;
@@ -161,7 +163,7 @@
     apply,
     applySuggestions,
     describe,
-    start() { pending = loadWaiting(); readOnly = false; return pending.slice(); },
+    start() { pending = loadWaiting(); readOnly = false; era++; return pending.slice(); },
     isReadOnly() { return readOnly; },
     add(change) {
       const c = Object.assign({ id: newId(), at: new Date().toISOString() }, change);
