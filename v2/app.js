@@ -6,6 +6,7 @@
   const tabs = Array.from(document.querySelectorAll('.tab'));
   const calm = window.matchMedia('(prefers-reduced-motion: reduce)');
   let current = 0;
+  let aiming = null, aimTimer;
 
   function saved() {
     try { const i = ORDER.indexOf(localStorage.getItem(LAST)); return i < 0 ? 0 : i; } catch (e) { return 0; }
@@ -20,7 +21,6 @@
   }
   // While a tapped page slides in, the halfway points of the slide don't count as a swipe,
   // so the bar and the remembered page can't flip to the page it slid past.
-  let aiming = null, aimTimer;
   function go(i, smooth) {
     aiming = i;
     clearTimeout(aimTimer);
@@ -35,12 +35,27 @@
   }
 
   // Open on the page used last, placed before it shows so it doesn't slide in.
+  // The pages may not be laid out yet on the first frame (width 0, or a style still loading), so
+  // keep placing until the page really sits there, and again whenever the pages change size.
   pages.classList.add('placing');
   mark(saved());
-  requestAnimationFrame(() => {
-    pages.scrollLeft = current * pages.clientWidth;
-    pages.classList.remove('placing');
-  });
+  let placed = false;
+  function place() {
+    const w = pages.clientWidth;
+    if (!w) return;
+    pages.scrollLeft = current * w;
+    if (Math.abs(pages.scrollLeft - current * w) < 2) {
+      placed = true;
+      pages.classList.remove('placing');
+    }
+  }
+  (function tryPlace(n) {
+    place();
+    if (!placed && n < 120) requestAnimationFrame(() => tryPlace(n + 1));
+    else pages.classList.remove('placing');
+  })(0);
+  window.addEventListener('load', place);
+  if (window.ResizeObserver) new ResizeObserver(() => { if (!aiming) place(); }).observe(pages);
 
   tabs.forEach((t, i) => t.addEventListener('click', () => go(i, true)));
 
@@ -57,7 +72,7 @@
   // While a TO-DO card is held, the pages stay put (see todo.js).
 
   // Turning the phone or resizing keeps the same page in view.
-  window.addEventListener('resize', () => { pages.scrollLeft = current * pages.clientWidth; });
+  window.addEventListener('resize', place);
 
   // ---- Data (read-only) ----
   const lines = {};
