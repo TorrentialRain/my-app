@@ -577,6 +577,9 @@ async function run() {
     await page.fill('#connect-key', 'sample-key');
     await page.tap('#connect-go');
     await page.waitForFunction(() => document.documentElement.dataset.loaded === 'yes', null, { timeout: 8000 }).catch(() => {});
+    // This made-up key can only read: the key screen says so and stays open, and Not now closes it.
+    expect(scheme + ' connect', /can only read/.test(await page.locator('#connect-why').textContent()), 'a key that can only read was not spotted on the key screen');
+    if (await page.locator('#connect-cancel').isVisible()) await page.tap('#connect-cancel');
     if (!(await page.locator('#connect').isHidden())) problem(scheme + ' connect', 'the Connect screen did not close');
     const ph = await darkness(page);
     if (scheme === 'light') expect(scheme + ' phone colors', ph.body > 200 && ph.todo > 200, 'a phone set to light should show the light colors (got ' + JSON.stringify(ph) + ')');
