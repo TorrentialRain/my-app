@@ -87,10 +87,23 @@
   const connectErr = document.getElementById('connect-error');
   const connectKey = document.getElementById('connect-key');
 
-  function askForKey(why) {
-    if (why) connectWhy.textContent = why;
+  const connectCancel = document.getElementById('connect-cancel');
+  const firstWhy = connectWhy.textContent;
+  function askForKey(why, canCancel) {
+    connectWhy.textContent = why || firstWhy;
+    connectErr.textContent = '';
+    connectCancel.hidden = !canCancel;
     connect.hidden = false;
   }
+
+  // Settings > Change key (and the waiting list's button): put in a new key, e.g. one that can save.
+  document.querySelectorAll('[data-change-key]').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.sheet').forEach((s) => { s.hidden = true; });
+    document.body.classList.remove('sheet-up');
+    askForKey('Paste the new key. It replaces the one on this phone, and anything waiting to save saves right after.', Data.source() !== null);
+    connectKey.focus();
+  }));
+  connectCancel.addEventListener('click', () => { connect.hidden = true; connectKey.value = ''; });
 
   function keyTrouble(e) {
     if (e.code === 'badkey' || e.code === 'noaccess') {

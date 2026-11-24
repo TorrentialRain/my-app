@@ -1,8 +1,11 @@
-// Data for the new Hub. READ-ONLY in this phase: there is no save function here at all,
-// so nothing in the new app can change the data box by mistake. (TO-DO's save path waits, switched off, in changes.js.)
+// Data for the new Hub: reading, and (for TO-DO) saving.
+//
+// Saving only ever goes through writeIfUnchanged: it writes a file only if nobody changed it since
+// this phone read it. If someone did (the robot, the old app, another phone), GitHub says no and the
+// TO-DO page reads the newest copy and puts its changes in again. So a save can't wipe out anyone else's.
 //
 // Where the key comes from, in this order:
-//   1. A key saved for the new Hub on this phone (from its Connect screen).
+//   1. A key saved for the new Hub on this phone (from its Connect screen, or Settings > Change key).
 //   2. The key the old app already saved, if this phone's storage has it and "Stay signed in" is on.
 //      It is only used in memory, never copied.
 //   3. Neither: the app shows its Connect screen.
@@ -72,6 +75,24 @@
     return res.json();
   }
 
+  // Text <-> the base64 GitHub sends, keeping letters like é and emoji intact.
+  const toB64 = (text) => { const bytes = new TextEncoder().encode(text); let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(bin); };
+  const fromB64 = (b64) => new TextDecoder().decode(Uint8Array.from(atob(String(b64).replace(/\s/g, '')), (c) => c.charCodeAt(0)));
+
+  async function call(method, path, body) {
+    if (!key) throw fail('nokey', 'No data box key on this phone yet.');
+    try {
+      return await fetch(`${API}/repos/${REPO}/contents/${path}` + (method === 'GET' ? `?ref=${BRANCH}` : ''), {
+        method,
+        cache: 'no-store',
+        headers: Object.assign({ Authorization: 'Bearer ' + key, Accept: 'application/vnd.github+json' }, body ? { 'Content-Type': 'application/json' } : {}),
+        body: body ? JSON.stringify(body) : undefined,
+      });
+    } catch (e) {
+      throw fail('offline', "Can't reach your data right now.");
+    }
+  }
+
   const Data = {
     // Find a key. Returns true if one was found.
     async start() {
@@ -101,6 +122,31 @@
     },
 
     read(path) { return get(path); },
+
+    // The newest copy of a file, with its version, for saving.
+    async readWithVersion(path) {
+      const res = await call('GET', path);
+      if (res.status === 401) throw fail('badkey', 'GitHub did not accept that key. It may be mistyped or expired.');
+      if (!res.ok) throw fail('server', 'GitHub answered with an error (' + res.status + ').');
+      const j = await res.json();
+      return { data: JSON.parse(fromB64(j.content)), version: j.sha };
+    },
+
+    // Write a file only if it is still the version read. Returns false if someone changed it since.
+    // Written the same way the old app writes, so the two never fight over spacing.
+    async writeIfUnchanged(path, data, version, note) {
+      const res = await call('PUT', path, {
+        message: note || 'New Hub: update ' + path,
+        content: toB64(JSON.stringify(data, null, 2) + '\n'),
+        branch: BRANCH,
+        sha: version,
+      });
+      if (res.ok) return true;
+      if (res.status === 409 || res.status === 422) return false;
+      if (res.status === 401) throw fail('badkey', 'GitHub did not accept that key. It may be mistyped or expired.');
+      if (res.status === 403 || res.status === 404) throw fail('readonly', 'The key on this phone can only read, so it can\'t save.');
+      throw fail('server', 'GitHub answered with an error (' + res.status + ').');
+    },
   };
 
   // Small summaries, one per page. Kept apart from the reading so they can be tested on their own.

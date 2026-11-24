@@ -175,6 +175,8 @@ body { position: fixed; inset: 0; overflow: hidden; }
 }
 @media (prefers-color-scheme: dark), (min-width: 900px) { .connect button { color: #000; } }
 .connect .error { color: var(--bad); margin-top: 12px; min-height: 1em; }
+.connect .quiet { background: transparent; color: var(--plan); }
+.td-pending.is-bad { font-weight: 600; }
 
 /* ================= TO-DO page =================
    Flat look (Josh's pick, Nov 24): solid cards, soft shadow, no glass, no shine.

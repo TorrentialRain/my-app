@@ -200,7 +200,6 @@
   let tab = tabById(store.get('hub2.todoTab', 'all')).id;
   let onlyOverdue = store.get('hub2.todoOnlyOverdue', {});
   let doneOpen = false;
-  let told = false;
 
   function recompute() {
     tasks = Changes.apply(base, Changes.list().filter((c) => c.file !== 'suggestions'));
@@ -278,9 +277,7 @@
         '<button type="button" class="sg-skip">Skip</button><button type="button" class="sg-add">Add</button></div>').join('');
     }
 
-    const n = Changes.list().length;
-    pendingEl.hidden = !n;
-    $('.pending-text', pendingEl).textContent = n === 1 ? '1 change waiting to save' : n + ' changes waiting to save';
+    showSaving();
     document.documentElement.dataset.todo = 'ready';
   }
   function landsIn(p) {
@@ -296,11 +293,75 @@
     return 'Spotted by Claude';
   }
 
-  // Every change goes through here: it shows at once, joins the waiting list, and the first one says why.
+  // Every change goes through here: it shows at once, is kept on this phone, and saves a moment later.
   function change(c) {
     Changes.add(c);
     render();
-    if (!told) { told = true; toast('Saving turns on soon. Until then, changes stay on screen until you close the app.'); }
+    saveSoon(700);
+  }
+
+  // ---------- Saving ----------
+  // The line under the list says where saving stands: waiting, saving, saved, or why it can't.
+  let dataStore = null;
+  let saveTimer = null;
+  let retryTimer = null;
+  let savingNow = false;
+  let justSaved = 0;
+  let lastRead = 0;
+  function showSaving() {
+    const n = Changes.list().length;
+    const text = $('.pending-text', pendingEl);
+    pendingEl.classList.toggle('is-bad', !!n && Changes.isReadOnly());
+    if (n) {
+      const count = n === 1 ? '1 change waiting to save' : n + ' changes waiting to save';
+      text.textContent = Changes.isReadOnly() ? count + ': this key can only read' : (savingNow ? 'Saving ' + (n === 1 ? '1 change' : n + ' changes') + '…' : count);
+      pendingEl.hidden = false;
+    } else if (Date.now() - justSaved < 2500) {
+      text.textContent = 'All saved';
+      pendingEl.hidden = false;
+    } else {
+      pendingEl.hidden = true;
+    }
+    pendingEl.dataset.state = !n ? (pendingEl.hidden ? 'none' : 'saved') : (Changes.isReadOnly() ? 'readonly' : (savingNow ? 'saving' : 'waiting'));
+  }
+  function saveSoon(ms) {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveNow, ms);
+  }
+  async function saveNow() {
+    if (!dataStore || savingNow || !Changes.list().length || Changes.isReadOnly()) return;
+    savingNow = true; showSaving();
+    const r = await Changes.save(dataStore);
+    savingNow = false;
+    // Show what was written, so the screen matches the data box (including anything the robot added).
+    if (r.files && r.files['data/tasks.json']) { base = r.files['data/tasks.json']; lastRead = Date.now(); }
+    if (r.files && r.files['data/suggestions.json']) sugs = r.files['data/suggestions.json'];
+    if (r.saved) {
+      justSaved = Date.now();
+      setTimeout(showSaving, 2600);
+      if (Changes.list().length) saveSoon(300); // more changes came in while saving
+    } else if (r.why === 'readonly') {
+      toast('The key on this phone can only read, so your changes are waiting here. Put in a key that can save: Menu, Settings, Change key.');
+    } else if (r.why === 'badkey') {
+      toast('GitHub stopped accepting the key on this phone. Your changes are waiting here. Put in a new key: Menu, Settings, Change key.');
+    } else if (r.why !== 'busy' && r.why !== 'nothing') {
+      // No signal, GitHub busy, or the file kept changing: try again in a while. Nothing is lost.
+      clearTimeout(retryTimer);
+      retryTimer = setTimeout(saveNow, 30000);
+    }
+    render();
+  }
+  // Back in the app, or the signal comes back: save what's waiting, and show the newest data.
+  async function catchUp() {
+    if (!dataStore || document.documentElement.dataset.todo !== 'ready') return;
+    if (Changes.list().length) { saveNow(); return; }
+    if (Date.now() - lastRead < 60000) { render(); return; }
+    try {
+      base = (await dataStore.read('data/tasks.json')) || base;
+      sugs = (await dataStore.read('data/suggestions.json').catch(() => sugs)) || sugs;
+      lastRead = Date.now();
+    } catch (e) { /* keep what's on screen */ }
+    render();
   }
 
   // ---------- Taps ----------
@@ -402,6 +463,10 @@
       : '<li class="empty">Nothing here yet.</li>';
   }
   function fillWaiting() {
+    $('#waiting-hint').textContent = Changes.isReadOnly()
+      ? "The key on this phone can only read, so these wait here. Put in a key that can save, and they save by themselves."
+      : 'These are kept on this phone and save by themselves as soon as your data box can be reached.';
+    $('#waiting-change-key').hidden = !Changes.isReadOnly();
     $('#waiting-list').innerHTML = Changes.list().map((c) => '<li>' + esc(c.file === 'suggestions'
       ? (c.type === 'skip' ? 'Skip a possible task' : 'Add a possible task') : Changes.describe(c, Object.assign({}, base, tasks))) + '</li>').join('');
   }
@@ -559,12 +624,15 @@
   window.Todo = {
     Pure,
     async load(Data) {
+      dataStore = Data;
       Changes.start();
       const [t, s] = await Promise.all([Data.read('data/tasks.json'), Data.read('data/suggestions.json').catch(() => ({}))]);
       base = t || {};
       sugs = s || {};
+      lastRead = Date.now();
       render();
       startTilt();
+      if (Changes.list().length) saveSoon(300); // changes left waiting from last time
     },
     showError(message) {
       listEl.innerHTML = '<p class="empty bad">' + esc(message) + '</p>';
@@ -572,5 +640,6 @@
     },
   };
   // A new day: overdue marks and the Done folder catch up when the app comes back.
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && document.documentElement.dataset.todo === 'ready') render(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) catchUp(); });
+  window.addEventListener('online', () => catchUp());
 })();

@@ -8,8 +8,9 @@
 //   - any text is too faint to read, or any button is smaller than 44 by 44
 //   - the TO-DO page shows the wrong tasks, or tick, add, drag, the Done folder, ?, the menu or the Archive don't work
 //   - a TO-DO change could be saved twice (the double-save checks)
-//   - the app ever tries to change the data box (it must only read for now)
-// It never touches the real data box: GitHub is answered with made-up sample data.
+//   - saving goes wrong: a change doesn't save, saves twice, wipes out someone else's change, writes a
+//     file it shouldn't, or a key that can only read isn't spotted and shown
+// It never touches the real data box: GitHub is played by a made-up data box with sample data.
 // Pictures of every page go to v2/check/out/.
 const path = require('path');
 const fs = require('fs');
@@ -100,11 +101,73 @@ function rules() {
   expect('rules', trashed.b.status === 'dropped' && trashed.b.droppedBy === 'josh', 'a trashed task must go to the Archive marked deleted');
   const sk = { id: 'x4', type: 'skip', file: 'suggestions', suggestionId: 's1', at: at(0) };
   expect('rules', Changes.applySuggestions(Changes.applySuggestions(SUGS, [sk]), [sk]).s1.changeIds.length === 1, 'a skip saved twice must land once');
-  expect('rules', Changes.SAVING === false, 'saving must stay off until the saving key goes in');
+  expect('rules', Changes.SAVING === true, 'saving should be on');
   const d = Todo.dueFrom('2026-12-02', '');
   expect('rules', d && d.dueNoTime === true && /T23:59:00-09:00$/.test(d.due), 'a day with no time should mean 11:59 PM Alaska time: got ' + (d && d.due));
   const d2 = Todo.dueFrom('2026-07-02', '14:30');
   expect('rules', d2 && /T14:30:00-08:00$/.test(d2.due), 'a summer time should use Alaska daylight time: got ' + (d2 && d2.due));
+}
+
+// ---- Saving, without a browser: a made-up data box that can say no, change under us, or lose a reply ----
+function fakeStore() {
+  const st = { files: { 'data/tasks.json': JSON.parse(JSON.stringify(TASKS)), 'data/suggestions.json': JSON.parse(JSON.stringify(SUGS)) }, ver: { 'data/tasks.json': 1, 'data/suggestions.json': 1 }, writes: 0, before: null, after: null };
+  st.readWithVersion = async (p) => ({ data: st.nullRead ? null : JSON.parse(JSON.stringify(st.files[p])), version: st.ver[p] });
+  st.writeIfUnchanged = async (p, data, v) => {
+    if (st.before) { const f = st.before; st.before = null; f(p); }
+    if (st.readonly) { const e = new Error('read only'); e.code = 'readonly'; throw e; }
+    if (v !== st.ver[p]) return false;
+    st.files[p] = JSON.parse(JSON.stringify(data)); st.ver[p]++; st.writes++;
+    if (st.after) { const f = st.after; st.after = null; f(p); }
+    return true;
+  };
+  return st;
+}
+async function saveRules() {
+  console.log('Checking saving');
+  const W1 = 'save';
+  // 1. A tick saves, and the waiting list empties.
+  let st = fakeStore(); Changes.start();
+  let c = Changes.add({ type: 'tick', taskId: 'a' });
+  let r = await Changes.save(st);
+  expect(W1, r.saved && st.files['data/tasks.json'].a.status === 'done' && !Changes.list().length, 'a tick should save and leave nothing waiting');
+  expect(W1, r.saved && r.files['data/tasks.json'] && r.files['data/tasks.json'].a.status === 'done', 'a save should hand back what it wrote, so the screen matches');
+  // 2. Someone else saves in between (the robot adds a task): ours goes in on top, theirs stays.
+  st = fakeStore(); Changes.start();
+  Changes.add({ type: 'tick', taskId: 'b' });
+  st.before = (p) => { st.files[p].r1 = { title: 'Added by the robot', kind: 'task', status: 'open', section: 'active' }; st.ver[p]++; };
+  r = await Changes.save(st);
+  const f2 = st.files['data/tasks.json'];
+  expect(W1, r.saved && f2.r1 && f2.b.status === 'done', "when someone else saves first, both changes should end up in the file (got r1=" + !!f2.r1 + ', b=' + f2.b.status + ')');
+  // 3. The save lands but the reply is lost: trying again must not put it in twice.
+  st = fakeStore(); Changes.start();
+  c = Changes.add({ type: 'add', taskId: 'z1', task: { title: 'Once only', kind: 'task', status: 'open', section: 'active' } });
+  st.after = () => { const e = new Error('no signal'); e.code = 'offline'; throw e; };
+  r = await Changes.save(st);
+  expect(W1, !r.saved && Changes.list().length === 1, 'a save whose reply was lost should stay waiting');
+  r = await Changes.save(st);
+  const once = Object.values(st.files['data/tasks.json']).filter((t) => t.title === 'Once only').length;
+  expect(W1, r.saved && once === 1, 'trying again after a lost reply must not add the task twice (found ' + once + ')');
+  // 4. A key that can only read: the change waits, and the app stops asking until the key changes.
+  st = fakeStore(); Changes.start(); st.readonly = true;
+  Changes.add({ type: 'tick', taskId: 'c' });
+  r = await Changes.save(st);
+  const before = st.writes;
+  const r2 = await Changes.save(st);
+  expect(W1, r.why === 'readonly' && Changes.isReadOnly() && Changes.list().length === 1 && r2.why === 'readonly' && st.writes === before, 'a key that can only read should keep the change waiting and say so');
+  Changes.start();
+  expect(W1, !Changes.isReadOnly(), 'putting in a new key should try saving again');
+  // 5. A bad read (nothing came back): nothing is written.
+  st = fakeStore(); Changes.start(); st.nullRead = true;
+  Changes.add({ type: 'tick', taskId: 'c' });
+  r = await Changes.save(st);
+  expect(W1, r.why === 'unsafe' && st.writes === 0 && Changes.list().length === 1, 'if the file reads back empty, the app must not write over it');
+  // 6. A skip and an add from a possible task save to their own files.
+  st = fakeStore(); Changes.start();
+  Changes.add({ file: 'suggestions', type: 'skip', suggestionId: 's1' });
+  Changes.add({ type: 'tick', taskId: 'd' });
+  r = await Changes.save(st);
+  expect(W1, r.saved && st.files['data/suggestions.json'].s1.status === 'skipped' && st.files['data/tasks.json'].d.status === 'done', 'a skip and a tick should each save to their own file');
+  Changes.start();
 }
 
 // ---- A tiny web server for the app's own files ----
@@ -227,15 +290,39 @@ async function lookBothEnds(page, where, size, shot) {
   await settle(page, 100);
 }
 
+// A made-up data box standing in for GitHub. The key decides what it allows:
+//   'sample-key' can only read (writes are refused, like a read-only key); 'saving-key' can save.
+// It checks versions like GitHub does, so a save on top of an old copy is refused.
+// ctx.box: the files; ctx.wrote: saves it took; ctx.refused: saves refused; ctx.badPaths: writes to other files.
+// ctx.box.trap: a hook a test can set to act just before the next save.
 async function newContext(browser, scheme, size, extra) {
   const ctx = await browser.newContext(Object.assign({ viewport: { width: size.W, height: size.H }, deviceScaleFactor: size.W > 1000 ? 1 : 3, colorScheme: scheme }, extra));
-  ctx.wrote = 0;
+  ctx.wrote = 0; ctx.refused = 0; ctx.badPaths = [];
+  const box = ctx.box = { files: {}, ver: {}, n: 0, trap: null };
+  for (const [p, d] of Object.entries(SAMPLE)) { box.files[p] = JSON.parse(JSON.stringify(d)); box.ver[p] = 'v' + (++box.n); }
+  box.bump = (p) => { box.ver[p] = 'v' + (++box.n); };
   await ctx.route('https://api.github.com/**', (route) => {
     const req = route.request();
-    if (req.method() !== 'GET') { ctx.wrote++; return route.fulfill({ status: 405, body: '' }); }
-    const m = req.url().match(/\/contents\/(.+?)\?/);
-    const body = m && SAMPLE[m[1]];
-    return route.fulfill(body ? { status: 200, contentType: 'application/json', body: JSON.stringify(body) } : { status: 404, body: '' });
+    const m = req.url().match(/\/contents\/([^?]+)/);
+    const p = m && m[1];
+    const auth = req.headers().authorization || '';
+    if (req.method() === 'GET') {
+      if (!p || !(p in box.files)) return route.fulfill({ status: 404, body: '' });
+      if (/raw/.test(req.headers().accept || '')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(box.files[p]) });
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ sha: box.ver[p], content: Buffer.from(JSON.stringify(box.files[p], null, 2) + '\n').toString('base64') }) });
+    }
+    if (req.method() !== 'PUT') { ctx.badPaths.push(req.method() + ' ' + p); return route.fulfill({ status: 405, body: '' }); }
+    if (!['data/tasks.json', 'data/suggestions.json'].includes(p)) ctx.badPaths.push(p);
+    if (!/saving-key/.test(auth)) { ctx.refused++; return route.fulfill({ status: 403, contentType: 'application/json', body: '{"message":"Resource not accessible by personal access token"}' }); }
+    let lost = false;
+    if (box.trap) { const t = box.trap; box.trap = null; const r = t(p); if (r === 'lost') lost = true; else if (r) return route.fulfill(r); }
+    const body = JSON.parse(req.postData());
+    if (body.sha !== box.ver[p]) return route.fulfill({ status: 409, contentType: 'application/json', body: '{"message":"does not match"}' });
+    box.files[p] = JSON.parse(Buffer.from(body.content, 'base64').toString('utf8'));
+    box.bump(p);
+    ctx.wrote++;
+    if (lost) return route.fulfill({ status: 502, body: '' }); // it saved, but the phone never hears back
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ content: { sha: box.ver[p] } }) });
   });
   return ctx;
 }
@@ -294,8 +381,10 @@ async function phoneTodo(page, scheme, size) {
   await settle(page, 200);
   expect(T + ' tick', !(await cardIds(page)).includes('a'), 'a ticked task stayed in the list');
   expect(T + ' tick', (await page.locator('.done-count').textContent()).trim() === '2', 'the Done folder should now hold 2');
-  expect(T + ' tick', await page.locator('#toast').isVisible(), 'the "saving turns on soon" note did not show');
-  expect(T + ' tick', /1 change waiting to save/.test(await page.locator('.td-pending').textContent()), 'the waiting-to-save list did not count the change');
+  // The key in this part can only read: the change waits on the phone and the page says why.
+  await page.waitForSelector('.td-pending[data-state="readonly"]', { timeout: 4000 }).catch(() => {});
+  expect(T + ' tick', await page.locator('#toast').isVisible(), 'the "this key can only read" note did not show');
+  expect(T + ' tick', /1 change waiting to save: this key can only read/.test(await page.locator('.td-pending').textContent()), 'the waiting line should count the change and say the key can only read (got "' + (await page.locator('.td-pending').textContent()) + '")');
   await page.tap('.done-toggle');
   await settle(page, 200);
   expect(T + ' Done', (await cardIds(page, '.done-list .card')).join() === 'a,i', 'the Done folder shows the wrong tasks: ' + await cardIds(page, '.done-list .card'));
@@ -414,6 +503,8 @@ async function darkness(page) {
 
 async function run() {
   rules();
+  await saveRules();
+  if (process.env.RULES_ONLY) { console.log(problems.length ? problems.length + ' problem(s).' : 'Rules and saving: all good.'); process.exit(problems.length ? 1 : 0); }
   const server = await serve();
   const base = 'http://127.0.0.1:' + server.address().port + '/my-app/v2/';
   fs.rmSync(OUT, { recursive: true, force: true });
@@ -482,7 +573,8 @@ async function run() {
       problem(scheme + ' reopen', 'did not open on the page used last (Finance). Before: ' + JSON.stringify(before) + ' After: ' + JSON.stringify(after));
     }
 
-    if (ctx.wrote) problem(scheme, `the app tried to change the data box ${ctx.wrote} time(s); it must only read`);
+    if (ctx.badPaths.length) problem(scheme, 'the app tried to write somewhere it never should: ' + ctx.badPaths.join(', '));
+    if (ctx.refused > 3) problem(scheme, `with a key that can only read, the app kept trying to save (${ctx.refused} times); it should stop after the first no`);
     await ctx.close();
 
     // 7. PC: tabs down the left, buttons along the top, Done on the right.
@@ -511,11 +603,77 @@ async function run() {
     await settle(pp, 250);
     await look(pp, scheme + ' PC add form', pc);
     await pp.screenshot({ path: path.join(OUT, scheme + '-pc-todo-add.png') });
-    if (pctx.wrote) problem(scheme + ' PC', `the app tried to change the data box ${pctx.wrote} time(s); it must only read`);
+    if (pctx.badPaths.length) problem(scheme + ' PC', 'the app tried to write somewhere it never should: ' + pctx.badPaths.join(', '));
     await pctx.close();
   }
 
-  // 8. Reduce Motion: the pictures stay inside their cards.
+  // 8. Saving, the way Josh will do it: a key that can only read first, then Settings > Change key.
+  console.log('Checking saving on the phone');
+  const sctx = await newContext(browser, 'light', phone, { hasTouch: true, isMobile: true });
+  const sp = await openConnected(sctx, base, edges);
+  const S = 'saving';
+  await sp.tap('.tab[data-tab="todo"]');
+  await settle(sp);
+  const state = () => sp.locator('.td-pending').getAttribute('data-state');
+  const waitSaved = async (where) => {
+    await sp.waitForFunction(() => ['saved', 'none'].includes(document.querySelector('.td-pending').dataset.state), null, { timeout: 8000 })
+      .catch(async () => problem(where, 'changes did not save (the line says "' + (await sp.locator('.td-pending').textContent()) + '")'));
+  };
+  await sp.tap('.card[data-id="a"] .tick');
+  await sp.waitForSelector('.td-pending[data-state="readonly"]', { timeout: 4000 }).catch(() => problem(S, 'a key that can only read was not spotted'));
+  await sp.tap('.td-pending');
+  await settle(sp, 300);
+  expect(S, await sp.locator('#waiting-change-key').isVisible(), 'the waiting list should offer to put in a key that can save');
+  await look(sp, S + ' waiting list (read-only key)', phone);
+  await sp.screenshot({ path: path.join(OUT, 'light-todo-waiting-readonly.png') });
+  await sp.tap('#sheet-waiting [data-close]');
+  await settle(sp, 200);
+  await sp.locator('[data-open="sheet-menu"]:visible').first().tap();
+  await settle(sp, 200);
+  await sp.tap('#sheet-menu [data-open="sheet-settings"]');
+  await settle(sp, 200);
+  await sp.tap('#settings-change-key');
+  await settle(sp, 200);
+  expect(S, await sp.locator('#connect').isVisible() && await sp.locator('#connect-cancel').isVisible(), 'Change key should show the key screen with a Not now button');
+  await look(sp, S + ' change key screen', phone);
+  await sp.screenshot({ path: path.join(OUT, 'light-change-key.png') });
+  await sp.fill('#connect-key', 'saving-key');
+  await sp.tap('#connect-go');
+  await sp.waitForFunction(() => document.getElementById('connect').hidden, null, { timeout: 5000 }).catch(() => problem(S, 'the key screen did not close'));
+  await waitSaved(S + ' after a new key');
+  let file = sctx.box.files['data/tasks.json'];
+  expect(S, file.a.status === 'done' && file.a.doneBy === 'josh', 'the tick made before the new key went in did not save');
+  await sp.screenshot({ path: path.join(OUT, 'light-todo-saved.png') });
+
+  // Someone else (the robot) saves just before the phone does: both changes must end up in the file, and show.
+  sctx.box.trap = (p) => { sctx.box.files[p].r1 = { title: 'Added by the robot', kind: 'task', status: 'open', section: 'active', priority: 5 }; sctx.box.bump(p); return null; };
+  await sp.tap('.card[data-id="b"] .tick');
+  await waitSaved(S + ' when the robot saved first');
+  file = sctx.box.files['data/tasks.json'];
+  expect(S, file.r1 && file.b.status === 'done', 'when the robot saved first, one of the two changes was lost');
+  await settle(sp, 300);
+  expect(S, (await cardIds(sp)).includes('r1'), "after saving, the robot's new task should show too");
+
+  // The save lands but the phone never hears back: the next save must not put it in twice.
+  sctx.box.trap = () => 'lost';
+  await sp.tap('.card[data-id="c"] .tick');
+  await sp.waitForSelector('.td-pending[data-state="waiting"]', { timeout: 5000 }).catch(() => {});
+  await sp.tap('.card[data-id="m"] .tick');
+  await waitSaved(S + ' after a lost reply');
+  file = sctx.box.files['data/tasks.json'];
+  expect(S, file.c.status === 'done' && file.m.status === 'done' && (file.c.changeIds || []).length === 1, 'after a lost reply the change landed ' + (file.c.changeIds || []).length + ' times, or the next change did not save');
+
+  // Reopening with nothing waiting writes nothing.
+  const wroteBefore = sctx.wrote;
+  await sp.reload();
+  await sp.waitForFunction(() => document.documentElement.dataset.todo === 'ready', null, { timeout: 8000 }).catch(() => {});
+  await settle(sp, 1500);
+  expect(S, sctx.wrote === wroteBefore, 'reopening with nothing waiting should not write anything');
+  expect(S, !(await sp.locator('.td-pending').isVisible()), 'after reopening, nothing should be waiting to save');
+  if (sctx.badPaths.length) problem(S, 'the app tried to write somewhere it never should: ' + sctx.badPaths.join(', '));
+  await sctx.close();
+
+  // 9. Reduce Motion: the pictures stay inside their cards.
   console.log('Checking Reduce Motion');
   const cctx = await newContext(browser, 'light', phone, { hasTouch: true, isMobile: true, reducedMotion: 'reduce' });
   const cp = await openConnected(cctx, base, edges);

@@ -1,8 +1,7 @@
 // Changes made on the TO-DO page (tick, add, move, reorder, trash) and how they get saved.
 //
-// SAVING IS OFF. The key on the phone can only read, so changes stay on screen until the app closes.
-// Turning saving on later is one step: put in a key that can save and set SAVING to true below.
-// Everything else (the double-save checks, the "waiting to save" list) is already here.
+// SAVING IS ON (Nov 24). Each change is kept on this phone first, then saved a moment later.
+// If the key on the phone can only read, changes wait on the phone and the page says so.
 //
 // Double-save checks, so one change can never land twice or wipe out someone else's:
 //   1. Every change has its own id. A task remembers the ids already put into it, and a change
@@ -15,8 +14,10 @@
 //   4. Only one save runs at a time.
 //   5. Anything that couldn't be saved stays in a "waiting to save" list on this phone and is
 //      tried again later. The page shows that list, so nothing is quietly dropped.
+//   6. A save may only add to a file, never shrink it. If the copy to be written holds fewer tasks
+//      than the copy read, nothing is written (that would mean something went badly wrong).
 (function () {
-  const SAVING = false;
+  const SAVING = true;
   const WAITING = 'hub2.waitingToSave';
   const KEEP_IDS = 30; // how many change ids each task remembers
 
@@ -112,30 +113,39 @@
     try { localStorage.setItem(WAITING, JSON.stringify(pending)); } catch (e) { /* stays in memory */ }
   }
 
-  // Save: newest copy, put the changes in, write only if nobody changed it since. Off for now.
+  // Save: newest copy, put the changes in, write only if nobody changed it since.
+  // Returns { saved, why, files } where files holds what was written, so the page can show it.
+  let readOnly = false;
   async function save(store) {
     if (!SAVING) return { saved: false, why: 'off' };
+    if (readOnly) return { saved: false, why: 'readonly' };
     if (saving || !pending.length) return { saved: false, why: saving ? 'busy' : 'nothing' };
     saving = true;
+    const files = {};
     try {
-      const files = [
+      const plan = [
         ['data/tasks.json', (c) => c.file !== 'suggestions', apply],
         ['data/suggestions.json', (c) => c.file === 'suggestions', applySuggestions],
       ];
-      for (const [path, mine, put] of files) {
+      for (const [path, mine, put] of plan) {
         let done = false;
         for (let tries = 0; tries < 3 && !done; tries++) {
           const batch = pending.filter(mine);
           if (!batch.length) { done = true; break; }
           const { data, version } = await store.readWithVersion(path);
-          const ok = await store.writeIfUnchanged(path, put(data, batch), version, 'TO-DO: ' + batch.length + ' change(s) from the phone');
-          if (ok) { pending = pending.filter((c) => !batch.includes(c)); keepWaiting(); done = true; }
+          const next = put(data, batch);
+          if (!data || typeof data !== 'object' || Object.keys(next).length < Object.keys(data).length) {
+            return { saved: false, why: 'unsafe', files };
+          }
+          const ok = await store.writeIfUnchanged(path, next, version, 'New Hub TO-DO: ' + batch.length + ' change(s) from the phone');
+          if (ok) { pending = pending.filter((c) => !batch.includes(c)); keepWaiting(); files[path] = next; done = true; }
         }
-        if (!done) return { saved: false, why: 'busy-elsewhere' };
+        if (!done) return { saved: false, why: 'busy-elsewhere', files };
       }
-      return { saved: true };
+      return { saved: true, files };
     } catch (e) {
-      return { saved: false, why: 'error', error: e };
+      if (e && e.code === 'readonly') readOnly = true;
+      return { saved: false, why: (e && e.code) || 'error', error: e, files };
     } finally {
       saving = false;
     }
@@ -147,7 +157,8 @@
     apply,
     applySuggestions,
     describe,
-    start() { pending = loadWaiting(); return pending.slice(); },
+    start() { pending = loadWaiting(); readOnly = false; return pending.slice(); },
+    isReadOnly() { return readOnly; },
     add(change) {
       const c = Object.assign({ id: newId(), at: new Date().toISOString() }, change);
       pending.push(c);

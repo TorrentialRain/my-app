@@ -14,7 +14,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="../icons/icon-180.png">
   <link rel="icon" type="image/png" href="../icons/icon-192.png">
-  <link rel="stylesheet" href="app.css?v=5">
+  <link rel="stylesheet" href="app.css?v=6">
 </head>
 <body>
   <!-- The new Hub (rebuild). Lives beside the old app and reads the same data box.
@@ -74,6 +74,7 @@
       <form id="connect-form" autocomplete="off">
         <input id="connect-key" type="password" placeholder="Data box key" aria-label="Data box key" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
         <button type="submit" id="connect-go">Connect</button>
+        <button type="button" id="connect-cancel" class="quiet" hidden>Not now</button>
       </form>
       <p id="connect-error" class="error" role="alert"></p>
     </div>
@@ -97,7 +98,7 @@
   <div class="sheet" id="sheet-questions" hidden role="dialog" aria-modal="true" aria-labelledby="q-title">
     <div class="sheet-card">
       <div class="sheet-top"><h2 id="q-title">Questions</h2><button type="button" class="round" data-close aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
-      <p class="hint">Small questions wait here and come as one short list on Sundays. Answering turns on with saving.</p>
+      <p class="hint">Small questions wait here and come as one short list on Sundays. Answering them here comes in a later step.</p>
       <ul class="rows" id="q-list"></ul>
     </div>
   </div>
@@ -120,14 +121,16 @@
     <div class="sheet-card">
       <div class="sheet-top"><h2 id="s-title">Settings</h2><button type="button" class="round" data-close aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
       <button type="button" class="menu-item" data-open="sheet-archive">Archive</button>
-      <p class="hint">Signed in on this phone. Saving is off until the saving key goes in. Backups happen by themselves.</p>
+      <button type="button" class="menu-item" id="settings-change-key" data-change-key>Change key</button>
+      <p class="hint">Signed in on this phone. Changes save by themselves a moment after you make them. Backups happen by themselves.</p>
     </div>
   </div>
   <div class="sheet" id="sheet-waiting" hidden role="dialog" aria-modal="true" aria-labelledby="w-title">
     <div class="sheet-card">
       <div class="sheet-top"><h2 id="w-title">Waiting to save</h2><button type="button" class="round" data-close aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
-      <p class="hint">Saving turns on soon. Until then, these stay on screen until you close the app.</p>
+      <p class="hint" id="waiting-hint"></p>
       <ul class="rows" id="waiting-list"></ul>
+      <button type="button" class="wide" id="waiting-change-key" data-change-key hidden>Put in a key that can save</button>
     </div>
   </div>
   <div class="toast" id="toast" role="status" hidden></div>
@@ -148,9 +151,9 @@
     </button>
   </nav>
 
-  <script src="data.js?v=2"></script>
-  <script src="changes.js?v=2"></script>
-  <script src="todo.js?v=3"></script>
-  <script src="app.js?v=4"></script>
+  <script src="data.js?v=3"></script>
+  <script src="changes.js?v=3"></script>
+  <script src="todo.js?v=4"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>
