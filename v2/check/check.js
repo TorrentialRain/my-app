@@ -337,8 +337,10 @@ async function phoneTodo(page, scheme, size) {
   expect(T + ' add', await page.locator('.td-list .card .n', { hasText: 'My own note' }).count() === 1, "the new task's note did not show");
 
   // Drag: reorder, move to a tab, and trash.
-  await dragCard(page, 'c', '.td-list .card[data-id="b"]', T + ' reorder', true);
-  expect(T + ' reorder', (await cardIds(page))[0] === 'c', 'dragging a card to the top did not keep it there: ' + await cardIds(page));
+  await page.evaluate(() => { document.querySelector('.td-scroll').scrollTop = 0; });
+  await settle(page, 150);
+  await dragCard(page, 'm', '.td-list .card[data-id="b"]', T + ' reorder', true);
+  expect(T + ' reorder', (await cardIds(page))[0] === 'm', 'dragging a card to the top did not keep it there: ' + await cardIds(page));
   await page.evaluate(() => { document.querySelector('.td-scroll').scrollTop = 0; });
   await settle(page, 150);
   const mv = (await cardIds(page))[1];
@@ -450,11 +452,15 @@ async function run() {
     // 6. Reopen: lands on the page used last.
     await page.tap('.tab[data-tab="finance"]');
     await settle(page, 1300);
+    const before = await page.evaluate(() => ({ stored: localStorage.getItem('hub2.lastPage'), bar: document.querySelector('.tab[aria-current="page"]')?.dataset.tab, x: document.getElementById('pages').scrollLeft }));
     await page.reload();
     await page.addStyleTag({ content: edges });
     await page.waitForFunction(() => document.documentElement.dataset.loaded === 'yes', null, { timeout: 8000 }).catch(() => problem(scheme + ' reopen', 'the data did not load with the saved key'));
     const reopened = await page.evaluate(() => { const p = document.getElementById('pages'); return Math.round(p.scrollLeft / p.clientWidth); });
-    if (reopened !== 1) problem(scheme + ' reopen', 'did not open on the page used last (Finance)');
+    if (reopened !== 1) {
+      const after = await page.evaluate(() => ({ stored: localStorage.getItem('hub2.lastPage'), bar: document.querySelector('.tab[aria-current="page"]')?.dataset.tab, x: document.getElementById('pages').scrollLeft, w: document.getElementById('pages').clientWidth }));
+      problem(scheme + ' reopen', 'did not open on the page used last (Finance). Before: ' + JSON.stringify(before) + ' After: ' + JSON.stringify(after));
+    }
 
     if (ctx.wrote) problem(scheme, `the app tried to change the data box ${ctx.wrote} time(s); it must only read`);
     await ctx.close();
