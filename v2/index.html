@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
   <title>Hub</title>
-  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#f6f1ec" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
   <meta name="color-scheme" content="light dark">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -14,15 +14,47 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="../icons/icon-180.png">
   <link rel="icon" type="image/png" href="../icons/icon-192.png">
-  <link rel="stylesheet" href="app.css?v=1">
+  <link rel="stylesheet" href="app.css?v=2">
 </head>
 <body>
-  <!-- The new Hub (rebuild, Phase 2). Lives beside the old app and reads the same data box.
-       This frame only READS the data box. Nothing here writes to it. -->
+  <!-- The new Hub (rebuild). Lives beside the old app and reads the same data box.
+       It only READS the data box for now: TO-DO changes stay on screen until saving is switched on. -->
   <main id="pages" class="pages" aria-live="polite">
-    <section class="page" id="page-todo" data-page="todo" aria-label="TO-DO">
-      <h1 class="title">TO-DO</h1>
-      <p class="line" data-line="todo">Loading…</p>
+    <section class="page todo" id="page-todo" data-page="todo" aria-label="TO-DO">
+      <div class="td-scroll" data-scrolls>
+        <div class="td-wrap">
+          <header class="td-head">
+            <div class="td-titles">
+              <h1 class="title">TO-DO</h1>
+              <p class="td-sub" data-line="todo">Loading…</p>
+            </div>
+            <div class="td-tools">
+              <button type="button" class="only" data-only-overdue aria-pressed="false">Only overdue<span class="sw" aria-hidden="true"><span></span></span></button>
+              <button type="button" class="round pc-only" data-open="sheet-questions" aria-label="Questions"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.2 9a3 3 0 0 1 5.8 1c0 2-3 2.6-3 4.5"/><circle cx="12" cy="18.5" r="0.8" fill="currentColor"/></svg></button>
+              <button type="button" class="round pc-only" data-open="sheet-menu" aria-label="Menu: Print, Archive, Settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/></svg></button>
+              <button type="button" class="addbtn pc-only" data-open="sheet-add"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add task</button>
+            </div>
+          </header>
+          <nav class="td-tabs" aria-label="TO-DO tabs"></nav>
+          <button type="button" class="td-pending" data-open="sheet-waiting" hidden><span class="pending-text"></span></button>
+          <div class="td-suggest card-flat" hidden>
+            <div class="sg-head"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg><span></span></div>
+            <div class="sg-list"></div>
+          </div>
+          <div class="td-list"></div>
+          <div class="td-done" hidden>
+            <button type="button" class="done-toggle" aria-expanded="false"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg><span class="done-word">Done</span> <span class="done-count">0</span></button>
+            <div class="done-list"></div>
+            <p class="done-note pc-only">Moves to the Archive after a day.</p>
+          </div>
+        </div>
+      </div>
+      <div class="td-fabs phone-only" data-floats>
+        <button type="button" class="round" data-open="sheet-questions" aria-label="Questions"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.2 9a3 3 0 0 1 5.8 1c0 2-3 2.6-3 4.5"/><circle cx="12" cy="18.5" r="0.8" fill="currentColor"/></svg></button>
+        <button type="button" class="round" data-open="sheet-menu" aria-label="Menu: Print, Archive, Settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/></svg></button>
+        <button type="button" class="plus" data-open="sheet-add" aria-label="Add task"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+      </div>
+      <div class="td-trash" hidden aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></div>
     </section>
     <section class="page" id="page-finance" data-page="finance" aria-label="Finance">
       <h1 class="title">Finance</h1>
@@ -47,6 +79,60 @@
     </div>
   </div>
 
+
+  <!-- TO-DO sheets -->
+  <div class="sheet" id="sheet-add" hidden role="dialog" aria-modal="true" aria-labelledby="add-title">
+    <form class="sheet-card" id="add-form" autocomplete="off">
+      <div class="sheet-top"><h2 id="add-title">New task</h2><button type="button" class="round" data-close aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      <label class="fld"><span>Name</span><input id="add-name" type="text" autocapitalize="sentences" required></label>
+      <div class="fld-row">
+        <label class="fld"><span>Due date</span><input id="add-date" type="date"></label>
+        <label class="fld"><span>Time</span><input id="add-time" type="time"></label>
+      </div>
+      <label class="fld"><span>Note</span><textarea id="add-note" rows="2"></textarea></label>
+      <p class="hint" id="add-where"></p>
+      <button type="submit" class="wide">Add</button>
+    </form>
+  </div>
+  <div class="sheet" id="sheet-questions" hidden role="dialog" aria-modal="true" aria-labelledby="q-title">
+    <div class="sheet-card">
+      <div class="sheet-top"><h2 id="q-title">Questions</h2><button type="button" class="round" data-close aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      <p class="hint">Small questions wait here and come as one short list on Sundays. Answering turns on with saving.</p>
+      <ul class="rows" id="q-list"></ul>
+    </div>
+  </div>
+  <div class="sheet" id="sheet-menu" hidden role="dialog" aria-modal="true" aria-labelledby="m-title">
+    <div class="sheet-card">
+      <div class="sheet-top"><h2 id="m-title">Menu</h2><button type="button" class="round" data-close aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      <button type="button" class="menu-item" id="menu-print">Print to PDF</button>
+      <button type="button" class="menu-item" data-open="sheet-archive">Archive</button>
+      <button type="button" class="menu-item" data-open="sheet-settings">Settings</button>
+    </div>
+  </div>
+  <div class="sheet" id="sheet-archive" hidden role="dialog" aria-modal="true" aria-labelledby="a-title">
+    <div class="sheet-card">
+      <div class="sheet-top"><h2 id="a-title">Archive</h2><button type="button" class="round" data-close aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      <p class="hint">Every finished or deleted task, newest first.</p>
+      <ul class="rows" id="archive-list"></ul>
+    </div>
+  </div>
+  <div class="sheet" id="sheet-settings" hidden role="dialog" aria-modal="true" aria-labelledby="s-title">
+    <div class="sheet-card">
+      <div class="sheet-top"><h2 id="s-title">Settings</h2><button type="button" class="round" data-close aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      <button type="button" class="menu-item" data-open="sheet-archive">Archive</button>
+      <p class="hint">Signed in on this phone. Saving is off until the saving key goes in. Backups happen by themselves.</p>
+    </div>
+  </div>
+  <div class="sheet" id="sheet-waiting" hidden role="dialog" aria-modal="true" aria-labelledby="w-title">
+    <div class="sheet-card">
+      <div class="sheet-top"><h2 id="w-title">Waiting to save</h2><button type="button" class="round" data-close aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      <p class="hint">Saving turns on soon. Until then, these stay on screen until you close the app.</p>
+      <ul class="rows" id="waiting-list"></ul>
+    </div>
+  </div>
+  <div class="toast" id="toast" role="status" hidden></div>
+  <div id="print" aria-hidden="true"></div>
+
   <nav class="bar" aria-label="Pages">
     <button type="button" class="tab" data-tab="todo" aria-label="TO-DO">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5l1.8 1.8L9 5M4 12.5l1.8 1.8L9 11M4 18.5l1.8 1.8L9 17M12 7h8M12 13h8M12 19h8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -62,7 +148,9 @@
     </button>
   </nav>
 
-  <script src="data.js?v=1"></script>
-  <script src="app.js?v=1"></script>
+  <script src="data.js?v=2"></script>
+  <script src="changes.js?v=1"></script>
+  <script src="todo.js?v=1"></script>
+  <script src="app.js?v=2"></script>
 </body>
 </html>

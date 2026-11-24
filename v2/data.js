@@ -1,5 +1,5 @@
 // Data for the new Hub. READ-ONLY in this phase: there is no save function here at all,
-// so nothing in the new app can change the data box by mistake.
+// so nothing in the new app can change the data box by mistake. (TO-DO's save path waits, switched off, in changes.js.)
 //
 // Where the key comes from, in this order:
 //   1. A key saved for the new Hub on this phone (from its Connect screen).
@@ -105,10 +105,6 @@
 
   // Small summaries, one per page. Kept apart from the reading so they can be tested on their own.
   const Summary = {
-    todo(tasks) {
-      const n = Object.values(tasks || {}).filter((t) => t && t.status === 'open').length;
-      return n === 1 ? '1 open task' : n + ' open tasks';
-    },
     finance(fin) {
       const items = (fin && fin.debts && fin.debts.items) || [];
       const owed = items.filter((d) => Number(d.owed) > 0).length;

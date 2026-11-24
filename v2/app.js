@@ -43,6 +43,8 @@
     }, 80);
   }, { passive: true });
 
+  // While a TO-DO card is held, the pages stay put (see todo.js).
+
   // Turning the phone or resizing keeps the same page in view.
   window.addEventListener('resize', () => { pages.scrollLeft = current * pages.clientWidth; });
 
@@ -64,23 +66,29 @@
     connect.hidden = false;
   }
 
+  function keyTrouble(e) {
+    if (e.code === 'badkey' || e.code === 'noaccess') {
+      if (Data.source() === 'own') Data.forgetOwnKey();
+      askForKey(e.message + ' Paste a key that works.');
+    }
+  }
+
   async function load() {
     const jobs = [
-      ['todo', 'data/tasks.json', Summary.todo],
       ['finance', 'data/fin.json', Summary.finance],
       ['plan', 'data/calendar.json', Summary.plan],
     ];
-    await Promise.all(jobs.map(async ([page, path, sum]) => {
-      try {
-        say(page, sum(await Data.read(path)));
-      } catch (e) {
-        say(page, e.message, true);
-        if (e.code === 'badkey' || e.code === 'noaccess') {
-          if (Data.source() === 'own') Data.forgetOwnKey();
-          askForKey(e.message + ' Paste a key that works.');
+    await Promise.all([
+      Todo.load(Data).catch((e) => { say('todo', e.message, true); Todo.showError(e.message); keyTrouble(e); }),
+      ...jobs.map(async ([page, path, sum]) => {
+        try {
+          say(page, sum(await Data.read(path)));
+        } catch (e) {
+          say(page, e.message, true);
+          keyTrouble(e);
         }
-      }
-    }));
+      }),
+    ]);
     document.documentElement.dataset.loaded = 'yes';
   }
 
