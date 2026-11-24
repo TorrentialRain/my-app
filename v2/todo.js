@@ -307,6 +307,7 @@
   let retryTimer = null;
   let savingNow = false;
   let justSaved = 0;
+  let again = false;    // a change came in while a save was running: save once more right after
   let lastRead = 0;
   function showSaving() {
     const n = Changes.list().length;
@@ -329,7 +330,8 @@
     saveTimer = setTimeout(saveNow, ms);
   }
   async function saveNow() {
-    if (!dataStore || savingNow || !Changes.list().length || Changes.isReadOnly()) return;
+    if (savingNow) { again = true; return; }
+    if (!dataStore || !Changes.list().length || Changes.isReadOnly()) return;
     savingNow = true; showSaving();
     const r = await Changes.save(dataStore);
     savingNow = false;
@@ -337,10 +339,13 @@
     // Show what was written, so the screen matches the data box (including anything the robot added).
     if (r.files && r.files['data/tasks.json']) { base = r.files['data/tasks.json']; lastRead = Date.now(); }
     if (r.files && r.files['data/suggestions.json']) sugs = r.files['data/suggestions.json'];
+    const cameIn = again; again = false;
     if (r.saved) {
       justSaved = Date.now();
       setTimeout(showSaving, 2600);
       if (Changes.list().length) saveSoon(300); // more changes came in while saving
+    } else if (cameIn && r.why !== 'readonly' && r.why !== 'badkey' && r.why !== 'unsafe') {
+      saveSoon(300); // a new change came in while that try failed: try once more now, with both
     } else if (r.why === 'readonly') {
       toast('The key on this phone can only read, so your changes are waiting here. Put in a key that can save: Menu, Settings, Change key.');
     } else if (r.why === 'badkey') {
