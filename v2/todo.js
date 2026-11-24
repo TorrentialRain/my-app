@@ -333,6 +333,7 @@
     savingNow = true; showSaving();
     const r = await Changes.save(dataStore);
     savingNow = false;
+    pendingEl.dataset.why = r.saved ? 'saved' : r.why + (r.error && r.error.message ? ': ' + r.error.message : '');
     // Show what was written, so the screen matches the data box (including anything the robot added).
     if (r.files && r.files['data/tasks.json']) { base = r.files['data/tasks.json']; lastRead = Date.now(); }
     if (r.files && r.files['data/suggestions.json']) sugs = r.files['data/suggestions.json'];

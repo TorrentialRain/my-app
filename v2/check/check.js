@@ -617,7 +617,7 @@ async function run() {
   const state = () => sp.locator('.td-pending').getAttribute('data-state');
   const waitSaved = async (where) => {
     await sp.waitForFunction(() => ['saved', 'none'].includes(document.querySelector('.td-pending').dataset.state), null, { timeout: 8000 })
-      .catch(async () => problem(where, 'changes did not save (the line says "' + (await sp.locator('.td-pending').textContent()) + '")'));
+      .catch(async () => problem(where, 'changes did not save (the line says "' + (await sp.locator('.td-pending').textContent()) + '", last try: ' + (await sp.locator('.td-pending').getAttribute('data-why')) + ', saves taken: ' + sctx.wrote + ')'));
   };
   await sp.tap('.card[data-id="a"] .tick');
   await sp.waitForSelector('.td-pending[data-state="readonly"]', { timeout: 4000 }).catch(() => problem(S, 'a key that can only read was not spotted'));
