@@ -516,8 +516,7 @@
     if (d.moved) {
       // Josh's order for this list (or this part of All) sticks: every card in it gets its place.
       const ids = $$('.td-list .card[data-group="' + d.group + '"]').map((c) => c.dataset.id);
-      ids.forEach((tid, i) => { if (tid !== id && tasks[tid].myRank !== (i + 1) * 10) Changes.add({ type: 'rank', taskId: tid, rank: (i + 1) * 10 }); });
-      change({ type: 'rank', taskId: id, rank: (ids.indexOf(id) + 1) * 10 });
+      change({ type: 'order', taskId: id, ids });
       return;
     }
     render();

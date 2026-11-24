@@ -178,15 +178,17 @@ body { position: fixed; inset: 0; overflow: hidden; }
    Flat look (Josh's pick, Nov 24): solid cards, soft shadow, no glass, no shine.
    3D: each card's picture stands past the card's top edge and shifts a little as the phone tilts.
    Both switch off under "Reduce Motion". */
-#page-todo {
+/* The colors live on the page and on a card being dragged (which floats above the page, outside it). */
+#page-todo, .card.ghost {
   --td-bg: #f6f1ec; --card: #ffffff; --ink: #1c1c1e; --ink2: #5e5e63; --ink3: #3a3a3c;
   --due: #f2ece6; --on: #ff8c2b; --on-ink: #1c1c1e; --deep: #9a3f05; --od: #ffd60a; --field: #f6f1ec;
   --shadow: 0 1px 2px rgba(0,0,0,0.05), 0 6px 16px rgba(120,60,10,0.08);
   --tx: 0; --ty: 0;
-  position: relative; padding: 0; overflow: hidden; background: var(--td-bg); color: var(--ink);
 }
+#page-todo { position: relative; padding: 0; overflow: hidden; background: var(--td-bg); color: var(--ink); }
+.card.ghost { color: var(--ink); background: var(--card); }
 @media (prefers-color-scheme: dark) {
-  #page-todo {
+  #page-todo, .card.ghost {
     --td-bg: #0b0907; --card: #1e1c1a; --ink: #ffffff; --ink2: #a1a1a8; --ink3: #e5e5ea;
     --due: #34302c; --on: #ff9a3d; --on-ink: #000000; --deep: #ffb070; --field: #2c2926;
     --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 6px 16px rgba(0,0,0,0.35);

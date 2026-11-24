@@ -81,7 +81,9 @@ function rules() {
   // Josh's drag order wins.
   // (a drop gives every card in that list its place, the way the page does it)
   const order = ['l'].concat(ids('all').filter((x) => x !== 'l' && x !== 'd'));
-  const ranked = Changes.apply(TASKS, order.map((tid, i) => ({ id: 'r' + i, type: 'rank', taskId: tid, rank: (i + 1) * 10 })));
+  const orderChange = { id: 'r1', type: 'order', taskId: 'l', ids: order };
+  const ranked = Changes.apply(Changes.apply(TASKS, [orderChange]), [orderChange]);
+  expect('rules', ranked.l.changeIds.length === 1, 'the same new order saved twice must land once');
   expect('rules', Todo.listFor(ranked, 'all', NOW)[0][0][0] === 'l', 'a task Josh dragged to the top must stay on top');
   // Double-save checks.
   const tick = { id: 'x1', type: 'tick', taskId: 'a', at: at(0) };
@@ -339,7 +341,11 @@ async function phoneTodo(page, scheme, size) {
   // Drag: reorder, move to a tab, and trash.
   await page.evaluate(() => { document.querySelector('.td-scroll').scrollTop = 0; });
   await settle(page, 150);
+  const waitCount = async () => Number(((await page.locator('.td-pending').textContent()).match(/\d+/) || [0])[0]);
+  const beforeDrag = await waitCount();
   await dragCard(page, 'm', '.td-list .card[data-id="b"]', T + ' reorder', true);
+  expect(T + ' reorder', (await waitCount()) === beforeDrag + 1, 'one drag should add one line to the waiting-to-save list');
+  expect(T + ' reorder', await page.evaluate(() => !document.querySelector('.card.ghost')), 'the dragged copy of the card was left on screen');
   expect(T + ' reorder', (await cardIds(page))[0] === 'm', 'dragging a card to the top did not keep it there: ' + await cardIds(page));
   await page.evaluate(() => { document.querySelector('.td-scroll').scrollTop = 0; });
   await settle(page, 150);
@@ -356,6 +362,8 @@ async function phoneTodo(page, scheme, size) {
   await page.mouse.move(m.x + 30, m.y + 40, { steps: 4 });
   await page.waitForTimeout(100);
   expect(T + ' trash', await page.locator('.td-trash').isVisible(), 'the trash did not show while dragging');
+  const ghostBg = await page.evaluate(() => { const g = document.querySelector('.card.ghost'); return g ? getComputedStyle(g).backgroundColor : 'none'; });
+  expect(T + ' drag', /^rgb\(/.test(ghostBg), 'the card being dragged has no solid background (got ' + ghostBg + ')');
   await page.screenshot({ path: path.join(OUT, scheme + '-todo-dragging.png') });
   const tr = await page.locator('.td-trash').boundingBox();
   if (tr) await page.mouse.move(tr.x + tr.width / 2, tr.y + tr.height / 2, { steps: 10 });

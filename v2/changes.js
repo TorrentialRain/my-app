@@ -36,6 +36,18 @@
         out[id] = t;
         continue;
       }
+      if (c.type === 'order') {
+        // A drag gives every card in that list its place. One change, so one line in the waiting list.
+        c.ids.forEach((tid, i) => {
+          const t = out[tid];
+          if (!t) return;
+          t.changeIds = t.changeIds || [];
+          if (t.changeIds.includes(c.id)) return;
+          t.myRank = (i + 1) * 10;
+          t.changeIds = t.changeIds.concat(c.id).slice(-KEEP_IDS);
+        });
+        continue;
+      }
       const t = out[c.taskId];
       if (!t) continue; // the task is gone (deleted elsewhere): nothing to change
       t.changeIds = t.changeIds || [];
@@ -82,6 +94,7 @@
       untick: 'Mark "' + title + '" not done',
       move: 'Move "' + title + '" to ' + (c.tabName || 'another tab'),
       rank: 'Put "' + title + '" in a new spot',
+      order: 'Put "' + title + '" in a new spot',
       trash: 'Delete "' + title + '"',
       subtask: (c.done ? 'Tick' : 'Untick') + ' a step on "' + title + '"',
     })[c.type] || 'Change "' + title + '"';
