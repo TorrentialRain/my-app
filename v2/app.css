@@ -1,0 +1,176 @@
+/* New Hub frame. Light and dark follow the phone. iPhone's own font. */
+:root {
+  color-scheme: light dark;
+  --bg: #f2f2f7;
+  --text: #000000;
+  --muted: #5c5c63;
+  --bar: rgba(249, 249, 251, 0.78);
+  --hairline: rgba(60, 60, 67, 0.22);
+  --field: #ffffff;
+  /* Page colors (Josh's picks, Nov 24). Light versions are deeper so they stay readable on the light background. */
+  --todo: #c85a00;      /* fruity orange */
+  --finance: #187f39;   /* green = money */
+  --plan: #0a72b8;      /* sky blue */
+  --tab-off: #6b6b72;
+  --bad: #c4211a;
+  /* Phone edges. The check fills these in by hand because a test browser has no notch. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --bar-h: 50px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000;
+    --text: #ffffff;
+    --muted: #a1a1aa;
+    --bar: rgba(22, 22, 26, 0.78);
+    --hairline: rgba(84, 84, 88, 0.6);
+    --field: #1c1c1e;
+    --todo: #ff9f2e;
+    --finance: #32d74b;
+    --plan: #5ac8fa;
+    --tab-off: #8e8e96;
+    --bad: #ff6961;
+  }
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+}
+body { position: fixed; inset: 0; overflow: hidden; }
+[hidden] { display: none !important; }
+
+/* The pages sit side by side. Swiping left or right moves one whole page at a time. */
+.pages {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.pages::-webkit-scrollbar { display: none; }
+.pages.placing { visibility: hidden; }
+
+.page {
+  flex: 0 0 100%;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  padding:
+    calc(var(--safe-top) + 12px)
+    calc(var(--safe-right) + 20px)
+    calc(var(--safe-bottom) + var(--bar-h) + 24px)
+    calc(var(--safe-left) + 20px);
+}
+
+/* Anything that scrolls sideways inside a page (the TO-DO lane row, the Finance graph) gets this class,
+   so swiping on it moves it and never changes the page. */
+.hscroll { overflow-x: auto; overscroll-behavior-x: contain; touch-action: pan-x pan-y; }
+
+.title {
+  margin: 8px 0 6px;
+  font-size: 34px;
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+#page-todo .title { color: var(--todo); }
+#page-finance .title { color: var(--finance); }
+#page-plan .title { color: var(--plan); }
+
+.line { margin: 0; font-size: 17px; line-height: 1.35; color: var(--muted); }
+.line.bad { color: var(--bad); }
+
+/* Bottom bar: see-through, runs to the bottom edge. Buttons sit a little lower than usual,
+   right above the home swipe area. */
+.bar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  display: flex;
+  justify-content: space-around;
+  align-items: flex-end;
+  padding: 0 var(--safe-right) var(--safe-bottom) var(--safe-left);
+  background: var(--bar);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border-top: 0.5px solid var(--hairline);
+  z-index: 5;
+}
+.tab {
+  flex: 1 1 0;
+  height: var(--bar-h);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  padding: 0 0 3px;
+  margin: 0;
+  border: 0;
+  background: none;
+  color: var(--tab-off);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+.tab svg { width: 26px; height: 26px; }
+.tab[aria-current="page"][data-tab="todo"] { color: var(--todo); }
+.tab[aria-current="page"][data-tab="finance"] { color: var(--finance); }
+.tab[aria-current="page"][data-tab="plan"] { color: var(--plan); }
+
+/* Connect screen (only when no key is found on this phone). */
+.connect {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: var(--bg);
+  display: flex;
+  align-items: flex-start;
+  padding:
+    calc(var(--safe-top) + 40px)
+    calc(var(--safe-right) + 20px)
+    calc(var(--safe-bottom) + 20px)
+    calc(var(--safe-left) + 20px);
+}
+.connect-card { width: 100%; }
+.connect h1 { margin: 0 0 8px; font-size: 28px; font-weight: 700; }
+.connect p { margin: 0 0 16px; font-size: 16px; line-height: 1.4; color: var(--muted); }
+.connect form { display: flex; flex-direction: column; gap: 10px; }
+.connect input {
+  font: inherit; font-size: 17px;
+  padding: 13px 14px;
+  border-radius: 12px;
+  border: 0.5px solid var(--hairline);
+  background: var(--field);
+  color: var(--text);
+}
+.connect button {
+  font: inherit; font-size: 17px; font-weight: 600;
+  padding: 13px;
+  border: 0; border-radius: 12px;
+  background: var(--plan);
+  color: #fff;
+}
+@media (prefers-color-scheme: dark) { .connect button { color: #000; } }
+.connect .error { color: var(--bad); margin-top: 12px; min-height: 1em; }

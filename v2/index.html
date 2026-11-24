@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>Hub</title>
+  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="light dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="New Hub">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="../icons/icon-180.png">
+  <link rel="icon" type="image/png" href="../icons/icon-192.png">
+  <link rel="stylesheet" href="app.css?v=1">
+</head>
+<body>
+  <!-- The new Hub (rebuild, Phase 2). Lives beside the old app and reads the same data box.
+       This frame only READS the data box. Nothing here writes to it. -->
+  <main id="pages" class="pages" aria-live="polite">
+    <section class="page" id="page-todo" data-page="todo" aria-label="TO-DO">
+      <h1 class="title">TO-DO</h1>
+      <p class="line" data-line="todo">Loading…</p>
+    </section>
+    <section class="page" id="page-finance" data-page="finance" aria-label="Finance">
+      <h1 class="title">Finance</h1>
+      <p class="line" data-line="finance">Loading…</p>
+    </section>
+    <section class="page" id="page-plan" data-page="plan" aria-label="Plan">
+      <h1 class="title">Plan</h1>
+      <p class="line" data-line="plan">Loading…</p>
+    </section>
+  </main>
+
+  <!-- First time on a device where the new Hub can't find a data box key yet. -->
+  <div id="connect" class="connect" hidden>
+    <div class="connect-card">
+      <h1>Connect your data</h1>
+      <p id="connect-why">Paste the key for your data box. It stays on this phone.</p>
+      <form id="connect-form" autocomplete="off">
+        <input id="connect-key" type="password" placeholder="Data box key" aria-label="Data box key" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
+        <button type="submit" id="connect-go">Connect</button>
+      </form>
+      <p id="connect-error" class="error" role="alert"></p>
+    </div>
+  </div>
+
+  <nav class="bar" aria-label="Pages">
+    <button type="button" class="tab" data-tab="todo" aria-label="TO-DO">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5l1.8 1.8L9 5M4 12.5l1.8 1.8L9 11M4 18.5l1.8 1.8L9 17M12 7h8M12 13h8M12 19h8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>TO-DO</span>
+    </button>
+    <button type="button" class="tab" data-tab="finance" aria-label="Finance">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V11M10 19V6M16 19v-5M21 19H3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+      <span>Finance</span>
+    </button>
+    <button type="button" class="tab" data-tab="plan" aria-label="Plan">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3.5 10h17M8 3v4M16 3v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>Plan</span>
+    </button>
+  </nav>
+
+  <script src="data.js?v=1"></script>
+  <script src="app.js?v=1"></script>
+</body>
+</html>

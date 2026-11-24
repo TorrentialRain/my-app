@@ -1,0 +1,51 @@
+# New Hub check. Every update to the new Hub goes to the "v2-next" branch first.
+# This runs the check there; only if it passes does the update move to "main", where it goes live.
+name: New Hub check
+on:
+  push:
+    branches: [v2-next]
+  workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+concurrency:
+  group: v2-check
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 50
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Get the test browser (Safari's engine)
+        run: |
+          npm install --no-save --no-package-lock playwright@1.48.2
+          npx playwright install --with-deps webkit
+      - name: Run the check
+        run: node v2/check/check.js
+      - name: Keep the phone pictures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phone-pictures
+          path: v2/check/out/
+          retention-days: 30
+      - name: Passed, so put it live
+        if: success() && github.ref == 'refs/heads/v2-next'
+        run: |
+          git fetch origin main --depth=50
+          if ! git merge-base --is-ancestor origin/main HEAD; then
+            echo "main has changes that v2-next doesn't. Bring v2-next up to date with main, then push again."
+            exit 1
+          fi
+          git push origin HEAD:main
+      - name: Ask GitHub Pages to publish
+        if: success() && github.ref == 'refs/heads/v2-next'
+        continue-on-error: true
+        run: |
+          curl -sS -X POST -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/pages/builds
