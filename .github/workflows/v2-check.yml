@@ -13,7 +13,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # Pinned: "latest" moved to a newer Ubuntu the test browser does not support yet.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
