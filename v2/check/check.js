@@ -1055,15 +1055,16 @@ async function pcFinance(pp, scheme, size) {
     const r = (s) => document.querySelector(s).getBoundingClientRect();
     const p = document.getElementById('page-finance');
     const side = r('.fi-side'), main = r('.fi-main'), chart = r('.fi-chart'), bk = r('.fi-buckets');
+    const cols = [...document.querySelectorAll('.fi-cols > .fi-col')].map((c) => Math.round(c.getBoundingClientRect().height));
     const m = getComputedStyle(p).backgroundColor.match(/[\d.]+/g).map(Number);
     return { left: side.width > 0 && side.right <= main.left, sideBySide: chart.right <= bk.left && Math.abs(chart.top - bk.top) < 4,
-      fits: p.scrollHeight <= p.clientHeight + 1, over: p.scrollHeight - p.clientHeight, phoneTabs: getComputedStyle(document.querySelector('.fi-tabs')).display,
+      fits: p.scrollHeight <= p.clientHeight + 1, over: p.scrollHeight - p.clientHeight, cols: cols.join(' and '), phoneTabs: getComputedStyle(document.querySelector('.fi-tabs')).display,
       bg: Math.round(0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) };
   });
   expect(F, lay.left, 'the Finance tabs should run down the left');
   expect(F, lay.phoneTabs === 'none', 'the phone tab row should not show on a PC');
   expect(F, lay.sideBySide, 'Spending should show the graph side and the buckets side by side');
-  expect(F, lay.fits, 'Spending should fit on one screen (it runs ' + lay.over + ' pixels past the bottom)');
+  expect(F, lay.fits, 'Spending should fit on one screen (it runs ' + lay.over + ' pixels past the bottom; the two sides are ' + lay.cols + ' pixels tall)');
   expect(F, lay.bg < 50, 'a PC should always be dark (got ' + lay.bg + ')');
   for (const t of FIN_TABS) {
     await pp.click(`.fi-side [data-fi-tab="${t}"]`);
@@ -1307,7 +1308,7 @@ async function run() {
   await finSaved(FS + ' note');
   let notesF = sctx.box.files['data/notes.json'] || { items: [] };
   expect(FS, notesF.items.length === 1 && notesF.items[0].page === 'finance' && notesF.items[0].status === 'waiting', 'the Quick-budget note did not save as waiting (' + JSON.stringify(notesF.items) + ')');
-  expect(FS, /Waiting/.test(await sp.locator('.fi-notes').textContent()), 'the sent note should show as Waiting');
+  expect(FS, /Waiting/.test(await sp.locator('#page-finance .fi-notes').textContent()), 'the sent note should show as Waiting');
   await sp.tap('.fi-tabs [data-fi-tab="activity"]');
   await settle(sp, 200);
   const txId = await sp.locator('.fi-row').first().getAttribute('data-tx');

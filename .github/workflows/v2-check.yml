@@ -1,5 +1,8 @@
 # New Hub check. Every update to the new Hub goes to the "v2-next" branch first.
 # This runs the check there; only if it passes does the update move to "main", where it goes live.
+# A failed check never fails the run itself: GitHub emails Josh about every failed run, and he gets no
+# messages unless something needs him. Instead the result is saved as a mark on the update (named
+# "New Hub check", passed or failed), which sends no email, and a failed update simply doesn't go live.
 name: New Hub check
 on:
   push:
@@ -8,6 +11,7 @@ on:
 permissions:
   contents: write
   pages: write
+  statuses: write
 concurrency:
   group: v2-check
   cancel-in-progress: false
@@ -26,13 +30,18 @@ jobs:
         with:
           node-version: 22
       - name: Get the test browser (Safari's engine)
+        continue-on-error: true
         run: |
           npm install --no-save --no-package-lock playwright@1.48.2
           npx playwright install --with-deps webkit
       - name: Run the check
+        id: check
+        continue-on-error: true
         run: node v2/check/check.js
       - name: Look at TO-DO and Plan with the real data (read-only, no pictures, nothing named in the log)
-        if: success() && env.HAS_DATA_KEY == 'true'
+        id: real
+        continue-on-error: true
+        if: steps.check.outcome == 'success' && env.HAS_DATA_KEY == 'true'
         env:
           KEY: ${{ secrets.HUB_DATA_READ_KEY }}
         run: |
@@ -60,7 +69,9 @@ jobs:
           git -c user.name="New Hub check" -c user.email="actions@github.com" commit -qm "Phone pictures from check run ${{ github.run_number }} (${{ github.sha }})"
           git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" v2-pictures
       - name: Passed, so put it live
-        if: success() && github.ref == 'refs/heads/v2-next'
+        id: live
+        continue-on-error: true
+        if: steps.check.outcome == 'success' && steps.real.outcome != 'failure' && github.ref == 'refs/heads/v2-next'
         run: |
           git fetch origin main --depth=50
           if ! git merge-base --is-ancestor origin/main HEAD; then
@@ -69,8 +80,20 @@ jobs:
           fi
           git push origin HEAD:main
       - name: Ask GitHub Pages to publish
-        if: success() && github.ref == 'refs/heads/v2-next'
+        if: steps.live.outcome == 'success'
         continue-on-error: true
         run: |
           curl -sS -X POST -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/${{ github.repository }}/pages/builds
+      - name: Save the result as a mark on the update (no email)
+        if: always()
+        run: |
+          if [ "${{ steps.check.outcome }}" = success ] && [ "${{ steps.real.outcome }}" != failure ] && [ "${{ steps.live.outcome }}" != failure ]; then
+            state=success; words="Passed"
+          else
+            state=failure; words="Failed: check ${{ steps.check.outcome }}, real data ${{ steps.real.outcome }}, going live ${{ steps.live.outcome }}"
+          fi
+          echo "New Hub check: $words" | tee -a "$GITHUB_STEP_SUMMARY"
+          curl -sS -o /dev/null -X POST -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }} \
+            -d "{\"state\":\"$state\",\"context\":\"New Hub check\",\"description\":\"${words:0:130}\",\"target_url\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"

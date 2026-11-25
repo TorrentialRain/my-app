@@ -615,7 +615,7 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
 .num.out { color: var(--out); }
 .num.in { color: var(--in); }
 .fi-seg { display: flex; background: var(--chip); border-radius: 22px; padding: 2px; }
-.fi-seg button { min-height: 44px; padding: 0 12px; border: 0; border-radius: 20px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; }
+.fi-seg button { min-height: 44px; min-width: 44px; padding: 0 12px; border: 0; border-radius: 20px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; }
 .fi-seg button[aria-pressed="true"] { background: var(--on); color: var(--on-ink); font-weight: 600; }
 .fi-graph { width: 100%; height: 150px; display: block; }
 .fi-zero { stroke: var(--line); stroke-width: 1; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
@@ -731,9 +731,10 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
 
 /* Finance on a PC: tabs down the left with no label, Spending's graph side and buckets side by side, all on one screen. */
 @media (min-width: 900px) {
-  #page-finance { padding-top: 96px; padding-bottom: 24px; }
+  #page-finance { padding-top: 88px; padding-bottom: 20px; }
+  .fi-head { display: flex; flex-direction: row; align-items: baseline; gap: 16px; flex-wrap: wrap; }
   .fi-wrap { flex-direction: row; align-items: flex-start; gap: 24px; width: 100%; max-width: 1360px; margin: 0 auto; }
-  .fi-side { flex-direction: column; flex: 0 0 220px; gap: 4px; padding: 14px 10px; background: var(--card); border-radius: 24px; box-shadow: var(--shadow); position: sticky; top: 96px; }
+  .fi-side { flex-direction: column; flex: 0 0 220px; gap: 4px; padding: 14px 10px; background: var(--card); border-radius: 24px; box-shadow: var(--shadow); position: sticky; top: 88px; }
   .fi-side .fi-tab { width: 100%; min-height: 48px; justify-content: flex-start; padding: 0 14px; }
   .fi-main { flex: 1; gap: 12px; }
   .fi-cols { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 20px; align-items: start; }
@@ -741,10 +742,12 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
   .fi-two { flex-direction: row; }
   .fi-two > .fi-card { flex: 1; }
   .fi-card { padding: 12px 16px; gap: 8px; }
-  .fi-graph { height: 120px; }
+  .fi-graph { height: 96px; }
   .fi-big { font-size: 30px; line-height: 36px; }
   .fi-piebody { flex-direction: row; align-items: center; gap: 20px; }
-  .fi-donut { width: 160px; height: 160px; }
+  .fi-donut { width: 128px; height: 128px; }
   .fi-groups { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; align-items: start; }
   .fi-groups .fi-list li { padding: 3px 0; font-size: 14px; }
+  .fi-grid { gap: 26px 12px; padding-top: 16px; }
+  .fi-tile { min-height: 84px; padding: 26px 12px 10px; }
 }
