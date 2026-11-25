@@ -227,6 +227,26 @@
     return timeText(it.start) + ' – ' + timeText(it.end) + ' · ' + it.cal;
   }
   function style(it) { const c = colorsOf(it); return '--c:' + c.color + ';--k:' + c.ink; }
+  // Long words get split points of our own (a soft hyphen), so a word that's wider than its block breaks
+  // with a "-" at a sensible place, the same on the iPhone and in the phone check (which has no hyphen dictionary).
+  const VOW = /[aeiouy]/i, PAIR = /^(th|ch|sh|ck|ph|wh|gh|ng|qu|tr|br|cr|dr|fr|gr|pr|bl|cl|fl|gl|pl|sl|sc|sp|st|wr|kn)$/i, LET = /[a-z]/i;
+  function splitWord(w) {
+    if (w.length < 8) return w;
+    const at = [];
+    for (let i = 3; i <= w.length - 3; i++) {
+      const a = w[i - 1], b = w[i];
+      if (!LET.test(a) || !LET.test(b)) continue;
+      if ((!VOW.test(a) && !VOW.test(b) && !PAIR.test(a + b)) || (VOW.test(a) && !VOW.test(b) && VOW.test(w[i + 1] || ''))) {
+        if (at.length && i - at[at.length - 1] < 2) at.pop(); // never leave one letter on its own
+        at.push(i);
+      }
+    }
+    if (!at.length) at.push(Math.floor(w.length / 2));
+    let out = '', from = 0;
+    for (const i of at) { out += w.slice(from, i) + '\u00AD'; from = i; }
+    return out + w.slice(from);
+  }
+  const breakable = (name) => esc(name).replace(/[A-Za-z]{8,}/g, splitWord);
   // A block holds its name in one span; fitNames() then trims it to the lines that fit, ending in "…".
   function block(it, cls) {
     const pos = 'top:' + (it.a / 14.4) + '%;height:calc(' + ((it.z - it.a) / 14.4) + '% - 2px);' +
@@ -234,7 +254,7 @@
     const short = it.z - it.a < 45 ? ' short' : '';
     const time = it.task ? (it.late ? 'Overdue · ' : '') + timeText(it.end) : timeText(it.start) + ' – ' + timeText(it.end);
     return '<div class="' + cls + short + (it.late ? ' late' : '') + '" role="button" tabindex="0" style="' + pos + ';' + style(it) + '" data-time="' + esc(time) + '"' +
-      tipAttrs(it, whenOf(it)) + '><span class="nm">' + esc(it.name) + '</span></div>';
+      tipAttrs(it, whenOf(it)) + '><span class="nm">' + breakable(it.name) + '</span></div>';
   }
   // Every block gets as many whole lines of its name as it has room for, the last one ending in "…".
   // The time line under a name shows only when a line of name still fits above it.
@@ -342,7 +362,7 @@
       for (const it of d.timed) {
         const pos = 'top:' + (it.a / 14.4) + '%;height:calc(' + ((it.z - it.a) / 14.4) + '% - 1px);' +
           'left:calc(var(--gut) + ' + colW + ' * ' + i + ' + ' + colW + ' * ' + it.col + ' / ' + it.cols + ');width:calc(' + colW + ' / ' + it.cols + ' - 2px)';
-        grid += '<div class="pl-wev' + (it.late ? ' late' : '') + '" role="button" tabindex="0" style="' + pos + ';' + style(it) + '"' + tipAttrs(it, whenOf(it)) + '><span class="nm">' + esc(it.name) + '</span></div>';
+        grid += '<div class="pl-wev' + (it.late ? ' late' : '') + '" role="button" tabindex="0" style="' + pos + ';' + style(it) + '"' + tipAttrs(it, whenOf(it)) + '><span class="nm">' + breakable(it.name) + '</span></div>';
       }
       grid += nowLine(now, k, 'calc(var(--gut) + ' + colW + ' * ' + i + ')', 'calc(' + colW + ')');
     });

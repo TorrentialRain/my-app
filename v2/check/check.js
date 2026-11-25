@@ -321,10 +321,18 @@ function inspect({ W, H, TOP, BOTTOM }) {
     if (!skipTop && !skipBottom && (r.left < -0.5 || r.right > W + 0.5 || r.bottom > H + 0.5 || r.top < -0.5)) out.push(name(el) + ' is cut off at the screen edge');
     else if (!skipTop && r.top < TOP && !cover) out.push(name(el) + ' sits under the status bar');
     else if (!skipBottom && r.bottom > H - BOTTOM) out.push(name(el) + ' sits in the home swipe area');
-    if (el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflowX !== 'visible' && !['svg', 'textarea', 'input'].includes(tag(el))) out.push(name(el) + ' has text cut off');
+    if (el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflowX !== 'visible' && getComputedStyle(el).textOverflow !== 'ellipsis' && !['svg', 'textarea', 'input'].includes(tag(el))) out.push(name(el) + ' has text cut off with no "…"');
     // Page content must not hide under the page bar.
     if (cover || el.closest('.bar') || (barOnTop ? skipTop : skipBottom)) continue;
     if (r.bottom > bar.top + 0.5 && r.top < bar.bottom - 0.5) out.push(name(el) + ' is under the page bar');
+  }
+  // Inside anything that scrolls, no part may be squeezed shorter than what it holds (it would spill past the edge instead of scrolling).
+  for (const box of document.querySelectorAll('body *')) {
+    if (!vis(box) || !/auto|scroll/.test(getComputedStyle(box).overflowY)) continue;
+    for (const kid of box.children) {
+      if (!vis(kid) || getComputedStyle(kid).overflowY !== 'visible') continue;
+      if (kid.scrollHeight > kid.clientHeight + 1 && kid.clientHeight > 0) out.push(name(kid).split(' "')[0] + ' is squeezed shorter than what it holds, so it spills instead of scrolling');
+    }
   }
   // Nothing overlaps anything else (unless one sits inside the other). Floating buttons are judged
   // with the list scrolled to its end, where Josh can always scroll the last card clear of them.
@@ -643,7 +651,7 @@ async function namesFit(page, where) {
       if (!b.offsetParent) continue;
       const nm = b.classList.contains('pl-wchip') ? b : b.querySelector('.nm');
       if (!nm) { out.push('a block has no name in it'); continue; }
-      const name = '"' + nm.textContent + '"';
+      const name = '"' + nm.textContent.replace(/\u00AD/g, '') + '"';
       if (nm === b) {
         if (b.scrollWidth > b.clientWidth + 1 && getComputedStyle(b).textOverflow !== 'ellipsis') out.push('an all-day name is cut with no "…": ' + name);
         continue;
@@ -656,6 +664,20 @@ async function namesFit(page, where) {
       const clamp = getComputedStyle(nm).webkitLineClamp;
       if (nm.scrollHeight > nm.clientHeight + 1 && (!clamp || clamp === 'none')) out.push('a name is cut with no "…": ' + name);
       if (nm.scrollWidth > nm.clientWidth + 1) out.push('a name is wider than its block: ' + name);
+      // A word may only break at a space or at one of Plan's own split points (shown with a "-").
+      const tn = nm.firstChild;
+      if (tn && tn.nodeType === 3) {
+        const t = tn.textContent, rg = document.createRange();
+        let prevTop = null;
+        for (let i = 0; i < t.length; i++) {
+          if (t[i] === ' ' || t[i] === '\u00AD') continue;
+          rg.setStart(tn, i); rg.setEnd(tn, i + 1);
+          const cr = rg.getBoundingClientRect();
+          if (cr.top >= r.bottom - 1) break;
+          if (prevTop !== null && cr.top > prevTop + 2 && i > 0 && t[i - 1] !== ' ' && t[i - 1] !== '\u00AD') { out.push('a name breaks in the middle of a word with no "-": ' + name); break; }
+          prevTop = cr.top;
+        }
+      }
     }
     return out;
   });
@@ -670,7 +692,16 @@ async function lookPlan(page, where, size, shot) {
     if (shot) await page.screenshot({ path: path.join(OUT, shot + (end === 'end' ? '-end' : '') + '.png') });
   }
 }
-const planText = (page) => page.evaluate(() => document.getElementById('page-plan').innerText);
+// A sheet that scrolls is judged at its top and at its end.
+async function lookSheet(page, where, size, sel) {
+  for (const end of ['top', 'end']) {
+    await page.evaluate(([sel, end]) => { const c = document.querySelector(sel + ' .sheet-card'); c.scrollTop = end === 'top' ? 0 : c.scrollHeight; }, [sel, end]);
+    await settle(page, 150);
+    await look(page, where + ' (' + end + ')', size);
+  }
+  await page.evaluate((sel) => { document.querySelector(sel + ' .sheet-card').scrollTop = 0; }, sel);
+}
+const planText = (page) => page.evaluate(() => document.getElementById('page-plan').innerText.replace(/\u00AD/g, ''));
 async function phonePlan(page, scheme, size) {
   const P = scheme + ' Plan';
   await page.tap('.tab[data-tab="plan"]');
@@ -705,7 +736,7 @@ async function phonePlan(page, scheme, size) {
   expect(P, /Overdue · 2/i.test(bt) && bt.includes('unit 9: quiz #8') && bt.includes('needs attention') && bt.includes('read chapter 7') && bt.includes('money: nothing new'), 'the brief is missing its lists or its own words');
   expect(P, !(await page.locator('#brief-body a, #brief-body script, #brief-body svg').count()) && (await page.title()) !== 'a brief must never run code', 'the brief must show as plain words only (no links, no code)');
   expect(P, (await page.locator('#brief-body .due.late').count()) === LATE_N, 'every overdue task in the brief should say "Overdue · date" in yellow');
-  await look(page, P + ' brief', size);
+  await lookSheet(page, P + ' brief', size, '#sheet-brief');
   await page.screenshot({ path: path.join(OUT, scheme + '-plan-brief.png') });
   // Swipe down to close (a finger, as far as the test browser can play one).
   const swiped = await page.evaluate(async () => {
@@ -782,7 +813,7 @@ async function pcPlan(pp, scheme, size) {
   await pp.click('.pl-brief');
   await settle(pp, 300);
   expect(P, await pp.locator('#sheet-brief').isVisible(), 'the brief did not open on a PC');
-  await look(pp, P + ' brief', size);
+  await lookSheet(pp, P + ' brief', size, '#sheet-brief');
   await pp.screenshot({ path: path.join(OUT, scheme + '-pc-plan-brief.png') });
   await pp.keyboard.press('Escape');
   await settle(pp, 200);

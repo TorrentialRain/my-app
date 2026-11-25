@@ -328,6 +328,8 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
   padding: 14px calc(var(--safe-right) + 20px) calc(var(--safe-bottom) + 20px) calc(var(--safe-left) + 20px);
   display: flex; flex-direction: column; gap: 12px;
 }
+/* A card that scrolls keeps every part at full height, so a long card scrolls instead of squashing its parts. */
+.sheet-card > * { flex-shrink: 0; }
 @media (prefers-color-scheme: dark), (min-width: 900px) { .sheet-card { --card: #1e1c1a; --ink: #ffffff; --ink2: #a1a1a8; --on: #ff9a3d; --on-ink: #000000; --field: #2c2926; } }
 .sheet-top { display: flex; align-items: center; justify-content: space-between; }
 .sheet-top h2 { margin: 0; font-size: 22px; font-weight: 700; }
@@ -435,7 +437,7 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
 }
 /* The name: whole words, split with a hyphen only when one word is wider than the block, and "…" on the last line that fits. */
 .pl-ev .nm, .pl-wev .nm { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; overflow: hidden;
-  overflow-wrap: break-word; -webkit-hyphens: auto; hyphens: auto; }
+  overflow-wrap: break-word; -webkit-hyphens: manual; hyphens: manual; }
 .pl-ev.notime::after { display: none; }
 .pl-ev.tiny, .pl-wev.tiny { padding-top: 0; padding-bottom: 0; }
 .pl-ev::after { content: attr(data-time); display: block; font-weight: 400; font-size: 13px; }

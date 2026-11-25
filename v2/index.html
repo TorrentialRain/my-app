@@ -14,7 +14,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="../icons/icon-180.png">
   <link rel="icon" type="image/png" href="../icons/icon-192.png">
-  <link rel="stylesheet" href="app.css?v=9">
+  <link rel="stylesheet" href="app.css?v=10">
 </head>
 <body>
   <!-- The new Hub (rebuild). Lives beside the old app and reads the same data box.
@@ -125,7 +125,7 @@
 
   <!-- TO-DO sheets -->
   <div class="sheet" id="sheet-add" hidden role="dialog" aria-modal="true" aria-labelledby="add-title">
-    <form class="sheet-card" id="add-form" autocomplete="off">
+    <form class="sheet-card" id="add-form" autocomplete="off" data-scrolls>
       <div class="sheet-top"><h2 id="add-title">New task</h2><button type="button" class="round" data-close aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
       <label class="fld"><span>Name</span><input id="add-name" type="text" autocapitalize="sentences" required></label>
       <div class="fld-row">
@@ -178,7 +178,7 @@
   </div>
   <!-- Plan: the full brief, slid up over Plan. Swipe down to close. -->
   <div class="sheet" id="sheet-brief" hidden role="dialog" aria-modal="true" aria-labelledby="brief-title">
-    <div class="sheet-card pl-sheet">
+    <div class="sheet-card pl-sheet" data-scrolls>
       <span class="grab" aria-hidden="true"></span>
       <div class="sheet-top"><h2 id="brief-title">Morning brief</h2><button type="button" class="round" data-close aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
       <p class="hint" id="brief-date"></p>
@@ -208,7 +208,7 @@
   <script src="data.js?v=5"></script>
   <script src="changes.js?v=5"></script>
   <script src="todo.js?v=7"></script>
-  <script src="plan.js?v=2"></script>
+  <script src="plan.js?v=3"></script>
   <script src="app.js?v=8"></script>
 </body>
 </html>
