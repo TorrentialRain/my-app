@@ -502,7 +502,7 @@ async function everyTab(page, T) {
     expect(T + ' ' + t.name + ' tab', st.on && st.ready === 'ready' && !/loading/i.test(st.sub) && st.shown > 0,
       'the tab did not open and show its list (selected: ' + st.on + ', line: "' + st.sub + '", items: ' + st.shown + ')');
     if (t.id === 'overdue') {
-      expect(T + ' Overdue tab', st.cards > 0 && st.late === st.cards, 'every card on the Overdue tab should say Overdue on its date (' + st.late + ' of ' + st.cards + ')');
+      expect(T + ' Overdue tab', st.cards > 0 && st.late === st.cards, 'every card on the Overdue tab should have its date in yellow (' + st.late + ' of ' + st.cards + ')');
       await underlines(page, T + ' Overdue tab', 'cards');
       continue;
     }
@@ -527,7 +527,9 @@ async function phoneTodo(page, scheme, size) {
   expect(T, same(await cardIds(page), ['b', 'a', 'm', 'c', 'l', 'd']), 'All shows the wrong cards: ' + await cardIds(page));
   expect(T, !(await page.locator('.td-list').textContent()).includes('Robot history'), "a card shows the robot's notes; only Josh's own note may show");
   expect(T, (await page.locator('.td-list').textContent()).includes('Check Costco first'), "Josh's own note does not show");
-  expect(T, /^Overdue · /.test(await page.locator('.card[data-id="b"] .due.late').textContent().catch(() => '')), 'an overdue task\'s date does not say Overdue');
+  // An overdue date is yellow but doesn't say "Overdue": the underline says it (Josh's pick, Nov 25).
+  const lateDate = await page.locator('.card[data-id="b"] .due.late').textContent().catch(() => '');
+  expect(T, lateDate !== '' && !/overdue/i.test(lateDate), 'an overdue task\'s date should be yellow and should not say "Overdue" (got "' + lateDate + '")');
   expect(T, await page.locator('.card[data-id="d"] .due.late').count() === 0, 'a task that is not overdue is marked Overdue');
   await underlines(page, T + ' All', 'cards');
   expect(T, await page.locator('.td-suggest').isVisible(), 'the possible task does not show');
@@ -789,7 +791,8 @@ async function phonePlan(page, scheme, size) {
   const bt = (await page.locator('#brief-body').innerText()).toLowerCase();
   expect(P, /Overdue · 2/i.test(bt) && bt.includes('unit 9: quiz #8') && bt.includes('needs attention') && bt.includes('read chapter 7') && bt.includes('money: nothing new'), 'the brief is missing its lists or its own words');
   expect(P, !(await page.locator('#brief-body a, #brief-body script, #brief-body svg').count()) && (await page.title()) !== 'a brief must never run code', 'the brief must show as plain words only (no links, no code)');
-  expect(P, (await page.locator('#brief-body .due.late').count()) === LATE_N, 'every overdue task in the brief should say "Overdue · date" in yellow');
+  expect(P, (await page.locator('#brief-body .due.late').count()) === LATE_N, 'every overdue task in the brief should have its date in yellow');
+  expect(P, !(await page.locator('#brief-body .due.late').allTextContents()).some((t) => /overdue/i.test(t)), 'an overdue date in the brief should not say "Overdue"');
   await underlines(page, P + ' brief', '#brief-body .pl-row');
   await lookSheet(page, P + ' brief', size, '#sheet-brief');
   await page.screenshot({ path: path.join(OUT, scheme + '-plan-brief.png') });

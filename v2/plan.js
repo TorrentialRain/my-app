@@ -266,7 +266,7 @@
     const pos = 'top:' + (it.a / 14.4) + '%;height:calc(' + ((it.z - it.a) / 14.4) + '% - 2px);' +
       'left:calc(var(--gut) + (100% - var(--gut)) * ' + it.col + ' / ' + it.cols + ');width:calc((100% - var(--gut)) / ' + it.cols + ' - 3px)';
     const short = it.z - it.a < 45 ? ' short' : '';
-    const time = it.task ? (it.late ? 'Overdue · ' : '') + timeText(it.end) : timeText(it.start) + ' – ' + timeText(it.end);
+    const time = it.task ? timeText(it.end) : timeText(it.start) + ' – ' + timeText(it.end);
     return '<div class="' + cls + short + (it.late ? ' late' : '') + '" role="button" tabindex="0" style="' + pos + ';' + style(it) + '" data-time="' + esc(time) + '"' +
       tipAttrs(it, whenOf(it)) + '><span class="nm">' + breakable(it.name) + '</span></div>';
   }
@@ -442,7 +442,7 @@
     h += '<h3>Today</h3><ul class="pl-rows">' + (evs.join('') || '<li class="pl-row"><span class="t muted">Nothing on the calendar.</span></li>') + '</ul>';
     h += '<h3>Due today · ' + due.length + '</h3><ul class="pl-rows">' + (due.map((x) => '<li class="pl-row">' + sq(x.kind) + '<span class="t">' + esc(x.name) + '</span><span class="w">' + esc(x.when) + '</span></li>').join('') ||
       '<li class="pl-row"><span class="t muted">Nothing else due today.</span></li>') + '</ul>';
-    h += '<h3 id="brief-overdue">Overdue · ' + late.length + '</h3><ul class="pl-rows">' + (late.map((x) => '<li class="pl-row late"><span class="t">' + esc(x.name) + '</span><span class="due late">Overdue · ' + esc(x.tag) + '</span></li>').join('') ||
+    h += '<h3 id="brief-overdue">Overdue · ' + late.length + '</h3><ul class="pl-rows">' + (late.map((x) => '<li class="pl-row late"><span class="t">' + esc(x.name) + '</span><span class="due late">' + esc(x.tag) + '</span></li>').join('') ||
       '<li class="pl-row"><span class="t muted">Nothing overdue.</span></li>') + '</ul>';
     if (fresh) {
       for (const p of briefParts(b.html)) {
