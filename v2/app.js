@@ -116,10 +116,10 @@
   async function load() {
     const jobs = [
       ['finance', 'data/fin.json', Summary.finance],
-      ['plan', 'data/calendar.json', Summary.plan],
     ];
     await Promise.all([
       Todo.load(Data).catch((e) => { say('todo', e.message, true); Todo.showError(e.message); keyTrouble(e); }),
+      Plan.load(Data).catch((e) => { say('plan', e.message, true); Plan.showError(e.message); keyTrouble(e); }),
       ...jobs.map(async ([page, path, sum]) => {
         try {
           say(page, sum(await Data.read(path)));

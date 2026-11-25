@@ -49,18 +49,54 @@ const SUGS = {
   s1: { kind: 'task', title: 'Return the library book', status: 'new', source: 'email', createdAt: at(-1), proposed: { section: 'active' } },
   s2: { kind: 'task', title: 'Old idea', status: 'skipped', source: 'email', createdAt: at(-1), proposed: { section: 'active' } },
 };
+// A calendar copy shaped like the real one, around today (Anchorage time).
+const Plan = require('../plan.js');
+const TODAY = Plan.dayKey(NOW);
+const T = (dayOff, h, m) => new Date(Plan.dayStart(Plan.addDays(TODAY, dayOff)) + ((h * 60 + (m || 0)) * 60000)).toISOString();
+const ev = (id, summary, dayOff, h1, m1, h2, m2) => ({ id, summary, start: { dateTime: T(dayOff, h1, m1) }, end: { dateTime: T(dayOff, h2, m2) } });
+const allDay = (id, summary, dayOff) => ({ id, summary, start: { date: Plan.addDays(TODAY, dayOff) }, end: { date: Plan.addDays(TODAY, dayOff + 1) } });
+const RANGE = { from: Plan.addDays(TODAY, -8), to: Plan.addDays(TODAY, 20), fetchedAt: at(0, -1) };
+const WEEK = [-3, -2, -1, 0, 1, 2, 3];
+const CALENDAR = {
+  work: Object.assign({ name: 'Work Schedule', events: WEEK.map((d) => ev('w' + d, 'Work (Midtown)', d, 10, 0, 15, 0)) }, RANGE),
+  class: Object.assign({ name: 'Class Schedule', events: [
+    allDay('dorm', 'Dorm Night', 0),
+    ev('bk', 'Creekside Eatery Breakfast', 0, 7, 30, 9, 30),
+    ev('long', 'A long class name that has to wrap inside its block without spilling into the next one', 0, 14, 0, 15, 30),
+    ev('cw', 'Classwork Time', 0, 15, 30, 16, 30),
+    ev('jpn', 'Elementary Japanese I', 0, 17, 30, 19, 10),
+    ev('wr', 'Introduction to College Writing', 1, 17, 30, 18, 45),
+  ] }, RANGE),
+  gym: Object.assign({ name: 'Gym Schedule', events: [ev('g1', 'Gym', 1, 18, 0, 19, 0)] }, RANGE),
+  main: Object.assign({ name: 'My calendar', events: [
+    ev('din', 'Creekside Eatery Dinner', 0, 16, 30, 17, 30),
+    ev('q', 'Quick call', 0, 12, 0, 12, 10),
+    ev('late', 'Movie night', 0, 22, 30, 23, 59),
+    ev('mirror', 'Due: Print the bus pass', 0, 11, 0, 11, 30), // the calendar's copy of a task already ticked: must not show
+  ] }, RANGE),
+  storage: Object.assign({ name: 'Storage Schedule', events: [allDay('s1', 'Foothills Josh F 10-6', 0)] }, RANGE),
+  bb: Object.assign({ name: 'University of Alaska', events: [ev('b1', 'New Event 8/26/26', 0, 17, 30, 18, 30)] }, RANGE),
+};
+const BRIEF = { current: { date: TODAY, headline: 'Sample day: work until 3, then the Japanese class.', setAt: at(0, -2),
+  html: '<!doctype html><html><head><style>body{}</style></head><body><div class="band top"><div class="inner"><h1>Sample day</h1><svg><text>skip</text></svg>' +
+    '<div class="acts"><div class="act"><p class="t">10 AM – 3 PM</p><p>The Midtown shift.</p></div></div></div></div>' +
+    '<div class="band bottom"><div class="inner"><h2>Needs attention</h2><ol class="list"><li><span class="num">1</span><div class="body"><p class="title"><a href="https://example.com/">Read chapter 7</a></p><p>Due tomorrow, <a href="https://example.com/">on your TO-DO</a>.</p></div></li></ol>' +
+    '<h2>Resolved</h2><ol class="list"><li><span class="num">1</span><div class="body"><p class="title">Bus pass printed</p><p>Done yesterday.</p></div></li></ol><p>Money: nothing new.</p></div></div>' +
+    '<script>document.title = "a brief must never run code"</script></body></html>' } };
 const SAMPLE = {
   'meta/app.json': { name: 'sample' },
   'data/tasks.json': TASKS,
   'data/suggestions.json': SUGS,
   'data/fin.json': { debts: { items: [{ name: 'Sample', owed: 40 }, { name: 'Paid', owed: 0 }] } },
-  'data/calendar.json': { one: { name: 'One', events: [] }, two: { name: 'Two', events: [] } },
+  'data/calendar.json': CALENDAR,
+  'data/brief.json': BRIEF,
 };
 const flat = (tab) => Todo.listFor(TASKS, tab, NOW).flat();
 const EXPECT = {
   todo: flat('all').length + ' open · ' + flat('all').filter(([, t]) => Todo.isOverdue(t, NOW)).length + ' overdue',
-  finance: '1 debt still owed', plan: '2 calendars found',
+  finance: '1 debt still owed', plan: Plan.dueLine(Plan.dueToday(TASKS, NOW).length),
 };
+const LATE_N = Plan.overdue(TASKS, NOW).length;
 
 const problems = [];
 function problem(where, what) { problems.push(where + ': ' + what); console.log('  FAIL ' + where + ': ' + what); }
@@ -106,6 +142,39 @@ function rules() {
   expect('rules', d && d.dueNoTime === true && /T23:59:00-09:00$/.test(d.due), 'a day with no time should mean 11:59 PM Alaska time: got ' + (d && d.due));
   const d2 = Todo.dueFrom('2026-07-02', '14:30');
   expect('rules', d2 && /T14:30:00-08:00$/.test(d2.due), 'a summer time should use Alaska daylight time: got ' + (d2 && d2.due));
+}
+
+// ---- 1b. The Plan rules, on their own ----
+function planRules() {
+  console.log('Checking the Plan rules');
+  const W = 'plan rules';
+  const evs = Plan.eventsOf(CALENDAR);
+  const names = evs.map((e) => e.name);
+  expect(W, !names.some((n) => /^Due:/.test(n)), "the calendar's \"Due:\" copies must not show (due items come from the task list)");
+  expect(W, !names.includes('Foothills Josh F 10-6') && !names.includes('New Event 8/26/26'), "the store's calendar and the Blackboard copy should be left out");
+  expect(W, names.includes('Gym') && names.includes('Work (Midtown)') && names.includes('Dorm Night'), 'Work, Class, Gym and main calendars should all show');
+  expect(W, Plan.eventsOf({ x: { name: 'Brand new calendar', events: [ev('n', 'Something new', 0, 9, 0, 10, 0)] } }).map((e) => e.kind).join() === 'main', 'a calendar Plan has never seen must still show (in the main color)');
+  const due = Plan.dueOf(TASKS, NOW);
+  expect(W, !due.some((d) => d.taskId === 'i'), 'a ticked task must not show as due');
+  expect(W, due.some((d) => d.taskId === 'g' && d.name === 'Due: Read chapter 7'), 'an open task with a due date should show as due, under its current name');
+  expect(W, due.filter((d) => d.late).map((d) => d.taskId).sort().join() === 'b,f', 'only overdue tasks may be yellow');
+  expect(W, Plan.overdue(TASKS, NOW).map((x) => x.id).join() === 'f,b', 'the overdue list should be oldest first');
+  const hue = (hex) => { const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255); const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    if (mx === mn) return { h: 0, s: 0 }; const d = mx - mn; let h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return { h: (h * 60 + 360) % 360, s: d / mx }; };
+  expect(W, Object.values(Plan.KINDS).every((k) => { const c = hue(k.color); return !(c.s > 0.5 && c.h >= 38 && c.h <= 70); }), 'no calendar may be yellow: yellow only means overdue');
+  const day = Plan.dayOf(evs, TODAY, 20);
+  const work = day.timed.find((x) => x.name === 'Work (Midtown)'), long = day.timed.find((x) => /long class/.test(x.name));
+  expect(W, work && long && work.cols === 2 && long.cols === 2 && work.col !== long.col, 'things at the same time should sit side by side');
+  const brk = day.timed.find((x) => /Breakfast/.test(x.name));
+  expect(W, brk && Math.round(brk.a) === 450 && Math.round(brk.b) === 570, 'breakfast should run 7:30 to 9:30 (got ' + (brk && [brk.a, brk.b]) + ')');
+  expect(W, day.allDay.map((x) => x.name).join() === 'Dorm Night', 'all-day events should sit in the all-day row');
+  const r = Plan.rangeOf(CALENDAR);
+  expect(W, Plan.loaded(r, TODAY) && !Plan.loaded(r, Plan.addDays(TODAY, 40)), 'a day outside the calendar copy should count as not copied yet');
+  expect(W, Plan.headline(BRIEF, NOW, day) === BRIEF.current.headline, "today's brief headline should be the top line");
+  const old = { current: Object.assign({}, BRIEF.current, { date: Plan.addDays(TODAY, -1) }) };
+  expect(W, Plan.headline(old, NOW, day) !== BRIEF.current.headline, "yesterday's brief must not show as today's");
+  expect(W, new Date(Plan.dayStart('2027-03-14')).toISOString() === '2027-03-14T09:00:00.000Z' && new Date(Plan.dayStart('2027-03-15')).toISOString() === '2027-03-15T08:00:00.000Z', 'days should start at midnight Alaska time, also across the clock change');
+  expect(W, Plan.weekStart('2026-11-25') === '2026-11-22', 'weeks should start on Sunday');
 }
 
 // ---- Saving, without a browser: a made-up data box that can say no, change under us, or lose a reply ----
@@ -220,13 +289,22 @@ function inspect({ W, H, TOP, BOTTOM }) {
     if (['svg', 'input', 'img', 'textarea'].includes(tag(el))) return true;
     return Array.from(el.childNodes).some((n) => n.nodeType === 3 && n.textContent.trim());
   });
-  // When the Connect screen or a sheet is up it covers everything else, so only what's on it counts.
-  const cover = [document.getElementById('connect')].concat(Array.from(document.querySelectorAll('.sheet'))).find(vis);
-  if (cover) items = items.filter((el) => cover.contains(el));
-  const rect = (el) => el.getBoundingClientRect();
+
   // Lists that scroll: content partly scrolled past an edge is fine there, so those edges are only
   // judged when the list is scrolled all the way to that end (the check looks at both ends).
   const sc = (el) => el.closest('[data-scrolls]');
+  // What shows of a thing inside a scroll area that doesn't fill the screen (Plan's hours) is the part inside it.
+  const rect = (el) => {
+    const r = el.getBoundingClientRect(), s = sc(el);
+    if (!s || s === el) return r;
+    const c = s.getBoundingClientRect();
+    const top = Math.max(r.top, c.top), bottom = Math.min(r.bottom, c.bottom), left = Math.max(r.left, c.left), right = Math.min(r.right, c.right);
+    return { top, bottom, left, right, width: Math.max(0, right - left), height: Math.max(0, bottom - top) };
+  };
+  items = items.filter((el) => { const r = rect(el); return r.width > 0 && r.height > 0; });
+  // When the Connect screen or a sheet is up it covers everything else, so only what's on it counts.
+  const cover = [document.getElementById('connect')].concat(Array.from(document.querySelectorAll('.sheet'))).find(vis);
+  if (cover) items = items.filter((el) => cover.contains(el));
   const pastTop = (el) => { const s = sc(el); return !!s && s.scrollTop > 1; };
   const notAtBottom = (el) => { const s = sc(el); return !!s && s.scrollTop + s.clientHeight < s.scrollHeight - 1; };
   const floats = (el) => el.closest('[data-floats]');
@@ -282,7 +360,7 @@ function inspect({ W, H, TOP, BOTTOM }) {
   // Every button is at least 44 by 44, so a thumb hits it (Apple's rule).
   for (const b of document.querySelectorAll('button, a[href], input, textarea, select')) {
     if (!vis(b) || (cover && !cover.contains(b))) continue;
-    const r = rect(b);
+    const r = b.getBoundingClientRect();
     if (r.width < 43.5 || r.height < 43.5) out.push(name(b) + ' is smaller than 44 by 44 (' + Math.round(r.width) + ' by ' + Math.round(r.height) + ')');
   }
   return out;
@@ -548,6 +626,137 @@ async function phoneTodo(page, scheme, size) {
 }
 
 // How dark the page is: 0 is black, 255 is white. Used to check that the phone follows its setting and a PC is always dark.
+// ---- The Plan page ----
+async function planReady(page) {
+  await page.waitForFunction(() => document.documentElement.dataset.plan === 'ready', null, { timeout: 8000 }).catch(() => problem('plan', 'the Plan page did not get ready'));
+}
+// Look at Plan with its hours scrolled to the top and to the end.
+async function lookPlan(page, where, size, shot) {
+  for (const end of ['top', 'end']) {
+    await page.evaluate((end) => { document.querySelectorAll('#page-plan [data-scrolls]').forEach((s) => { s.scrollTop = end === 'top' ? 0 : s.scrollHeight; }); }, end);
+    await settle(page, 150);
+    await look(page, where + ' (' + end + ')', size);
+    if (shot) await page.screenshot({ path: path.join(OUT, shot + (end === 'end' ? '-end' : '') + '.png') });
+  }
+}
+const planText = (page) => page.evaluate(() => document.getElementById('page-plan').innerText);
+async function phonePlan(page, scheme, size) {
+  const P = scheme + ' Plan';
+  await page.tap('.tab[data-tab="plan"]');
+  await settle(page);
+  await planReady(page);
+  // Opens on today, in the day view.
+  if ((await page.locator('.pl-wrap').getAttribute('data-view')) !== 'day') { await page.tap('[data-view-pick="day"]'); await settle(page, 200); }
+  const text = await planText(page);
+  expect(P, text.includes('Work (Midtown)') && text.includes('Creekside Eatery Breakfast') && text.includes('Dorm Night'), 'today\'s events do not show by name');
+  expect(P, !text.includes('Print the bus pass') && !text.includes('Foothills Josh F') && !text.includes('New Event 8/26'), 'something that should be left out shows (a ticked task\'s calendar copy, the store\'s calendar or the Blackboard copy)');
+  expect(P, (await page.locator('.pl-hl').textContent()).trim() === BRIEF.current.headline, 'the brief line should show today\'s brief headline');
+  const late = page.locator('.pl-late');
+  expect(P, (await late.isVisible()) && (await late.textContent()).trim() === LATE_N + ' overdue', 'today should show a yellow "' + LATE_N + ' overdue" button');
+  await lookPlan(page, P + ' day', size, scheme + '-plan-day');
+  // Tapping a block shows just its name.
+  await page.evaluate(() => { document.querySelector('.pl-daycard .pl-scroll').scrollTop = document.querySelector('.pl-grid').offsetHeight * 9 / 24; });
+  await settle(page, 150);
+  await page.locator('.pl-daycard .pl-ev', { hasText: 'Work (Midtown)' }).tap();
+  await settle(page, 200);
+  const tip = await page.evaluate(() => { const b = document.querySelector('.pl-bubble'); return { shown: !b.hidden, text: b.innerText }; });
+  expect(P, tip.shown && /Work \(Midtown\)/.test(tip.text), 'tapping a block did not show its name (' + JSON.stringify(tip) + ')');
+  expect(P, !(await page.locator('#sheet-brief').isVisible()), 'tapping a block should only show its name, not open anything');
+  await page.screenshot({ path: path.join(OUT, scheme + '-plan-tap.png') });
+  await page.tap('.pl-date');
+  await settle(page, 150);
+  expect(P, await page.locator('.pl-bubble').isHidden(), 'the name bubble did not go away');
+  // The brief slides up; it shows the lists, the brief's own words as plain text, and never runs anything from it.
+  await page.tap('.pl-brief');
+  await settle(page, 350);
+  expect(P, await page.locator('#sheet-brief').isVisible(), 'tapping the brief line did not open the brief');
+  const bt = (await page.locator('#brief-body').innerText()).toLowerCase();
+  expect(P, /Overdue · 2/i.test(bt) && bt.includes('unit 9: quiz #8') && bt.includes('needs attention') && bt.includes('read chapter 7') && bt.includes('money: nothing new'), 'the brief is missing its lists or its own words');
+  expect(P, !(await page.locator('#brief-body a, #brief-body script, #brief-body svg').count()) && (await page.title()) !== 'a brief must never run code', 'the brief must show as plain words only (no links, no code)');
+  expect(P, (await page.locator('#brief-body .due.late').count()) === LATE_N, 'every overdue task in the brief should say "Overdue · date" in yellow');
+  await look(page, P + ' brief', size);
+  await page.screenshot({ path: path.join(OUT, scheme + '-plan-brief.png') });
+  // Swipe down to close (a finger, as far as the test browser can play one).
+  const swiped = await page.evaluate(async () => {
+    const card = document.querySelector('#sheet-brief .sheet-card');
+    if (typeof Touch !== 'function' || typeof TouchEvent !== 'function') return 'no touch';
+    const t = (y) => new Touch({ identifier: 1, target: card, clientX: 200, clientY: y });
+    card.dispatchEvent(new TouchEvent('touchstart', { touches: [t(300)], bubbles: true, cancelable: true }));
+    card.dispatchEvent(new TouchEvent('touchmove', { touches: [t(460)], bubbles: true, cancelable: true }));
+    card.dispatchEvent(new TouchEvent('touchend', { touches: [], bubbles: true, cancelable: true }));
+    await new Promise((r) => setTimeout(r, 300));
+    return document.getElementById('sheet-brief').hidden ? 'closed' : 'open';
+  }).catch((e) => 'error: ' + e.message);
+  if (swiped === 'closed') console.log('  ok: swiping down closes the brief');
+  else {
+    if (swiped === 'open') problem(P, 'swiping down did not close the brief');
+    else console.log('  note: the test browser could not play a swipe (' + swiped + '), so the × button was checked instead');
+    await page.tap('#sheet-brief [data-close]');
+    await settle(page, 300);
+  }
+  expect(P, await page.locator('#sheet-brief').isHidden(), 'the brief did not close');
+  // The yellow button opens the brief at the overdue list.
+  await page.tap('.pl-late');
+  await settle(page, 400);
+  expect(P, await page.locator('#sheet-brief').isVisible(), 'the overdue button did not open the brief');
+  await page.tap('#sheet-brief [data-close]');
+  await settle(page, 300);
+  // Arrows move a day; Today comes back.
+  const d0 = await page.locator('.pl-date').textContent();
+  await page.tap('.pl-next');
+  await settle(page, 200);
+  expect(P, (await page.locator('.pl-date').textContent()) !== d0 && await page.locator('.pl-today').isVisible(), 'the › arrow did not move to the next day, or Today did not show');
+  expect(P, (await planText(page)).includes('Introduction to College Writing'), "tomorrow's class does not show on tomorrow");
+  await page.tap('.pl-today');
+  await settle(page, 200);
+  expect(P, (await page.locator('.pl-date').textContent()) === d0, 'Today did not go back to today');
+  // Week view.
+  await page.tap('[data-view-pick="week"]');
+  await settle(page, 300);
+  expect(P, (await page.locator('.pl-wday').count()) === 7 && (await page.locator('.pl-wev').count()) >= 7, 'the week grid should show 7 days with blocks');
+  await lookPlan(page, P + ' week', size, scheme + '-plan-week');
+  // Weeks past the calendar copy say so.
+  for (let i = 0; i < 4; i++) { await page.tap('.pl-next'); await settle(page, 120); }
+  expect(P, await page.locator('.pl-wnote').isVisible(), 'a week past the calendar copy should say it isn\'t copied yet');
+  await look(page, P + ' week not copied yet', size);
+  await page.tap('.pl-today');
+  await settle(page, 200);
+  // Tapping a day in the week opens that day.
+  await page.locator('.pl-wday').nth(0).tap();
+  await settle(page, 250);
+  expect(P, (await page.locator('.pl-wrap').getAttribute('data-view')) === 'day', 'tapping a day in the week should open that day');
+  await page.tap('.pl-today');
+  await settle(page, 200);
+  const dk = await page.evaluate(() => { const m = getComputedStyle(document.getElementById('page-plan')).backgroundColor.match(/[\d.]+/g).map(Number); return Math.round(0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]); });
+  if (scheme === 'light') expect(P, dk > 200, 'Plan should be light on a phone set to light (got ' + dk + ')');
+  else expect(P, dk < 50, 'Plan should be dark on a phone set to dark (got ' + dk + ')');
+}
+async function pcPlan(pp, scheme, size) {
+  const P = scheme + ' PC Plan';
+  await pp.click('.tab[data-tab="plan"]');
+  await settle(pp);
+  await planReady(pp);
+  const lay = await pp.evaluate(() => {
+    const r = (s) => document.querySelector(s).getBoundingClientRect();
+    const d = r('.pl-daycard'), w = r('.pl-weekcard'), k = r('.pl-key'), b = r('.pl-brief');
+    return { side: d.width > 0 && w.width > 0 && d.right <= w.left && Math.abs(d.top - w.top) < 2, key: k.width > 0 && k.right <= d.left, briefTop: b.bottom <= d.top,
+      bg: (() => { const m = getComputedStyle(document.getElementById('page-plan')).backgroundColor.match(/[\d.]+/g).map(Number); return Math.round(0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]); })(),
+      switches: document.querySelectorAll('#page-plan input[type="checkbox"], #page-plan [role="switch"]').length };
+  });
+  expect(P, lay.side, 'the day and the week should sit side by side');
+  expect(P, lay.key && lay.briefTop, 'the calendar list should be on the left and the brief line on top');
+  expect(P, lay.switches === 0, 'Plan should have no hide switches');
+  expect(P, lay.bg < 50, 'a PC should always be dark (got ' + lay.bg + ')');
+  await lookPlan(pp, P, size, scheme + '-pc-plan');
+  await pp.click('.pl-brief');
+  await settle(pp, 300);
+  expect(P, await pp.locator('#sheet-brief').isVisible(), 'the brief did not open on a PC');
+  await look(pp, P + ' brief', size);
+  await pp.screenshot({ path: path.join(OUT, scheme + '-pc-plan-brief.png') });
+  await pp.keyboard.press('Escape');
+  await settle(pp, 200);
+}
+
 async function darkness(page) {
   return page.evaluate(() => {
     const read = (el) => { const m = getComputedStyle(el).backgroundColor.match(/[\d.]+/g).map(Number); return Math.round(0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]); };
@@ -557,6 +766,7 @@ async function darkness(page) {
 
 async function run() {
   rules();
+  planRules();
   await saveRules();
   if (process.env.RULES_ONLY) { console.log(problems.length ? problems.length + ' problem(s).' : 'Rules and saving: all good.'); process.exit(problems.length ? 1 : 0); }
   const server = await serve();
@@ -604,6 +814,7 @@ async function run() {
       }, i);
       if (state.at !== i) problem(`${scheme} ${id}`, 'tapping the bar did not move to this page');
       if (state.current !== id) problem(`${scheme} ${id}`, 'the bar does not show this page as the current one');
+      if (id === 'plan') await planReady(page);
       const line = (await page.locator(`[data-line="${id}"]`).textContent()).trim();
       if (line !== EXPECT[id]) problem(`${scheme} ${id}`, `data line says "${line}", expected "${EXPECT[id]}"`);
       if (id !== 'todo') { await look(page, `${scheme} ${id}`, phone); await page.screenshot({ path: path.join(OUT, `${scheme}-${id}.png`) }); }
@@ -616,6 +827,9 @@ async function run() {
 
     // 5. The TO-DO page, all of it.
     await phoneTodo(page, scheme, phone);
+
+    // 5b. The Plan page, all of it.
+    await phonePlan(page, scheme, phone);
 
     // 6. Reopen: lands on the page used last.
     await page.tap('.tab[data-tab="finance"]');
@@ -664,6 +878,7 @@ async function run() {
     await settle(pp, 250);
     await look(pp, scheme + ' PC add form', pc);
     await pp.screenshot({ path: path.join(OUT, scheme + '-pc-todo-add.png') });
+    await pcPlan(pp, scheme, pc);
     if (pctx.badPaths.length) problem(scheme + ' PC', 'the app tried to write somewhere it never should: ' + pctx.badPaths.join(', '));
     await pctx.close();
   }

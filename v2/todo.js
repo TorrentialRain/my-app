@@ -280,6 +280,8 @@
 
     showSaving();
     document.documentElement.dataset.todo = 'ready';
+    // Plan shows the same tasks (due items, overdue), so it redraws whenever they change here.
+    document.dispatchEvent(new Event('hub:tasks'));
   }
   function landsIn(p) {
     const cls = CLASS_TABS.find((c) => c.section === p.section || c.course === p.course);
@@ -634,6 +636,7 @@
 
   // ---------- Start ----------
   window.Todo = {
+    tasks() { return tasks; },
     Pure,
     async load(Data) {
       dataStore = Data;

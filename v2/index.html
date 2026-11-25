@@ -14,7 +14,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="../icons/icon-180.png">
   <link rel="icon" type="image/png" href="../icons/icon-192.png">
-  <link rel="stylesheet" href="app.css?v=7">
+  <link rel="stylesheet" href="app.css?v=8">
 </head>
 <body>
   <!-- The new Hub (rebuild). Lives beside the old app and reads the same data box.
@@ -60,9 +60,51 @@
       <h1 class="title">Finance</h1>
       <p class="line" data-line="finance">Loading…</p>
     </section>
-    <section class="page" id="page-plan" data-page="plan" aria-label="Plan">
-      <h1 class="title">Plan</h1>
-      <p class="line" data-line="plan">Loading…</p>
+    <section class="page plan" id="page-plan" data-page="plan" aria-label="Plan">
+      <!-- Plan only reads. Nothing on this page saves. -->
+      <div class="pl-wrap" data-view="day">
+        <header class="pl-head">
+          <h1 class="title">Plan</h1>
+          <div class="pl-seg" role="group" aria-label="View">
+            <button type="button" data-view-pick="day" aria-pressed="true">Day</button>
+            <button type="button" data-view-pick="week" aria-pressed="false">Week</button>
+          </div>
+          <p class="pl-date"></p>
+          <div class="pl-nav">
+            <button type="button" class="pl-today" hidden>Today</button>
+            <button type="button" class="round pl-prev" aria-label="Earlier"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+            <button type="button" class="round pl-next" aria-label="Later"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+          </div>
+          <div class="pl-tools pc-only">
+            <button type="button" class="round" data-open="sheet-questions" aria-label="Questions"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.2 9a3 3 0 0 1 5.8 1c0 2-3 2.6-3 4.5"/><circle cx="12" cy="18.5" r="0.8" fill="currentColor"/></svg></button>
+            <button type="button" class="round" data-open="sheet-menu" aria-label="Menu: Print, Archive, Settings, Change key"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          </div>
+        </header>
+        <button type="button" class="pl-brief" data-open="sheet-brief" aria-label="Open the brief">
+          <span class="pl-sun" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg></span>
+          <span class="pl-bt">
+            <span class="pl-bl"><span class="pl-cap">Brief</span><span class="pl-chip" data-line="plan">Loading…</span></span>
+            <span class="pl-hl">Loading…</span>
+          </span>
+          <svg class="pl-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>
+        </button>
+        <div class="pl-body">
+          <aside class="pl-key pc-only" aria-label="Calendars"></aside>
+          <div class="pl-card pl-daycard">
+            <p class="pl-cardname pc-only pl-dayname"></p>
+            <div class="pl-strip phone-only"></div>
+            <div class="pl-allday"></div>
+            <div class="pl-scroll" data-scrolls><div class="pl-grid"></div></div>
+          </div>
+          <div class="pl-card pl-weekcard">
+            <p class="pl-cardname pc-only pl-weekname"></p>
+            <div class="pl-whead"></div>
+            <p class="pl-wnote" hidden>Gray days aren't copied from your calendar yet.</p>
+            <div class="pl-wallday"></div>
+            <div class="pl-scroll" data-scrolls><div class="pl-wgrid"></div></div>
+          </div>
+        </div>
+      </div>
     </section>
   </main>
 
@@ -134,6 +176,17 @@
       <button type="button" class="wide" id="waiting-change-key" data-change-key hidden>Put in a key that can save</button>
     </div>
   </div>
+  <!-- Plan: the full brief, slid up over Plan. Swipe down to close. -->
+  <div class="sheet" id="sheet-brief" hidden role="dialog" aria-modal="true" aria-labelledby="brief-title">
+    <div class="sheet-card pl-sheet">
+      <span class="grab" aria-hidden="true"></span>
+      <div class="sheet-top"><h2 id="brief-title">Morning brief</h2><button type="button" class="round" data-close aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      <p class="hint" id="brief-date"></p>
+      <div id="brief-body"></div>
+      <p class="hint pl-swipe phone-only">Swipe down to close.</p>
+    </div>
+  </div>
+  <div class="pl-bubble" hidden role="status"></div>
   <div class="toast" id="toast" role="status" hidden></div>
   <div id="print" aria-hidden="true"></div>
 
@@ -154,7 +207,8 @@
 
   <script src="data.js?v=5"></script>
   <script src="changes.js?v=5"></script>
-  <script src="todo.js?v=6"></script>
-  <script src="app.js?v=7"></script>
+  <script src="todo.js?v=7"></script>
+  <script src="plan.js?v=1"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>
