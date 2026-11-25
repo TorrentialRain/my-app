@@ -57,6 +57,8 @@ const SUGS = {
 };
 // A calendar copy shaped like the real one, around today (Anchorage time).
 const Plan = require('../plan.js');
+const Money = require('../money.js');
+const FinSave = require('../finsave.js');
 const TODAY = Plan.dayKey(NOW);
 const T = (dayOff, h, m) => new Date(Plan.dayStart(Plan.addDays(TODAY, dayOff)) + ((h * 60 + (m || 0)) * 60000)).toISOString();
 const ev = (id, summary, dayOff, h1, m1, h2, m2) => ({ id, summary, start: { dateTime: T(dayOff, h1, m1) }, end: { dateTime: T(dayOff, h2, m2) } });
@@ -89,18 +91,48 @@ const BRIEF = { current: { date: TODAY, headline: 'Sample day: work until 3, the
     '<div class="band bottom"><div class="inner"><h2>Needs attention</h2><ol class="list"><li><span class="num">1</span><div class="body"><p class="title"><a href="https://example.com/">Read chapter 7</a></p><p>Due tomorrow, <a href="https://example.com/">on your TO-DO</a>.</p></div></li></ol>' +
     '<h2>Resolved</h2><ol class="list"><li><span class="num">1</span><div class="body"><p class="title">Bus pass printed</p><p>Done yesterday.</p></div></li></ol><p>Money: nothing new.</p></div></div>' +
     '<script>document.title = "a brief must never run code"</script></body></html>' } };
+// Made-up money: a paycheck six days ago, a week of charges (one person payment with no reason yet, one pending,
+// one bought twice the same day), two accounts, savings, a debt with a payment due, wishlists, a store rule.
+const dayN = (n) => Plan.dayKey(NOW + n * 864e5);
+const TX = [
+  ['t01', -6, 950, 'First National Bank Alaska', 'Arctic Sample paycheck', 'income', 'income'],
+  ['t02', -6, -42.18, 'First National Bank Alaska', 'Corner Store Anchorage AK', 'groceries', '50'],
+  ['t03', -5, -38.5, 'First National Bank Alaska', 'Sample Gas Station', 'gas', 'gas'],
+  ['t04', -4, -10.99, 'Cash App', 'Sample Music · Cash App Card', 'subscriptions', 'subs'],
+  ['t05', -3, -24.75, 'Cash App', 'DoorDash Sample Diner · Cash App Card', 'food', '30'],
+  ['t06', -3, -24.75, 'Cash App', 'DoorDash Sample Diner · Cash App Card', 'food', '30'],
+  ['t07', -2, -40, 'Cash App', 'CASH APP*SAMPLE FRIEND', 'people', '30'],
+  ['t08', -2, 60, 'Cash App', 'Transfer from bank', 'transfer', 'transfer'],
+  ['t09', -2, -60, 'First National Bank Alaska', 'Transfer to Cash App', 'transfer', 'transfer'],
+  ['t10', -1, -55, 'First National Bank Alaska', 'Sample Clinic Anchorage AK', 'medical', 'medical'],
+  ['t11', -1, -18.4, 'First National Bank Alaska', 'Sample Bookshop with a rather long name that keeps going', 'shopping', '30'],
+  ['t12', 0, -6.25, 'Cash App', 'Sample Coffee · Cash App Card', 'food', '30', 1],
+].map(([id, n, a, k, s, cat, u, p]) => ({ id, d: dayN(n), a, k, s, cat, c: cat, u, m: 0, p: p || 0 }));
+const MONTHS = {};
+for (const t of TX) (MONTHS[t.d.slice(0, 7)] = MONTHS[t.d.slice(0, 7)] || { txns: [] }).txns.push(t);
+const FIN = {
+  tracker: { anchors: { 'First National Bank Alaska': { amount: 512.34, date: TODAY }, 'Cash App': { amount: 21.6, date: TODAY } } },
+  rules: { gas: 120, subs: [{ name: 'Sample Music', monthly: 10.99, billDay: +dayN(-4).slice(8) }] },
+  savings: { efund: { account: 'Sample savings', saved: 250, asOf: dayN(-1) }, other: [{ name: 'Cash App Savings', amount: 30, goal: 'Laptop', asOf: dayN(-1) }] },
+  debts: { items: [{ id: 'd1', name: 'Sample phone plan', owedTo: 'Sample Wireless', owed: 120, total: 200 }, { id: 'd2', name: 'Paid back a friend', owedTo: 'Sample Friend', owed: 0, total: 50 }],
+    payments: [{ id: 'p1', debtId: 'd1', name: 'Sample phone plan', amount: 40, due: dayN(5), paid: false }] },
+  wishlists: { lists: [{ id: 'l_tech', name: 'Tech', items: [{ id: 'w1', name: 'Sample laptop', amount: 600, saved: 30, setAside: [{ amount: 30, paycheck: dayN(-6), at: at(-1) }] }, { id: 'w2', name: 'Old headphones', amount: 80, saved: 80, bought: dayN(-10) }] }] },
+  exceptions: { items: [{ id: 'x1', name: 'Concert ticket', amount: 45, bucket: '30', when: dayN(8) }] },
+  storeRules: { items: [{ id: 'r1', store: 'Corner Store', cat: 'groceries', u: '50', at: at(-3) }] },
+};
 const SAMPLE = {
   'meta/app.json': { name: 'sample' },
   'data/tasks.json': TASKS,
   'data/suggestions.json': SUGS,
-  'data/fin.json': { debts: { items: [{ name: 'Sample', owed: 40 }, { name: 'Paid', owed: 0 }] } },
+  'data/fin.json': FIN,
+  'data/fin.config.months.json': MONTHS,
   'data/calendar.json': CALENDAR,
   'data/brief.json': BRIEF,
 };
 const flat = (tab) => Todo.listFor(TASKS, tab, NOW).flat();
 const EXPECT = {
   todo: flat('all').length + ' open · ' + flat('all').filter(([, t]) => Todo.isOverdue(t, NOW)).length + ' overdue',
-  finance: '1 debt still owed', plan: Plan.dueLine(Plan.dueToday(TASKS, NOW).length),
+  finance: 'Next paycheck ' + Money.longDay(Money.work(FIN, MONTHS, null, new Date(NOW)).nextPaycheck), plan: Plan.dueLine(Plan.dueToday(TASKS, NOW).length),
 };
 const LATE_N = Plan.overdue(TASKS, NOW).length;
 
@@ -200,6 +232,42 @@ function fakeStore() {
   };
   return st;
 }
+// ---- Finance rules: the money math and the saving rules, without a browser ----
+function finRules() {
+  const F = 'Finance rules';
+  const w = Money.work(FIN, MONTHS, null, new Date(NOW));
+  const B = w.budget;
+  expect(F, B, 'the buckets did not work out from the sample paycheck');
+  if (B) {
+    // The buckets' "left" amounts plus what's held add up to what's in the accounts (Total debt isn't part of it).
+    const sum = B.tiles.filter((t) => t.key !== 'debt').reduce((a, t) => a + Math.max(0, t.left), 0) + B.alsoHeld - B.shortBy;
+    expect(F, Math.abs(sum - B.balance) < 0.02, 'the buckets do not add up to the accounts (' + sum.toFixed(2) + ' vs ' + B.balance + ')');
+    expect(F, B.tiles.some((t) => t.key === 'debt' && t.name === 'Total debt'), 'there is no Total debt bucket');
+  }
+  const rows = w.activity.flatMap((d) => d.rows);
+  expect(F, rows.filter((r) => r.double).length === 2, 'the same charge twice on one day should be flagged');
+  expect(F, rows.some((r) => r.ask), 'money sent to a person should ask what it was for');
+  expect(F, rows.some((r) => r.pending), 'a pending charge should show as pending');
+  expect(F, rows.some((r) => r.ruled), 'a store rule should show on its charges');
+  expect(F, !rows.some((r) => /^Cash App to (to|from)\b/i.test(r.name)), 'a Cash App name came out as "Cash App to to"');
+  // Every label is spelled out: no short names in the money words.
+  const words = JSON.stringify([Object.values(Money.BUCKETS), Object.values(Money.CATS).map((c) => c.name), Object.values(Money.GROUPS)]);
+  expect(F, !/\b(subs|Subs|misc|w\/|\$\d+k)\b/.test(words), 'a Finance label is shortened: ' + (words.match(/\b(subs|Subs|misc|w\/)\b/) || [''])[0]);
+  // Saving: each change lands once, a file never shrinks, and every change adds one line to the change log.
+  const c1 = { id: 'c1', at: at(0), type: 'addNote', note: { id: 'n1', page: 'finance', text: 'Lent $40' } };
+  const once = FinSave.apply('notes', null, [c1]);
+  const twice = FinSave.apply('notes', once, [c1]);
+  expect(F, once.items.length === 1 && twice.items.length === 1, 'a note could land twice');
+  const fx = { id: 'c2', at: at(0), type: 'fixCharge', txId: 't05', name: 'Dinner', cat: 'food', bucket: '30' };
+  const m1 = FinSave.apply('months', MONTHS, [fx]);
+  const t5 = Money.allTx(m1).find((t) => t.id === 't05');
+  expect(F, t5.name === 'Dinner' && t5.lb === 'josh' && (t5.changeIds || []).length === 1, 'fixing a charge did not mark it as his');
+  expect(F, FinSave.size(FinSave.apply('months', m1, [fx])) === FinSave.size(m1), 'fixing the same charge again changed the file');
+  const r = FinSave.apply('fin', FIN, [{ id: 'c3', at: at(0), type: 'undoRule', ruleId: 'r1' }]);
+  expect(F, r.storeRules.items.length === 1 && r.storeRules.items[0].undone, 'undoing a store rule should switch it off, not delete it');
+  expect(F, FinSave.size(r) >= FinSave.size(FIN), 'undoing a store rule made the money file smaller');
+}
+
 async function saveRules() {
   console.log('Checking saving');
   const W1 = 'save';
@@ -434,7 +502,7 @@ async function newContext(browser, scheme, size, extra) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ sha: box.ver[p], content: Buffer.from(JSON.stringify(box.files[p], null, 2) + '\n').toString('base64') }) });
     }
     if (req.method() !== 'PUT') { ctx.badPaths.push(req.method() + ' ' + p); return route.fulfill({ status: 405, body: '' }); }
-    if (!['data/tasks.json', 'data/suggestions.json'].includes(p)) ctx.badPaths.push(p);
+    if (!['data/tasks.json', 'data/suggestions.json', 'data/fin.json', 'data/fin.config.months.json', 'data/notes.json', 'data/log.json'].includes(p)) ctx.badPaths.push(p);
     if (!/saving-key/.test(auth)) { ctx.refused++; return route.fulfill({ status: 403, contentType: 'application/json', body: '{"message":"Resource not accessible by personal access token"}' }); }
     let lost = false;
     if (box.trap) { const t = box.trap; box.trap = null; const r = t(p); if (r === 'lost') lost = true; else if (r) return route.fulfill(r); }
@@ -878,6 +946,140 @@ async function pcPlan(pp, scheme, size) {
   await settle(pp, 200);
 }
 
+// ---- Finance ----
+async function finReady(page) {
+  await page.waitForFunction(() => document.documentElement.dataset.finance === 'ready', null, { timeout: 8000 }).catch(() => problem('Finance', 'the Finance page did not get ready'));
+}
+// The whole Finance page is judged at its top and at its end.
+async function lookFin(page, where, size, shot) {
+  for (const end of ['top', 'end']) {
+    await page.evaluate((end) => { const p = document.getElementById('page-finance'); p.scrollTop = end === 'top' ? 0 : p.scrollHeight; }, end);
+    await settle(page, 150);
+    await look(page, where + ' (' + end + ')', size);
+    if (shot) await page.screenshot({ path: path.join(OUT, shot + (end === 'end' ? '-end' : '') + '.png') });
+  }
+  await page.evaluate(() => { document.getElementById('page-finance').scrollTop = 0; });
+}
+const FIN_TABS = ['spending', 'activity', 'wishlists', 'debt', 'quick'];
+// His Finance rule (Nov 25): every label spelled out. No short day or month names, no "subs", no "$1k".
+async function spelledOut(page, where) {
+  const bad = await page.evaluate(() => {
+    const t = document.getElementById('page-finance').innerText + ' ' + (document.getElementById('sheet-fin').hidden ? '' : document.getElementById('sheet-fin').innerText);
+    const m = t.match(/\b(subs|Subs|Mon|Tue|Tues|Wed|Thu|Thur|Fri|Sat|Sun|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\b\.?|\$\d+(\.\d+)?k\b|\b\d{1,2}\/\d{1,2}\b/);
+    return m ? m[0] : '';
+  });
+  expect(where, !bad, 'a label is shortened ("' + bad + '"); every Finance label is spelled out');
+}
+async function phoneFinance(page, scheme, size) {
+  const F = scheme + ' Finance';
+  await page.tap('.tab[data-tab="finance"]');
+  await settle(page);
+  await finReady(page);
+  const tabsOk = await page.evaluate(() => Array.from(document.querySelectorAll('.fi-tabs [data-fi-tab]')).map((b) => b.dataset.fiTab + ':' + b.getAttribute('aria-pressed')).join(','));
+  expect(F, tabsOk === 'spending:true,activity:false,wishlists:false,debt:false,quick:false', 'Finance should have the 5 tabs and open on Spending (got ' + tabsOk + ')');
+  // Spending, top to bottom: graph, Total balance, Savings balance, buckets, then the pie (his pick).
+  const order = await page.evaluate(() => ['.fi-chart', '.fi-two', '.fi-buckets', '.fi-pie'].map((s) => Math.round(document.querySelector(s).getBoundingClientRect().top)));
+  expect(F, order.every((v, i) => !i || v > order[i - 1]), 'Spending should go graph, balances, buckets, pie (tops: ' + order.join(', ') + ')');
+  for (const t of FIN_TABS) {
+    await page.tap(`.fi-tabs [data-fi-tab="${t}"]`);
+    await settle(page, 250);
+    expect(F, (await page.getAttribute(`.fi-tabs [data-fi-tab="${t}"]`, 'aria-pressed')) === 'true', 'the ' + t + ' tab did not open');
+    await lookFin(page, F + ' ' + t, size, scheme + '-finance-' + t);
+    await spelledOut(page, F + ' ' + t);
+  }
+  // A bucket opens one short line, with the breakdown in a dropdown.
+  await page.tap('.fi-tabs [data-fi-tab="spending"]');
+  await settle(page, 200);
+  await page.tap('[data-tile="needs"]');
+  await settle(page, 200);
+  expect(F, /^Needs: 50% · \$[\d,]+ this paycheck$/.test((await page.locator('.fi-infohead').textContent()).trim()), 'tapping Needs should show "Needs: 50% · $___ this paycheck" (got "' + (await page.locator('.fi-infohead').textContent()) + '")');
+  await page.tap('[data-break]');
+  await settle(page, 200);
+  await look(page, F + ' bucket breakdown', size);
+  await page.screenshot({ path: path.join(OUT, scheme + '-finance-needs-open.png') });
+  // Total debt opens "Who you owe", with a button to the Debt page.
+  await page.tap('[data-tile="debt"]');
+  await settle(page, 250);
+  expect(F, await page.locator('#sheet-fin').isVisible() && /Who you owe/.test(await page.locator('#fin-sheet-title').textContent()), 'Total debt should open "Who you owe"');
+  await lookSheet(page, F + ' who you owe', size, '#sheet-fin');
+  await page.screenshot({ path: path.join(OUT, scheme + '-finance-who-you-owe.png') });
+  await page.tap('[data-go-debt]');
+  await settle(page, 250);
+  expect(F, (await page.getAttribute('.fi-tabs [data-fi-tab="debt"]', 'aria-pressed')) === 'true', 'the Debt page button did not open Debt');
+  // Add a debt: the form looks right (closed without saving).
+  await page.tap('[data-add-debt]');
+  await settle(page, 250);
+  await lookSheet(page, F + ' add a debt', size, '#sheet-fin');
+  await page.screenshot({ path: path.join(OUT, scheme + '-finance-add-debt.png') });
+  await page.tap('#sheet-fin .sheet-top [data-close]');
+  await settle(page, 200);
+  // Activity: a charge opens the fix sheet (closed without saving).
+  await page.tap('.fi-tabs [data-fi-tab="activity"]');
+  await settle(page, 200);
+  const cols = await page.evaluate(() => { const r = document.querySelector('.fi-row'); const a = r.children[1].getBoundingClientRect(), b = r.children[2].getBoundingClientRect(); const h = document.querySelector('.fi-dayhead').children; return { a: Math.round(a.right), b: Math.round(b.right), ha: Math.round(h[1].getBoundingClientRect().right), hb: Math.round(h[2].getBoundingClientRect().right) }; });
+  expect(F, Math.abs(cols.a - cols.ha) < 2 && Math.abs(cols.b - cols.hb) < 2, 'the Amount and Balance columns do not line up with their headings (' + JSON.stringify(cols) + ')');
+  await page.locator('.fi-row').first().tap();
+  await settle(page, 250);
+  expect(F, /Fix this charge/.test(await page.locator('#fin-sheet-title').textContent()), 'tapping a charge should open "Fix this charge"');
+  await lookSheet(page, F + ' fix a charge', size, '#sheet-fin');
+  await spelledOut(page, F + ' fix a charge');
+  await page.screenshot({ path: path.join(OUT, scheme + '-finance-fix-charge.png') });
+  await page.tap('#sheet-fin .sheet-top [data-close]');
+  await settle(page, 200);
+  await page.tap('.fi-tabs [data-fi-tab="wishlists"]');
+  await settle(page, 200);
+  await page.locator('[data-aside]').first().tap();
+  await settle(page, 250);
+  await lookSheet(page, F + ' set money aside', size, '#sheet-fin');
+  await page.tap('#sheet-fin .sheet-top [data-close]');
+  await settle(page, 200);
+  await page.tap('.fi-tabs [data-fi-tab="spending"]');
+  await settle(page, 200);
+  // Plan's message box.
+  await page.tap('.tab[data-tab="plan"]');
+  await settle(page);
+  await page.tap('.pl-msg');
+  await settle(page, 250);
+  expect(scheme + ' Plan message', await page.locator('#sheet-planmsg').isVisible(), 'the Plan message button did not open its box');
+  await lookSheet(page, scheme + ' Plan message', size, '#sheet-planmsg');
+  await page.screenshot({ path: path.join(OUT, scheme + '-plan-message.png') });
+  await page.tap('#sheet-planmsg [data-close]');
+  await settle(page, 200);
+}
+async function pcFinance(pp, scheme, size) {
+  const F = scheme + ' PC Finance';
+  await pp.click('.tab[data-tab="finance"]');
+  await settle(pp);
+  await finReady(pp);
+  const lay = await pp.evaluate(() => {
+    const r = (s) => document.querySelector(s).getBoundingClientRect();
+    const p = document.getElementById('page-finance');
+    const side = r('.fi-side'), main = r('.fi-main'), chart = r('.fi-chart'), bk = r('.fi-buckets');
+    const m = getComputedStyle(p).backgroundColor.match(/[\d.]+/g).map(Number);
+    return { left: side.width > 0 && side.right <= main.left, sideBySide: chart.right <= bk.left && Math.abs(chart.top - bk.top) < 4,
+      fits: p.scrollHeight <= p.clientHeight + 1, over: p.scrollHeight - p.clientHeight, phoneTabs: getComputedStyle(document.querySelector('.fi-tabs')).display,
+      bg: Math.round(0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) };
+  });
+  expect(F, lay.left, 'the Finance tabs should run down the left');
+  expect(F, lay.phoneTabs === 'none', 'the phone tab row should not show on a PC');
+  expect(F, lay.sideBySide, 'Spending should show the graph side and the buckets side by side');
+  expect(F, lay.fits, 'Spending should fit on one screen (it runs ' + lay.over + ' pixels past the bottom)');
+  expect(F, lay.bg < 50, 'a PC should always be dark (got ' + lay.bg + ')');
+  for (const t of FIN_TABS) {
+    await pp.click(`.fi-side [data-fi-tab="${t}"]`);
+    await settle(pp, 250);
+    await lookFin(pp, F + ' ' + t, size, scheme + '-pc-finance-' + t);
+  }
+  await pp.click('.fi-side [data-fi-tab="spending"]');
+  await settle(pp, 200);
+  await pp.click('[data-tile="debt"]');
+  await settle(pp, 250);
+  await look(pp, F + ' who you owe', size);
+  await pp.keyboard.press('Escape');
+  await settle(pp, 200);
+  expect(F, await pp.locator('#sheet-fin').isHidden(), 'Escape should close the Finance sheet');
+}
+
 async function darkness(page) {
   return page.evaluate(() => {
     const read = (el) => { const m = getComputedStyle(el).backgroundColor.match(/[\d.]+/g).map(Number); return Math.round(0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]); };
@@ -888,6 +1090,7 @@ async function darkness(page) {
 async function run() {
   rules();
   planRules();
+  finRules();
   await saveRules();
   if (process.env.RULES_ONLY) { console.log(problems.length ? problems.length + ' problem(s).' : 'Rules and saving: all good.'); process.exit(problems.length ? 1 : 0); }
   const server = await serve();
@@ -952,6 +1155,9 @@ async function run() {
     // 5b. The Plan page, all of it.
     await phonePlan(page, scheme, phone);
 
+    // 5c. The Finance page, all of it, and Plan's message box.
+    await phoneFinance(page, scheme, phone);
+
     // 6. Reopen: lands on the page used last.
     await page.tap('.tab[data-tab="finance"]');
     await settle(page, 1300);
@@ -1004,6 +1210,7 @@ async function run() {
     await settle(pp, 250);
     expect(scheme + ' PC add form', !(await pp.locator('#sheet-add').isVisible()), 'Escape should close the add form on a PC');
     await pcPlan(pp, scheme, pc);
+    await pcFinance(pp, scheme, pc);
     if (pctx.badPaths.length) problem(scheme + ' PC', 'the app tried to write somewhere it never should: ' + pctx.badPaths.join(', '));
     await pctx.close();
   }
@@ -1083,6 +1290,63 @@ async function run() {
   await waitSaved(S + ' after a lost reply');
   file = sctx.box.files['data/tasks.json'];
   expect(S, file.c.status === 'done' && file.m.status === 'done' && (file.c.changeIds || []).length === 1, 'after a lost reply the change landed ' + (file.c.changeIds || []).length + ' times, or the next change did not save');
+
+  // Finance saving: a Quick-budget note, a fixed charge, and a Plan message, each saved once, each with a change-log line.
+  const FS = 'Finance saving';
+  const finSaved = async (where) => {
+    await sp.waitForFunction(() => ['saved', 'none'].includes(document.querySelector('.fi-pending').dataset.state), null, { timeout: 8000 })
+      .catch(async () => problem(where, 'Finance changes did not save (last try: ' + (await sp.locator('.fi-pending').getAttribute('data-why')) + ')'));
+  };
+  await sp.tap('.tab[data-tab="finance"]');
+  await settle(sp);
+  await finReady(sp);
+  await sp.tap('.fi-tabs [data-fi-tab="quick"]');
+  await settle(sp, 200);
+  await sp.fill('[data-note-form] textarea', 'Lent $40 to a friend, paying me back on the 5th');
+  await sp.tap('[data-note-form] button[type="submit"]');
+  await finSaved(FS + ' note');
+  let notesF = sctx.box.files['data/notes.json'] || { items: [] };
+  expect(FS, notesF.items.length === 1 && notesF.items[0].page === 'finance' && notesF.items[0].status === 'waiting', 'the Quick-budget note did not save as waiting (' + JSON.stringify(notesF.items) + ')');
+  expect(FS, /Waiting/.test(await sp.locator('.fi-notes').textContent()), 'the sent note should show as Waiting');
+  await sp.tap('.fi-tabs [data-fi-tab="activity"]');
+  await settle(sp, 200);
+  const txId = await sp.locator('.fi-row').first().getAttribute('data-tx');
+  await sp.locator('.fi-row').first().tap();
+  await settle(sp, 250);
+  await sp.fill('#sheet-fin input[name="name"]', 'Morning coffee');
+  await sp.selectOption('#sheet-fin select[name="cat"]', 'food');
+  await sp.tap('#sheet-fin button[type="submit"]');
+  await finSaved(FS + ' fix a charge');
+  const fixed = Money.allTx(sctx.box.files['data/fin.config.months.json']).find((t) => t.id === txId);
+  expect(FS, fixed && fixed.name === 'Morning coffee' && fixed.lb === 'josh', 'the fixed charge did not save as his');
+  expect(FS, (await sp.locator('.fi-row').first().textContent()).includes('Morning coffee'), 'the fixed name should show in Activity');
+  // A lost reply: the note saves, the phone never hears back, and the next save must not put it in twice.
+  sctx.box.trap = (p) => (p === 'data/notes.json' ? 'lost' : null);
+  await sp.tap('.fi-tabs [data-fi-tab="quick"]');
+  await settle(sp, 200);
+  await sp.fill('[data-note-form] textarea', 'Put $20 aside for a birthday gift');
+  await sp.tap('[data-note-form] button[type="submit"]');
+  await sp.waitForFunction(() => /^server|^error/.test(document.querySelector('.fi-pending').dataset.why || ''), null, { timeout: 6000 }).catch(() => problem(FS, 'the lost reply was not noticed'));
+  await sp.tap('.tab[data-tab="plan"]');
+  await settle(sp);
+  await sp.tap('.pl-msg');
+  await settle(sp, 250);
+  await sp.fill('#sheet-planmsg textarea', 'Move my dentist to Friday at 3 PM');
+  await sp.tap('#sheet-planmsg button[type="submit"]');
+  await sp.waitForFunction(() => document.querySelector('#sheet-planmsg .pm-state').textContent === 'All saved' || document.querySelector('.fi-pending').dataset.state === 'saved', null, { timeout: 8000 })
+    .catch(async () => problem(FS + ' Plan message', 'the Plan message did not save (' + (await sp.locator('.fi-pending').getAttribute('data-why')) + ')'));
+  await look(sp, FS + ' Plan message sent', phone);
+  await sp.screenshot({ path: path.join(OUT, 'light-plan-message-sent.png') });
+  await sp.tap('#sheet-planmsg [data-close]');
+  await settle(sp, 200);
+  notesF = sctx.box.files['data/notes.json'] || { items: [] };
+  const texts = notesF.items.map((n) => n.page + ':' + n.text);
+  expect(FS, texts.length === 3 && new Set(notesF.items.map((n) => n.id)).size === 3 && texts.filter((t) => /birthday/.test(t)).length === 1 && texts.some((t) => /^plan:Move my dentist/.test(t)),
+    'after a lost reply the notes landed wrong: ' + JSON.stringify(texts));
+  const logF = sctx.box.files['data/log.json'] || { items: [] };
+  const logged = logF.items.filter((l) => l.changeId);
+  expect(FS, logged.length === 4 && new Set(logged.map((l) => l.changeId)).size === 4 && logged.every((l) => l.at && l.who && l.what && l.why),
+    'every Finance change should add one line to the change log (got ' + logged.length + ')');
 
   // Reopening with nothing waiting writes nothing.
   const wroteBefore = sctx.wrote;

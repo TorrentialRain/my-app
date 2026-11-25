@@ -14,7 +14,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="../icons/icon-180.png">
   <link rel="icon" type="image/png" href="../icons/icon-192.png">
-  <link rel="stylesheet" href="app.css?v=12">
+  <link rel="stylesheet" href="app.css?v=13">
 </head>
 <body>
   <!-- The new Hub (rebuild). Lives beside the old app and reads the same data box.
@@ -56,9 +56,19 @@
       </div>
       <div class="td-trash" hidden aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></div>
     </section>
-    <section class="page" id="page-finance" data-page="finance" aria-label="Finance">
-      <h1 class="title">Finance</h1>
-      <p class="line" data-line="finance">Loading…</p>
+    <section class="page fin" id="page-finance" data-page="finance" aria-label="Finance" data-scrolls>
+      <div class="fi-wrap">
+        <nav class="fi-side pc-only" aria-label="Finance tabs"></nav>
+        <div class="fi-main">
+          <header class="fi-head">
+            <h1 class="title">Finance</h1>
+            <p class="line" data-line="finance">Loading…</p>
+          </header>
+          <nav class="fi-tabs phone-only" aria-label="Finance tabs"></nav>
+          <button type="button" class="fi-pending" data-fin-waiting hidden><span class="fi-ptext"></span></button>
+          <div class="fi-body"></div>
+        </div>
+      </div>
     </section>
     <section class="page plan" id="page-plan" data-page="plan" aria-label="Plan">
       <!-- Plan only reads. Nothing on this page saves. -->
@@ -71,6 +81,7 @@
           </div>
           <p class="pl-date"></p>
           <div class="pl-nav">
+            <button type="button" class="round pl-msg" data-open-planmsg aria-label="Message Claude about your calendar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.6A8 8 0 1 1 21 12z"/></svg></button>
             <button type="button" class="pl-today" hidden>Today</button>
             <button type="button" class="round pl-prev" aria-label="Earlier"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
             <button type="button" class="round pl-next" aria-label="Later"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
@@ -187,6 +198,23 @@
     </div>
   </div>
   <div class="pl-bubble" hidden role="status"></div>
+  <!-- Finance sheet: filled in by finance.js for each job (fix a charge, add a debt, who you owe, wishlist steps) -->
+  <div class="sheet" id="sheet-fin" hidden role="dialog" aria-modal="true" aria-labelledby="fin-sheet-title">
+    <div class="sheet-card fi-sheet" data-scrolls></div>
+  </div>
+  <!-- Plan: leave Claude a message about the calendar -->
+  <div class="sheet" id="sheet-planmsg" hidden role="dialog" aria-modal="true" aria-labelledby="pm-title">
+    <div class="sheet-card pl-sheet pm-card" data-scrolls>
+      <div class="sheet-top"><h2 id="pm-title">Message Claude</h2><button type="button" class="round" data-close aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      <form class="fi-form" autocomplete="off">
+        <label class="fld"><span>What should change on your calendar?</span><textarea rows="4" maxlength="600" placeholder="For example: Move my dentist to Friday at 3 PM and remind me the day before"></textarea></label>
+        <p class="hint">Claude makes the change, with the right reminders and Google Calendar alerts. Messages are read twice a day once the new robot is running. Until then, ask Claude in chat to read them.</p>
+        <button type="submit" class="wide">Send</button>
+      </form>
+      <p class="hint pm-state" role="status"></p>
+      <div class="pm-recent" hidden><h3>Sent</h3><ul class="fi-notes pm-list"></ul></div>
+    </div>
+  </div>
   <div class="toast" id="toast" role="status" hidden></div>
   <div id="print" aria-hidden="true"></div>
 
@@ -205,10 +233,13 @@
     </button>
   </nav>
 
-  <script src="data.js?v=5"></script>
+  <script src="data.js?v=6"></script>
   <script src="changes.js?v=5"></script>
+  <script src="money.js?v=1"></script>
+  <script src="finsave.js?v=1"></script>
   <script src="todo.js?v=9"></script>
   <script src="plan.js?v=6"></script>
-  <script src="app.js?v=8"></script>
+  <script src="finance.js?v=1"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>

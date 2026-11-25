@@ -149,9 +149,21 @@
 
     read(path) { return get(path); },
 
-    // The newest copy of a file, with its version, for saving.
-    async readWithVersion(path) {
+    // A file that may not exist yet (the notes file and the change log are made on first use): null if missing.
+    // Only for those files, and only once the main files read fine, so a missing file never looks like a bad key.
+    async readOptional(path) {
       const res = await call('GET', path);
+      if (res.status === 404) return null;
+      if (res.status === 401) throw fail('badkey', 'GitHub did not accept that key. It may be mistyped or expired.');
+      if (!res.ok) throw fail('server', 'GitHub answered with an error (' + res.status + ').');
+      const j = await res.json();
+      return JSON.parse(fromB64(j.content));
+    },
+
+    // The newest copy of a file, with its version, for saving. optional: a missing file comes back empty, to be made.
+    async readWithVersion(path, optional) {
+      const res = await call('GET', path);
+      if (optional && res.status === 404) return { data: null, version: null };
       if (res.status === 401) throw fail('badkey', 'GitHub did not accept that key. It may be mistyped or expired.');
       if (!res.ok) throw fail('server', 'GitHub answered with an error (' + res.status + ').');
       const j = await res.json();
@@ -189,7 +201,7 @@
         message: note || 'New Hub: update ' + path,
         content: toB64(asFileText(data, styles[path])),
         branch: BRANCH,
-        sha: version,
+        ...(version ? { sha: version } : {}), // no version: a new file, made only if it still doesn't exist
       });
       if (res.ok) return true;
       if (res.status === 409 || res.status === 422) return false;

@@ -114,20 +114,10 @@
   }
 
   async function load() {
-    const jobs = [
-      ['finance', 'data/fin.json', Summary.finance],
-    ];
     await Promise.all([
       Todo.load(Data).catch((e) => { say('todo', e.message, true); Todo.showError(e.message); keyTrouble(e); }),
       Plan.load(Data).catch((e) => { say('plan', e.message, true); Plan.showError(e.message); keyTrouble(e); }),
-      ...jobs.map(async ([page, path, sum]) => {
-        try {
-          say(page, sum(await Data.read(path)));
-        } catch (e) {
-          say(page, e.message, true);
-          keyTrouble(e);
-        }
-      }),
+      Finance.load(Data).catch((e) => { say('finance', e.message, true); Finance.showError(e.message); keyTrouble(e); }),
     ]);
     document.documentElement.dataset.loaded = 'yes';
   }
