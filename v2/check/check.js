@@ -99,7 +99,10 @@ const EXPECT = {
 const LATE_N = Plan.overdue(TASKS, NOW).length;
 
 const problems = [];
-function problem(where, what) { problems.push(where + ': ' + what); console.log('  FAIL ' + where + ': ' + what); }
+// With Josh's real data, this check's log is public: what a problem names (a task, an event) is left out of it.
+const REAL = process.env.REAL_DATA_DIR || '';
+const scrub = (t) => (REAL ? String(t).replace(/ "[^"]*"/g, ' (name hidden)') : t);
+function problem(where, what) { problems.push(where + ': ' + scrub(what)); console.log('  FAIL ' + where + ': ' + scrub(what)); }
 function expect(where, ok, what) { if (!ok) problem(where, what); }
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -878,6 +881,9 @@ async function run() {
     await settle(pp, 250);
     await look(pp, scheme + ' PC add form', pc);
     await pp.screenshot({ path: path.join(OUT, scheme + '-pc-todo-add.png') });
+    await pp.keyboard.press('Escape');
+    await settle(pp, 250);
+    expect(scheme + ' PC add form', !(await pp.locator('#sheet-add').isVisible()), 'Escape should close the add form on a PC');
     await pcPlan(pp, scheme, pc);
     if (pctx.badPaths.length) problem(scheme + ' PC', 'the app tried to write somewhere it never should: ' + pctx.badPaths.join(', '));
     await pctx.close();
@@ -991,4 +997,40 @@ async function run() {
   console.log('All good. Pictures are in v2/check/out/.');
 }
 
-run().catch((e) => { console.error(e); process.exit(1); });
+// ---- With Josh's real data (read-only, no pictures, nothing named in the log) ----
+// Runs only when the "New Hub check" has a read-only key for the data box (see the workflow).
+// It opens TO-DO and Plan on a phone in light and dark and on a PC, and looks for anything cut off,
+// overlapping, too faint or too small. It never writes: every save is refused and counted as a fail.
+async function realRun() {
+  const read = (p) => { try { return JSON.parse(fs.readFileSync(path.join(REAL, p), 'utf8')); } catch (e) { return undefined; } };
+  for (const p of Object.keys(SAMPLE)) { const d = read(p); if (d !== undefined) SAMPLE[p] = d; else if (p !== 'meta/app.json') delete SAMPLE[p]; }
+  const server = await serve();
+  const base = 'http://127.0.0.1:' + server.address().port + '/my-app/v2/';
+  const browser = await webkit.launch();
+  const edges = `:root{--safe-top:${TOP}px!important;--safe-bottom:${BOTTOM}px!important}`;
+  const sizes = [['light phone', 'light', { W, H, TOP, BOTTOM }, { hasTouch: true, isMobile: true }], ['dark phone', 'dark', { W, H, TOP, BOTTOM }, { hasTouch: true, isMobile: true }], ['PC', 'dark', { W: PC.W, H: PC.H, TOP: 0, BOTTOM: 0 }, {}]];
+  for (const [label, scheme, size, extra] of sizes) {
+    console.log('Real data: ' + label);
+    const ctx = await newContext(browser, scheme, size, extra);
+    const pg = await openConnected(ctx, base, size.TOP ? edges : '');
+    await planReady(pg);
+    const tap = (sel) => (extra.hasTouch ? pg.tap(sel) : pg.click(sel));
+    await tap('.tab[data-tab="todo"]'); await settle(pg);
+    await lookBothEnds(pg, 'real ' + label + ' TO-DO', size);
+    await tap('.tab[data-tab="plan"]'); await settle(pg);
+    for (const v of size.TOP ? ['day', 'week'] : ['day']) {
+      if (size.TOP) { await tap(`[data-view-pick="${v}"]`); await settle(pg, 250); }
+      await lookPlan(pg, 'real ' + label + ' Plan ' + v, size);
+    }
+    await tap('.pl-brief'); await settle(pg, 350);
+    await look(pg, 'real ' + label + ' Plan brief', size);
+    if (ctx.wrote || ctx.badPaths.length) problem('real ' + label, 'the app tried to save while only looking');
+    await ctx.close();
+  }
+  await browser.close();
+  server.close();
+  console.log(problems.length ? problems.length + ' problem(s) with the real data.' : 'Real data: all good.');
+  process.exit(problems.length ? 1 : 0);
+}
+
+(REAL ? realRun() : run()).catch((e) => { console.error(REAL ? 'The real-data check stopped: ' + e.name : e); process.exit(1); });

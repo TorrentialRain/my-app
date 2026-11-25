@@ -15,6 +15,9 @@ jobs:
   check:
     # Pinned: "latest" moved to a newer Ubuntu the test browser does not support yet.
     runs-on: ubuntu-24.04
+    env:
+      # A read-only key for the data box, kept as a GitHub secret. Without it the real-data look is skipped (and says so).
+      HAS_DATA_KEY: ${{ secrets.HUB_DATA_READ_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,6 +31,18 @@ jobs:
           npx playwright install --with-deps webkit
       - name: Run the check
         run: node v2/check/check.js
+      - name: Look at TO-DO and Plan with the real data (read-only, no pictures, nothing named in the log)
+        if: success() && env.HAS_DATA_KEY == 'true'
+        env:
+          KEY: ${{ secrets.HUB_DATA_READ_KEY }}
+        run: |
+          git clone -q --depth 1 "https://x-access-token:${KEY}@github.com/TorrentialRain/my-app-data.git" "$RUNNER_TEMP/real"
+          code=0; REAL_DATA_DIR="$RUNNER_TEMP/real" node v2/check/check.js || code=$?
+          rm -rf "$RUNNER_TEMP/real"
+          exit $code
+      - name: Real-data look skipped
+        if: env.HAS_DATA_KEY != 'true'
+        run: echo "No read-only data key on GitHub yet, so the real-data look was skipped."
       - name: Keep the phone pictures
         if: always()
         uses: actions/upload-artifact@v4
