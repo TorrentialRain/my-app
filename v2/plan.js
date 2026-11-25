@@ -207,6 +207,8 @@
   const wrap = $('.pl-wrap', page);
   const bubble = $('.pl-bubble');
   const pc = window.matchMedia('(min-width: 900px)');
+  let fitting = 0;
+  window.addEventListener('resize', () => { cancelAnimationFrame(fitting); fitting = requestAnimationFrame(() => { const pg = document.getElementById('page-plan'); if (pg) fitNames(pg); }); });
   const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
   let calendar = null, brief = null, ready = false;
@@ -225,14 +227,32 @@
     return timeText(it.start) + ' – ' + timeText(it.end) + ' · ' + it.cal;
   }
   function style(it) { const c = colorsOf(it); return '--c:' + c.color + ';--k:' + c.ink; }
-  // Blocks hold their name as their own text (the time is drawn by the page style), so nothing in a block can spill past it.
+  // A block holds its name in one span; fitNames() then trims it to the lines that fit, ending in "…".
   function block(it, cls) {
     const pos = 'top:' + (it.a / 14.4) + '%;height:calc(' + ((it.z - it.a) / 14.4) + '% - 2px);' +
       'left:calc(var(--gut) + (100% - var(--gut)) * ' + it.col + ' / ' + it.cols + ');width:calc((100% - var(--gut)) / ' + it.cols + ' - 3px)';
     const short = it.z - it.a < 45 ? ' short' : '';
     const time = it.task ? (it.late ? 'Overdue · ' : '') + timeText(it.end) : timeText(it.start) + ' – ' + timeText(it.end);
     return '<div class="' + cls + short + (it.late ? ' late' : '') + '" role="button" tabindex="0" style="' + pos + ';' + style(it) + '" data-time="' + esc(time) + '"' +
-      tipAttrs(it, whenOf(it)) + '>' + esc(it.name) + '</div>';
+      tipAttrs(it, whenOf(it)) + '><span class="nm">' + esc(it.name) + '</span></div>';
+  }
+  // Every block gets as many whole lines of its name as it has room for, the last one ending in "…".
+  // The time line under a name shows only when a line of name still fits above it.
+  function fitNames(root) {
+    root.querySelectorAll('.pl-ev, .pl-wev').forEach((b) => {
+      const nm = b.firstElementChild;
+      if (!nm) return;
+      b.classList.remove('notime', 'tiny');
+      const room = () => { const cs = getComputedStyle(b); return b.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom); };
+      const lh = parseFloat(getComputedStyle(nm).lineHeight) || 14;
+      if (b.clientHeight <= 0) return;
+      const after = getComputedStyle(b, '::after');
+      const timeH = after.display === 'none' || !after.content || after.content === 'none' ? 0 : (parseFloat(after.lineHeight) || lh);
+      let n = Math.floor((room() - timeH) / lh);
+      if (n < 1) { b.classList.add('notime'); n = Math.floor(room() / lh); }
+      if (n < 1) { b.classList.add('tiny'); n = 1; }
+      nm.style.webkitLineClamp = String(n);
+    });
   }
   function hourLabel(h, small) {
     if (h === 12) return small ? '12p' : 'Noon';
@@ -258,7 +278,7 @@
   // ---- Day view ----
   function renderDay(items, tasks, now, range) {
     const today = dayKey(now);
-    const d = dayOf(items, picked, 20);
+    const d = dayOf(items, picked, 25);
     // The week strip (phone): seven days, the picked one filled.
     const ws = weekStart(picked);
     $('.pl-strip', page).innerHTML = DAY_LETTERS.map((l, i) => {
@@ -281,6 +301,7 @@
     all.hidden = !top;
     const empty = !d.timed.length && !d.allDay.length && loaded(range, picked) ? '<p class="pl-empty">Nothing on this day.</p>' : '';
     $('.pl-grid', page).innerHTML = hours(false) + d.timed.map((it) => block(it, 'pl-ev')).join('') + nowLine(now, picked, 'var(--gut)', 'calc(100% - var(--gut))') + empty;
+    fitNames($('.pl-grid', page));
   }
 
   // ---- Week view ----
@@ -321,11 +342,12 @@
       for (const it of d.timed) {
         const pos = 'top:' + (it.a / 14.4) + '%;height:calc(' + ((it.z - it.a) / 14.4) + '% - 1px);' +
           'left:calc(var(--gut) + ' + colW + ' * ' + i + ' + ' + colW + ' * ' + it.col + ' / ' + it.cols + ');width:calc(' + colW + ' / ' + it.cols + ' - 2px)';
-        grid += '<div class="pl-wev' + (it.late ? ' late' : '') + '" role="button" tabindex="0" style="' + pos + ';' + style(it) + '"' + tipAttrs(it, whenOf(it)) + '>' + esc(it.name) + '</div>';
+        grid += '<div class="pl-wev' + (it.late ? ' late' : '') + '" role="button" tabindex="0" style="' + pos + ';' + style(it) + '"' + tipAttrs(it, whenOf(it)) + '><span class="nm">' + esc(it.name) + '</span></div>';
       }
       grid += nowLine(now, k, 'calc(var(--gut) + ' + colW + ' * ' + i + ')', 'calc(' + colW + ')');
     });
     $('.pl-wgrid', page).innerHTML = grid;
+    fitNames($('.pl-wgrid', page));
     $('.pl-weekname', page).textContent = 'Week of ' + shortDay(ws).replace(/^\w+ /, '');
   }
 

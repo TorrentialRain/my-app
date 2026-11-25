@@ -634,11 +634,39 @@ async function planReady(page) {
   await page.waitForFunction(() => document.documentElement.dataset.plan === 'ready', null, { timeout: 8000 }).catch(() => problem('plan', 'the Plan page did not get ready'));
 }
 // Look at Plan with its hours scrolled to the top and to the end.
+// Every name in a Plan block must end where you can see it: whole lines only, a "…" when it is cut,
+// never running past its block, and never a block too short to show one line.
+async function namesFit(page, where) {
+  const bad = await page.evaluate(() => {
+    const out = [];
+    for (const b of document.querySelectorAll('#page-plan .pl-ev, #page-plan .pl-wev, #page-plan .pl-wchip')) {
+      if (!b.offsetParent) continue;
+      const nm = b.classList.contains('pl-wchip') ? b : b.querySelector('.nm');
+      if (!nm) { out.push('a block has no name in it'); continue; }
+      const name = '"' + nm.textContent + '"';
+      if (nm === b) {
+        if (b.scrollWidth > b.clientWidth + 1 && getComputedStyle(b).textOverflow !== 'ellipsis') out.push('an all-day name is cut with no "…": ' + name);
+        continue;
+      }
+      const cs = getComputedStyle(b), lh = parseFloat(getComputedStyle(nm).lineHeight);
+      const inner = b.getBoundingClientRect().bottom - parseFloat(cs.paddingBottom) - parseFloat(cs.borderBottomWidth);
+      const r = nm.getBoundingClientRect();
+      if (r.height < lh - 1) out.push('a block is too short to show its name: ' + name);
+      else if (r.bottom > inner + 1) out.push('a name runs past the bottom of its block: ' + name);
+      const clamp = getComputedStyle(nm).webkitLineClamp;
+      if (nm.scrollHeight > nm.clientHeight + 1 && (!clamp || clamp === 'none')) out.push('a name is cut with no "…": ' + name);
+      if (nm.scrollWidth > nm.clientWidth + 1) out.push('a name is wider than its block: ' + name);
+    }
+    return out;
+  });
+  for (const p of [...new Set(bad)]) problem(where, p);
+}
 async function lookPlan(page, where, size, shot) {
   for (const end of ['top', 'end']) {
     await page.evaluate((end) => { document.querySelectorAll('#page-plan [data-scrolls]').forEach((s) => { s.scrollTop = end === 'top' ? 0 : s.scrollHeight; }); }, end);
     await settle(page, 150);
     await look(page, where + ' (' + end + ')', size);
+    if (end === 'top') await namesFit(page, where);
     if (shot) await page.screenshot({ path: path.join(OUT, shot + (end === 'end' ? '-end' : '') + '.png') });
   }
 }

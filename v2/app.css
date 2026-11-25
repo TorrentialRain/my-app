@@ -431,8 +431,13 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
 .pl-hr { position: absolute; left: 0; width: calc(var(--gut) - 8px); text-align: right; font-size: 12px; line-height: 16px; color: var(--ink2); }
 .pl-ev, .pl-wev {
   position: absolute; overflow: hidden; border-radius: 8px; background: var(--c); color: var(--k); cursor: pointer;
-  font-size: 14px; line-height: 18px; font-weight: 600; padding: 4px 7px; overflow-wrap: anywhere;
+  font-size: 14px; line-height: 18px; font-weight: 600; padding: 4px 7px;
 }
+/* The name: whole words, split with a hyphen only when one word is wider than the block, and "…" on the last line that fits. */
+.pl-ev .nm, .pl-wev .nm { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; overflow: hidden;
+  overflow-wrap: break-word; -webkit-hyphens: auto; hyphens: auto; }
+.pl-ev.notime::after { display: none; }
+.pl-ev.tiny, .pl-wev.tiny { padding-top: 0; padding-bottom: 0; }
 .pl-ev::after { content: attr(data-time); display: block; font-weight: 400; font-size: 13px; }
 .pl-ev.short { padding-top: 2px; }
 .pl-ev.short::after { display: none; }
@@ -452,7 +457,7 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
 .pl-wnote { margin: 0; padding: 0 12px 4px; font-size: 13px; line-height: 18px; color: var(--ink2); }
 .pl-wallday { border-bottom: 1px solid var(--line); padding-bottom: 6px; }
 .pl-wcol { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 0 1px; }
-.pl-wchip { border-radius: 5px; padding: 1px 3px; background: var(--c, var(--chip)); color: var(--k, var(--ink)); font-size: 11px; line-height: 15px; font-weight: 600; overflow: hidden; height: 17px; overflow-wrap: anywhere; cursor: pointer; }
+.pl-wchip { border-radius: 5px; padding: 1px 3px; background: var(--c, var(--chip)); color: var(--k, var(--ink)); font-size: 11px; line-height: 15px; font-weight: 600; overflow: hidden; height: 17px; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; }
 .pl-wchip.more { background: var(--chip); color: var(--ink); text-align: center; }
 .pl-wcol.off, .pl-ocol { background: repeating-linear-gradient(135deg, transparent 0 6px, var(--line) 6px 8px); }
 .pl-wday.off .l, .pl-wday.off .n { color: var(--ink2); }
