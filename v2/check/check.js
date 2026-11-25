@@ -25,8 +25,14 @@ const W = 428, H = 926, TOP = 47, BOTTOM = 34;
 const PC = { W: 1440, H: 900 };
 const PAGES = ['todo', 'finance', 'plan'];
 
-// ---- Made-up sample data, shaped like the real files. Dates are set around the time the check runs. ----
-const NOW = Date.now();
+// ---- Made-up sample data, shaped like the real files. Dates are set around midday today (Alaska time). ----
+// The pages run on this same clock (see newContext), so a check that runs across midnight can't see two
+// different days. Late at night is checked on purpose, in its own pass.
+const NOW = (() => {
+  const t = Date.now();
+  const h = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Anchorage', hour: 'numeric', hourCycle: 'h23' }).format(t));
+  return t + (12 - h) * 36e5;
+})();
 const at = (days, hours) => new Date(NOW + days * 864e5 + (hours || 0) * 36e5).toISOString();
 const TASKS = {
   a: { title: 'Buy winter boots', status: 'open', kind: 'task', section: 'active', due: at(2), priority: 5, myNote: 'Check Costco first, size 10', notes: 'Robot history: never shown' },
@@ -399,7 +405,20 @@ async function lookBothEnds(page, where, size, shot) {
 // ctx.box: the files; ctx.wrote: saves it took; ctx.refused: saves refused; ctx.badPaths: writes to other files.
 // ctx.box.trap: a hook a test can set to act just before the next save.
 async function newContext(browser, scheme, size, extra) {
+  extra = Object.assign({}, extra);
+  const startAt = extra.at || NOW;
+  delete extra.at;
   const ctx = await browser.newContext(Object.assign({ viewport: { width: size.W, height: size.H }, deviceScaleFactor: size.W > 1000 ? 1 : 3, colorScheme: scheme }, extra));
+  // The page's clock starts at the check's own time and runs on normally from there.
+  await ctx.addInitScript((startAt) => {
+    const Real = Date;
+    const shift = startAt - Real.now();
+    class CheckDate extends Real {
+      constructor(...a) { if (a.length) super(...a); else super(Real.now() + shift); }
+      static now() { return Real.now() + shift; }
+    }
+    window.Date = CheckDate;
+  }, startAt);
   ctx.wrote = 0; ctx.refused = 0; ctx.badPaths = [];
   const box = ctx.box = { files: {}, ver: {}, n: 0, trap: null };
   for (const [p, d] of Object.entries(SAMPLE)) { box.files[p] = JSON.parse(JSON.stringify(d)); box.ver[p] = 'v' + (++box.n); }
@@ -1072,7 +1091,22 @@ async function run() {
   if (sctx.badPaths.length) problem(S, 'the app tried to write somewhere it never should: ' + sctx.badPaths.join(', '));
   await sctx.close();
 
-  // 9. Reduce Motion: the pictures stay inside their cards.
+  // 9. Late at night: nothing on Plan pokes out past the end of the day (the "now" dot sits at the very bottom).
+  console.log('Checking Plan late at night');
+  const lateAt = Plan.dayStart(Plan.dayKey(NOW)) + 23 * 36e5 + 59 * 6e4;
+  const lctx = await newContext(browser, 'light', phone, { hasTouch: true, isMobile: true, at: lateAt });
+  const lp = await openConnected(lctx, base, edges);
+  await lp.tap('.tab[data-tab="plan"]');
+  await settle(lp);
+  await planReady(lp);
+  if ((await lp.locator('.pl-wrap').getAttribute('data-view')) !== 'day') { await lp.tap('[data-view-pick="day"]'); await settle(lp, 200); }
+  await lookPlan(lp, 'Late night Plan day', phone, 'light-plan-late-night');
+  await lp.tap('[data-view-pick="week"]');
+  await settle(lp, 200);
+  await lookPlan(lp, 'Late night Plan week', phone);
+  await lctx.close();
+
+  // 10. Reduce Motion: the pictures stay inside their cards.
   console.log('Checking Reduce Motion');
   const cctx = await newContext(browser, 'light', phone, { hasTouch: true, isMobile: true, reducedMotion: 'reduce' });
   const cp = await openConnected(cctx, base, edges);

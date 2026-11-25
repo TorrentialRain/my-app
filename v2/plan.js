@@ -304,7 +304,8 @@
   function nowLine(now, key, left, width) {
     if (dayKey(now) !== key) return '';
     const m = (now - dayStart(key)) / MIN;
-    return '<div class="pl-now" style="top:' + (m / 14.4) + '%;left:' + left + ';width:' + width + '" aria-hidden="true"></div>';
+    // Kept inside the day, so just before midnight the dot doesn't poke out past the bottom.
+    return '<div class="pl-now" style="top:min(' + (m / 14.4) + '%, calc(100% - 6px));left:' + left + ';width:' + width + '" aria-hidden="true"></div>';
   }
 
   function allItems(now) {
