@@ -716,7 +716,7 @@ async function phonePlan(page, scheme, size) {
   // Tapping a block shows just its name.
   await page.evaluate(() => { document.querySelector('.pl-daycard .pl-scroll').scrollTop = document.querySelector('.pl-grid').offsetHeight * 9 / 24; });
   await settle(page, 150);
-  await page.locator('.pl-daycard .pl-ev', { hasText: 'Work (Midtown)' }).tap();
+  await page.locator('.pl-daycard .pl-ev', { hasText: /Work \(Mid\u00AD?town\)/ }).tap();
   await settle(page, 200);
   const tip = await page.evaluate(() => { const b = document.querySelector('.pl-bubble'); return { shown: !b.hidden, text: b.innerText }; });
   expect(P, tip.shown && /Work \(Midtown\)/.test(tip.text), 'tapping a block did not show its name (' + JSON.stringify(tip) + ')');
