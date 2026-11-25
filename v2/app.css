@@ -439,6 +439,7 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
 .pl-ev .nm, .pl-wev .nm { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; overflow: hidden;
   overflow-wrap: break-word; -webkit-hyphens: manual; hyphens: manual; }
 .pl-ev.notime::after { display: none; }
+.pl-ev .nm.oneline, .pl-wev .nm.oneline { display: block; white-space: nowrap; text-overflow: ellipsis; }
 .pl-ev.tiny, .pl-wev.tiny { padding-top: 0; padding-bottom: 0; }
 .pl-ev::after { content: attr(data-time); display: block; font-weight: 400; font-size: 13px; }
 .pl-ev.short { padding-top: 2px; }

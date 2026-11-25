@@ -663,19 +663,16 @@ async function namesFit(page, where) {
       else if (r.bottom > inner + 1) out.push('a name runs past the bottom of its block: ' + name);
       const clamp = getComputedStyle(nm).webkitLineClamp;
       if (nm.scrollHeight > nm.clientHeight + 1 && (!clamp || clamp === 'none')) out.push('a name is cut with no "…": ' + name);
-      if (nm.scrollWidth > nm.clientWidth + 1) out.push('a name is wider than its block: ' + name);
-      // A word may only break at a space or at one of Plan's own split points (shown with a "-").
-      const tn = nm.firstChild;
-      if (tn && tn.nodeType === 3) {
-        const t = tn.textContent, rg = document.createRange();
-        let prevTop = null;
-        for (let i = 0; i < t.length; i++) {
-          if (t[i] === ' ' || t[i] === '\u00AD') continue;
-          rg.setStart(tn, i); rg.setEnd(tn, i + 1);
-          const cr = rg.getBoundingClientRect();
-          if (cr.top >= r.bottom - 1) break;
-          if (prevTop !== null && cr.top > prevTop + 2 && i > 0 && t[i - 1] !== ' ' && t[i - 1] !== '\u00AD') { out.push('a name breaks in the middle of a word with no "-": ' + name); break; }
-          prevTop = cr.top;
+      if (nm.scrollWidth > nm.clientWidth + 1 && getComputedStyle(nm).textOverflow !== 'ellipsis') out.push('a name is wider than its block: ' + name);
+      // A word may only break at a space or at one of Plan's own split points (shown with a "-"):
+      // so every piece that can't break further must fit the block's width, unless the name is one line ending in "…".
+      const ncs = getComputedStyle(nm);
+      if (!(ncs.whiteSpace === 'nowrap' && ncs.textOverflow === 'ellipsis')) {
+        const cx = document.createElement('canvas').getContext('2d');
+        cx.font = ncs.fontStyle + ' ' + ncs.fontWeight + ' ' + ncs.fontSize + ' ' + ncs.fontFamily;
+        for (const word of nm.textContent.split(/\s+/)) {
+          const bits = word.split('\u00AD');
+          if (bits.some((x, i) => cx.measureText(i < bits.length - 1 ? x + '-' : x).width > nm.clientWidth + 0.5)) { out.push('a name has to break in the middle of a word: ' + name); break; }
         }
       }
     }

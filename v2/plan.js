@@ -231,7 +231,7 @@
   // with a "-" at a sensible place, the same on the iPhone and in the phone check (which has no hyphen dictionary).
   const VOW = /[aeiouy]/i, PAIR = /^(th|ch|sh|ck|ph|wh|gh|ng|qu|tr|br|cr|dr|fr|gr|pr|bl|cl|fl|gl|pl|sl|sc|sp|st|wr|kn)$/i, LET = /[a-z]/i;
   function splitWord(w) {
-    if (w.length < 8) return w;
+    if (w.length < 6) return w;
     const at = [];
     for (let i = 3; i <= w.length - 3; i++) {
       const a = w[i - 1], b = w[i];
@@ -246,7 +246,21 @@
     for (const i of at) { out += w.slice(from, i) + '\u00AD'; from = i; }
     return out + w.slice(from);
   }
-  const breakable = (name) => esc(name).replace(/[A-Za-z]{8,}/g, splitWord);
+  const breakable = (name) => esc(name).replace(/[A-Za-z]{6,}/g, splitWord);
+  // The widest piece of a name that can't break any further (a word, or the part of a word up to a split, plus its "-").
+  let measure = null;
+  function widestPiece(nm) {
+    if (measure === null) { try { measure = document.createElement('canvas').getContext('2d') || false; } catch (e) { measure = false; } }
+    if (!measure) return 0;
+    const cs = getComputedStyle(nm);
+    measure.font = cs.fontStyle + ' ' + cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+    let max = 0;
+    for (const word of nm.textContent.split(/\s+/)) {
+      const bits = word.split('\u00AD');
+      bits.forEach((b, i) => { max = Math.max(max, measure.measureText(i < bits.length - 1 ? b + '-' : b).width); });
+    }
+    return max;
+  }
   // A block holds its name in one span; fitNames() then trims it to the lines that fit, ending in "…".
   function block(it, cls) {
     const pos = 'top:' + (it.a / 14.4) + '%;height:calc(' + ((it.z - it.a) / 14.4) + '% - 2px);' +
@@ -263,6 +277,7 @@
       const nm = b.firstElementChild;
       if (!nm) return;
       b.classList.remove('notime', 'tiny');
+      nm.classList.remove('oneline');
       const room = () => { const cs = getComputedStyle(b); return b.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom); };
       const lh = parseFloat(getComputedStyle(nm).lineHeight) || 14;
       if (b.clientHeight <= 0) return;
@@ -272,6 +287,8 @@
       if (n < 1) { b.classList.add('notime'); n = Math.floor(room() / lh); }
       if (n < 1) { b.classList.add('tiny'); n = 1; }
       nm.style.webkitLineClamp = String(n);
+      // Too narrow for even one piece of a word: one line ending in "…", never a word broken mid-letter.
+      nm.classList.toggle('oneline', widestPiece(nm) > nm.clientWidth + 0.5);
     });
   }
   function hourLabel(h, small) {
