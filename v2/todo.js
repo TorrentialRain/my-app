@@ -230,12 +230,13 @@
       ? '<ul class="subs">' + t.subtasks.map((st, i) => '<li><button type="button" class="sub' + (st.done ? ' did' : '') + '" data-sub="' + i + '" aria-pressed="' + !!st.done + '">' +
         '<span class="dot" aria-hidden="true">' + (st.done ? svg('check', 10) : '') + '</span><span class="n">' + esc(st.text) + '</span></button></li>').join('') + '</ul>'
       : '';
-    // Overdue shows on the date itself, in words: a lone yellow line looked like a loading bar (Nov 24).
+    // Overdue: the date says "Overdue · date" and the whole card gets a still yellow underline, edge to edge
+    // (Josh's pick, Nov 25). The old short line looked like a loading bar, so this one never moves.
     const late = isOverdue(t, now);
     const meta = (due || showClass)
       ? '<span class="meta">' + (due ? '<span class="due' + (late ? ' late' : '') + '">' + (late ? 'Overdue · ' : '') + esc(due) + '</span>' : '') + (showClass ? '<span class="due cls">' + esc(cls.name) + '</span>' : '') + '</span>'
       : '';
-    return '<article class="card' + (done ? ' is-done' : '') + '" data-id="' + esc(id) + '"' + (opts && opts.group != null ? ' data-group="' + opts.group + '"' : '') + '>' +
+    return '<article class="card' + (done ? ' is-done' : '') + (late && !done ? ' is-late' : '') + '" data-id="' + esc(id) + '"' + (opts && opts.group != null ? ' data-group="' + opts.group + '"' : '') + '>' +
       '<span class="pic" style="--b:' + b + ';--s:' + s + '" aria-hidden="true">' + svg(pic.icon, 26, '#FFFFFF') + '</span>' +
       '<button type="button" class="tick" aria-pressed="' + done + '" aria-label="' + (done ? 'Mark not done: ' : 'Mark done: ') + esc(t.title) + '"><span>' + (done ? svg('check', 13) : '') + '</span></button>' +
       '<div class="body"><span class="t">' + esc(t.title) + '</span>' +

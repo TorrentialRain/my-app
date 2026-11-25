@@ -292,6 +292,8 @@ body { position: fixed; inset: 0; overflow: hidden; }
 .sub.did .dot { background: var(--on); border-color: var(--on); }
 .sub.did .n { text-decoration: line-through; }
 .card.is-done .t { text-decoration: line-through; color: var(--ink2); }
+/* Overdue: a still, full-width yellow underline along the card's bottom edge (same yellow as Plan). */
+.card.is-late { box-shadow: inset 0 -5px 0 var(--od), var(--shadow); }
 .empty { margin: 8px 4px; font-size: 15px; color: var(--ink2); }
 .empty.bad { color: var(--bad); }
 
@@ -492,6 +494,7 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
 .pl-row .t.muted { color: var(--ink2); }
 .pl-row .w { flex: none; color: var(--ink2); font-size: 15px; }
 .pl-row .n { font-size: 15px; line-height: 20px; color: var(--ink2); overflow-wrap: anywhere; }
+.pl-row.late { border-bottom: 5px solid var(--od); }
 .pl-row .due.late { flex: none; min-height: 24px; padding: 0 9px; border-radius: 12px; background: var(--od); color: #1c1c1e; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; }
 .sq { flex: none; width: 12px; height: 12px; border-radius: 3px; }
 .pl-sheet .round { background: var(--field); color: var(--ink); }

@@ -484,6 +484,7 @@ async function everyTab(page, T) {
       'the tab did not open and show its list (selected: ' + st.on + ', line: "' + st.sub + '", items: ' + st.shown + ')');
     if (t.id === 'overdue') {
       expect(T + ' Overdue tab', st.cards > 0 && st.late === st.cards, 'every card on the Overdue tab should say Overdue on its date (' + st.late + ' of ' + st.cards + ')');
+      await underlines(page, T + ' Overdue tab', 'cards');
       continue;
     }
     const sw = page.locator('.only');
@@ -509,6 +510,7 @@ async function phoneTodo(page, scheme, size) {
   expect(T, (await page.locator('.td-list').textContent()).includes('Check Costco first'), "Josh's own note does not show");
   expect(T, /^Overdue · /.test(await page.locator('.card[data-id="b"] .due.late').textContent().catch(() => '')), 'an overdue task\'s date does not say Overdue');
   expect(T, await page.locator('.card[data-id="d"] .due.late').count() === 0, 'a task that is not overdue is marked Overdue');
+  await underlines(page, T + ' All', 'cards');
   expect(T, await page.locator('.td-suggest').isVisible(), 'the possible task does not show');
   await lookBothEnds(page, T, size, scheme + '-todo');
 
@@ -644,6 +646,42 @@ async function planReady(page) {
 // Look at Plan with its hours scrolled to the top and to the end.
 // Every name in a Plan block must end where you can see it: whole lines only, a "…" when it is cut,
 // never running past its block, and never a block too short to show one line.
+// Overdue look (Josh's pick, Nov 25): every overdue task, and only those, gets a still yellow underline that runs
+// the full width of the task. It must never move, so it can't read as a loading bar.
+async function underlines(page, where, rowsSel) {
+  const bad = await page.evaluate((rowsSel) => {
+    const out = [];
+    const YELLOW = 'rgb(255, 214, 10)';
+    const still = (el) => getComputedStyle(el).animationName === 'none' &&
+      getComputedStyle(el).transitionDuration.split(',').every((d) => parseFloat(d) === 0 || !/box-shadow|border|all/.test(getComputedStyle(el).transitionProperty));
+    if (rowsSel === 'cards') {
+      for (const c of document.querySelectorAll('.td-list .card')) {
+        const late = !!c.querySelector('.due.late');
+        const sh = getComputedStyle(c).boxShadow;
+        const has = sh.includes('inset') && sh.includes(YELLOW);
+        const name = (c.querySelector('.t') || c).textContent.trim();
+        if (late && !has) out.push('overdue task "' + name + '" has no full-width yellow underline');
+        if (!late && has) out.push('"' + name + '" is not overdue but has the yellow underline');
+        if (has && !still(c)) out.push('the yellow underline on "' + name + '" moves; it has to stay still');
+      }
+    } else {
+      for (const r of document.querySelectorAll(rowsSel)) {
+        const late = r.classList.contains('late');
+        const cs = getComputedStyle(r);
+        const has = cs.borderBottomColor === YELLOW && parseFloat(cs.borderBottomWidth) >= 3;
+        const list = r.parentElement.getBoundingClientRect(), box = r.getBoundingClientRect();
+        const name = (r.querySelector('.t') || r).textContent.trim();
+        if (late && !has) out.push('overdue task "' + name + '" has no yellow underline');
+        if (!late && has) out.push('"' + name + '" is not overdue but has the yellow underline');
+        if (has && (box.left - list.left > 1 || list.right - box.right > 1)) out.push('the yellow underline under "' + name + '" does not run the full width');
+        if (has && !still(r)) out.push('the yellow underline under "' + name + '" moves; it has to stay still');
+      }
+    }
+    return out;
+  }, rowsSel);
+  for (const b of bad) problem(where, b);
+}
+
 async function namesFit(page, where) {
   const bad = await page.evaluate(() => {
     const out = [];
@@ -733,6 +771,7 @@ async function phonePlan(page, scheme, size) {
   expect(P, /Overdue · 2/i.test(bt) && bt.includes('unit 9: quiz #8') && bt.includes('needs attention') && bt.includes('read chapter 7') && bt.includes('money: nothing new'), 'the brief is missing its lists or its own words');
   expect(P, !(await page.locator('#brief-body a, #brief-body script, #brief-body svg').count()) && (await page.title()) !== 'a brief must never run code', 'the brief must show as plain words only (no links, no code)');
   expect(P, (await page.locator('#brief-body .due.late').count()) === LATE_N, 'every overdue task in the brief should say "Overdue · date" in yellow');
+  await underlines(page, P + ' brief', '#brief-body .pl-row');
   await lookSheet(page, P + ' brief', size, '#sheet-brief');
   await page.screenshot({ path: path.join(OUT, scheme + '-plan-brief.png') });
   // Swipe down to close (a finger, as far as the test browser can play one).
@@ -810,6 +849,7 @@ async function pcPlan(pp, scheme, size) {
   await pp.click('.pl-brief');
   await settle(pp, 300);
   expect(P, await pp.locator('#sheet-brief').isVisible(), 'the brief did not open on a PC');
+  await underlines(pp, P + ' brief', '#brief-body .pl-row');
   await lookSheet(pp, P + ' brief', size, '#sheet-brief');
   await pp.screenshot({ path: path.join(OUT, scheme + '-pc-plan-brief.png') });
   await pp.keyboard.press('Escape');
@@ -927,6 +967,7 @@ async function run() {
     await lookBothEnds(pp, scheme + ' PC TO-DO', pc, scheme + '-pc-todo');
     await everyTab(pp, scheme + ' PC TO-DO');
     await tapTab(pp, 'overdue');
+    await underlines(pp, scheme + ' PC Overdue tab', 'cards');
     await pp.screenshot({ path: path.join(OUT, scheme + '-pc-todo-overdue.png') });
     await tapTab(pp, 'all');
     await dragCard(pp, 'a', '.tdtab[data-tab-id="waiting"]', scheme + ' PC move');
