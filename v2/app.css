@@ -617,7 +617,7 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
 .fi-seg { display: flex; background: var(--chip); border-radius: 22px; padding: 2px; }
 .fi-seg button { min-height: 44px; min-width: 44px; padding: 0 12px; border: 0; border-radius: 20px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; }
 .fi-seg button[aria-pressed="true"] { background: var(--on); color: var(--on-ink); font-weight: 600; }
-.fi-graph { width: 100%; height: 150px; display: block; }
+.fi-graph { width: 100%; height: 150px; display: block; overflow: visible; }
 .fi-zero { stroke: var(--line); stroke-width: 1; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
 .fi-area { fill: var(--on); opacity: 0.18; }
 .fi-lineg { fill: none; stroke: var(--deep); stroke-width: 2.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
