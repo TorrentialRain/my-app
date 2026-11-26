@@ -560,9 +560,18 @@ async function newContext(browser, scheme, size, extra) {
       static now() { return Real.now() + shift; }
     }
     window.Date = CheckDate;
-    // The test browser has no Face ID; say so, like a phone or computer without one. (The Face ID lock's
-    // own check puts in a made-up Face ID after this.) Without it, making a passkey waits for a face forever.
-    if (window.PublicKeyCredential) window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable = async () => false;
+    // A made-up Face ID that works like an iPhone's, so every check runs the way his phone does: the passkey
+    // gives its secret only on Face ID after it's made, and fakeface.no in storage makes it say "not now"
+    // (like a phone that wants a tap first). The test browser has no real one, and can't keep a lock in storage.
+    const no = () => { try { return localStorage.getItem('fakeface.no') === '1'; } catch (e) { return false; } };
+    const refuse = () => { const e = new Error('not now'); e.name = 'NotAllowedError'; return e; };
+    const cred = (secret) => ({ rawId: new Uint8Array([9, 8, 7, 6]).buffer, getClientExtensionResults: () => ({ prf: secret ? { enabled: true, results: { first: secret } } : { enabled: true } }) });
+    Object.defineProperty(navigator, 'credentials', { configurable: true, value: {
+      async create() { if (no()) throw refuse(); return cred(null); },
+      async get(o) { if (no()) throw refuse(); const salt = new Uint8Array(o.publicKey.extensions.prf.eval.first); return cred(salt.map((b) => b ^ 0x5a).buffer); },
+    } });
+    window.PublicKeyCredential = window.PublicKeyCredential || function () {};
+    window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable = async () => true;
   }, startAt);
   ctx.wrote = 0; ctx.refused = 0; ctx.badPaths = [];
   const box = ctx.box = { files: {}, ver: {}, n: 0, trap: null };
@@ -594,25 +603,11 @@ async function newContext(browser, scheme, size, extra) {
   return ctx;
 }
 // ---- The data key's Face ID lock (Josh's pick, Nov 26), with a made-up Face ID that works like an iPhone's ----
-// The made-up passkey gives its secret only on Face ID after it's made (like iOS), and can be told to say
-// "not now" (like a phone that wants a tap first) with fakeface.no in storage.
+// Uses the made-up Face ID every check context has (see newContext).
 async function faceLock(browser, base, edges, phone) {
   const F = 'Face ID lock';
   console.log('Checking the Face ID lock');
   const ctx = await newContext(browser, 'light', phone, { hasTouch: true, isMobile: true });
-  await ctx.addInitScript(() => {
-    const no = () => { try { return localStorage.getItem('fakeface.no') === '1'; } catch (e) { return false; } };
-    const count = (k) => { try { localStorage.setItem(k, String(+(localStorage.getItem(k) || 0) + 1)); } catch (e) { /* */ } };
-    const refuse = () => { const e = new Error('not now'); e.name = 'NotAllowedError'; return e; };
-    const cred = (secret) => ({ rawId: new Uint8Array([9, 8, 7, 6]).buffer, getClientExtensionResults: () => ({ prf: secret ? { enabled: true, results: { first: secret } } : { enabled: true } }) });
-    const fake = {
-      async create() { count('fakeface.made'); if (no()) throw refuse(); return cred(null); },
-      async get(o) { count('fakeface.asked'); if (no()) throw refuse(); const salt = new Uint8Array(o.publicKey.extensions.prf.eval.first); return cred(salt.map((b) => b ^ 0x5a).buffer); },
-    };
-    Object.defineProperty(navigator, 'credentials', { value: fake, configurable: true });
-    window.PublicKeyCredential = window.PublicKeyCredential || function () {};
-    window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable = async () => true;
-  });
   const ready = (pg) => pg.waitForFunction(() => document.documentElement.dataset.loaded === 'yes', null, { timeout: 8000 }).then(() => true).catch(() => false);
   const plainKeyKept = (pg) => pg.evaluate(() => Object.keys(localStorage).some((k) => /saving-key/.test(localStorage.getItem(k) || '')));
 
@@ -678,6 +673,21 @@ async function faceLock(browser, base, edges, phone) {
   expect(F, s2.mode === 'faceid' && !s2.plain, 'locking should leave no plain copy (got ' + JSON.stringify(s2) + ')');
   await pg.close();
   await c2.close();
+
+  // 5. No Face ID and a browser that can't keep a lock (this test browser can't): the Hub still opens at once,
+  // and the key is used for that visit only, never saved as plain text.
+  const c3 = await newContext(browser, 'light', phone, { hasTouch: true, isMobile: true });
+  await c3.addInitScript(() => { window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable = async () => false; });
+  pg = await c3.newPage();
+  await pg.goto(base);
+  await pg.waitForFunction(() => document.documentElement.dataset.loaded);
+  await pg.fill('#connect-key', 'saving-key');
+  await pg.tap('#connect-go');
+  expect(F, await ready(pg), 'with no Face ID, the Hub did not open after pasting a key');
+  expect(F, !(await plainKeyKept(pg)), 'with no Face ID, the key was kept as plain text');
+  expect(F, await pg.locator('#lockcard').isHidden(), 'with no way to lock, the lock screen should not show');
+  await pg.close();
+  await c3.close();
 }
 
 // The missed-charge pop-up opens by itself over whatever page he's on. Flows that aren't testing it close it.
