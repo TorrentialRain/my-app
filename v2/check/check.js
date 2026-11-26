@@ -240,9 +240,22 @@ function finRules() {
   expect(F, B, 'the buckets did not work out from the sample paycheck');
   if (B) {
     // The buckets' "left" amounts plus what's held add up to what's in the accounts (Total debt isn't part of it).
-    const sum = B.tiles.filter((t) => t.key !== 'debt').reduce((a, t) => a + Math.max(0, t.left), 0) + B.alsoHeld - B.shortBy;
+    const sum = B.tiles.filter((t) => t.key !== 'debt').reduce((a, t) => a + Math.max(0, t.left), 0) + B.alsoHeld - B.missing;
     expect(F, Math.abs(sum - B.balance) < 0.02, 'the buckets do not add up to the accounts (' + sum.toFixed(2) + ' vs ' + B.balance + ')');
     expect(F, B.tiles.some((t) => t.key === 'debt' && t.name === 'Total debt'), 'there is no Total debt bucket');
+  }
+  // When the accounts hold less than the plan, no bucket may show money that isn't there, Gas and
+  // Subscriptions included (Josh's yes, Nov 25), and the buckets still add up to the accounts.
+  const lowFin = JSON.parse(JSON.stringify(FIN));
+  lowFin.tracker.anchors['First National Bank Alaska'].amount = 20;
+  lowFin.tracker.anchors['Cash App'].amount = 0;
+  const L = Money.work(lowFin, MONTHS, null, new Date(NOW)).budget;
+  if (L) {
+    const shown = L.tiles.filter((t) => t.key !== 'debt' && t.key !== 'invest').reduce((a, t) => a + Math.max(0, t.left), 0);
+    expect(F, L.shortBy > 0, 'a nearly empty account should show as short of the plan');
+    expect(F, shown <= L.balance + 0.02, 'with ' + L.balance + ' in the accounts, the buckets still show ' + shown.toFixed(2));
+    const sumL = shown + Math.max(0, L.toInvest || 0) + L.alsoHeld - L.missing;
+    expect(F, Math.abs(sumL - L.balance) < 0.02, 'when short, the buckets do not add up to the accounts (' + sumL.toFixed(2) + ' vs ' + L.balance + ')');
   }
   const rows = w.activity.flatMap((d) => d.rows);
   expect(F, rows.filter((r) => r.double).length === 2, 'the same charge twice on one day should be flagged');

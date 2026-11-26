@@ -131,7 +131,11 @@
       const openHere = openTile && rowEnd && [tiles[i - (i % 2)], tiles[i]].some((x) => x && x.key === openTile);
       if (openHere) html += tileInfo(tiles.find((x) => x.key === openTile));
     });
-    const short = Bd.shortBy > 0.005 ? '<p class="fi-warn">Your accounts are ' + M.money(Bd.shortBy) + ' short of this paycheck\'s plan, so the buckets show what\'s really there.</p>' : '';
+    const NC = Bd.notCovered || {};
+    const gaps = [['planned', ' of your Quick-budget plans'], ['wish', ' set aside for wishlists'], ['subs', ' of Subscriptions'], ['gas', ' of Gas'], ['debt', ' of the debt payment due'], ['more', ' more']]
+      .filter(([k]) => NC[k] > 0.005).map(([k, w]) => M.money(NC[k]) + w);
+    const gapText = gaps.length ? ' Not covered until payday: ' + (gaps.length > 1 ? gaps.slice(0, -1).join(', ') + ' and ' + gaps[gaps.length - 1] : gaps[0]) + '.' : '';
+    const short = Bd.shortBy > 0.005 ? '<p class="fi-warn">Your accounts are ' + M.money(Bd.shortBy) + ' short of this paycheck\'s plan.' + gapText + '</p>' : '';
     return '<section class="fi-card fi-buckets"><div class="fi-cardhead"><h2>Buckets</h2><span class="fi-note">Paycheck of ' + M.monthDay(Bd.P.start) + '</span></div>' + short + '<div class="fi-grid">' + html + '</div></section>';
   }
   function tileInfo(t) {
