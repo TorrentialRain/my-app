@@ -5,10 +5,11 @@
 // TO-DO page reads the newest copy and puts its changes in again. So a save can't wipe out anyone else's.
 //
 // Where the key comes from, in this order:
-//   1. A key saved for the new Hub on this phone (from its Connect screen, or Settings > Change key).
-//   2. The key the old app already saved, if this phone's storage has it and "Stay signed in" is on.
-//      It is only used in memory, never copied.
-//   3. Neither: the app shows its Connect screen.
+//   1. The key locked on this phone (lock.js), opened with Face ID (Josh's pick, Nov 26).
+//   2. A key saved as plain text by an older version of the new Hub: used, then locked and the plain copy removed.
+//   3. The key the old app already saved, if this phone's storage has it and "Stay signed in" is on.
+//      It is read in memory, then locked for the new Hub, so the new Hub stops needing the old app.
+//   4. None: the app shows its Connect screen.
 (function () {
   const REPO = 'TorrentialRain/my-app-data';
   const BRANCH = 'main';
@@ -120,6 +121,7 @@
   const Data = {
     // Find a key. Returns true if one was found.
     async start() {
+      if (window.KeyLock && KeyLock.has()) { key = null; keySource = 'locked'; return 'locked'; }
       key = ownKey();
       if (key) { keySource = 'own'; return true; }
       key = await oldAppKey();
@@ -128,6 +130,22 @@
       return false;
     },
     source() { return keySource; },
+    // Open the locked key (Face ID). Throws 'needtap' if Face ID needs a tap or was cancelled.
+    async unlock() {
+      key = await KeyLock.unlock();
+      keySource = 'own';
+      return true;
+    },
+    // Is the key in use here not locked yet?
+    needsLock() { return !!key && !!window.KeyLock && !KeyLock.has(); },
+    // Lock the key in use and remove any plain copy. Throws 'needtap' when the phone wants a tap first.
+    async lockNow() {
+      if (!key || !window.KeyLock) return null;
+      const mode = await KeyLock.lock(key);
+      try { localStorage.removeItem(OWN_KEY); } catch (e) { /* nothing plain kept */ }
+      keySource = 'own';
+      return mode;
+    },
     // The key's last 4 letters, so Josh can tell which key a phone or computer is using.
     keyEnd() { return key ? String(key).slice(-4) : ''; },
 
@@ -136,15 +154,20 @@
       newKey = (newKey || '').trim();
       if (!newKey) throw fail('badkey', 'Paste the key first.');
       await get('meta/app.json', newKey);
-      try { localStorage.setItem(OWN_KEY, newKey); } catch (e) { /* this visit only */ }
+      // Never saved as plain text: the new key replaces any locked one and is locked straight away.
+      // If the phone wants a tap for Face ID first, it stays in memory until the lock screen's button.
+      try { localStorage.removeItem(OWN_KEY); } catch (e) { /* nothing plain kept */ }
+      if (window.KeyLock) await KeyLock.clear();
       key = newKey;
       keySource = 'own';
+      try { await this.lockNow(); } catch (e) { if (e.code !== 'needtap') throw e; }
     },
 
     // A saved key stopped working: forget it so the Connect screen can take a new one.
     forgetOwnKey() {
       try { localStorage.removeItem(OWN_KEY); } catch (e) { /* nothing saved */ }
-      if (keySource === 'own') { key = null; keySource = null; }
+      if (window.KeyLock) KeyLock.clear();
+      if (keySource === 'own' || keySource === 'locked') { key = null; keySource = null; }
     },
 
     read(path) { return get(path); },

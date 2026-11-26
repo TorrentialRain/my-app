@@ -142,13 +142,70 @@
         connect.hidden = true;
       }
       await load();
+      // Face ID wanted a tap before it could lock the new key: ask for that tap now.
+      if (Data.needsLock()) showLock('lock');
     } catch (e) {
       connectErr.textContent = e.message;
     }
   });
 
+  // ---- The Face ID lock (Josh's pick, Nov 26) ----
+  const lockCard = document.getElementById('lockcard');
+  const lockTitle = document.getElementById('lock-title');
+  const lockWhy = document.getElementById('lock-why');
+  const lockGo = document.getElementById('lock-go');
+  const lockOther = document.getElementById('lock-other');
+  const lockErr = document.getElementById('lock-error');
+  const FACE = /iPhone|iPad/.test(navigator.userAgent) ? 'Face ID' : 'this device\'s sign-in';
+  let lockJob = 'unlock';
+  function showLock(job, err) {
+    lockJob = job;
+    if (job === 'unlock') {
+      lockTitle.textContent = 'Unlock your Hub';
+      lockWhy.textContent = 'Look at your phone to open your data.';
+      lockGo.textContent = 'Unlock with ' + FACE;
+    } else {
+      lockTitle.textContent = 'Lock your data key';
+      lockWhy.textContent = 'Lock the key with ' + FACE + ', so it\'s never kept on this phone as plain text. After this, the Hub opens with a look.';
+      lockGo.textContent = 'Lock with ' + FACE;
+    }
+    lockOther.hidden = job !== 'unlock';
+    lockErr.textContent = err || '';
+    lockCard.hidden = false;
+    document.documentElement.dataset.lock = job;
+  }
+  function hideLock() { lockCard.hidden = true; lockErr.textContent = ''; document.documentElement.dataset.lock = 'done'; }
+
+  async function unlockAndLoad() {
+    try {
+      await Data.unlock();
+      hideLock();
+      await load();
+    } catch (e) {
+      if (e.code === 'needtap' || e.code === 'noface') { showLock('unlock', lockCard.hidden ? '' : 'That didn\'t work. Tap to try again.'); return; }
+      // The locked key can't be opened here any more (like the passkey was deleted): ask for the key again.
+      Data.forgetOwnKey();
+      hideLock();
+      askForKey('The locked key on this phone couldn\'t be opened. Paste your key once more and it gets locked again.');
+      document.documentElement.dataset.loaded = 'nokey';
+    }
+  }
+  async function lockIfNeeded() {
+    if (!Data.needsLock()) return;
+    try { await Data.lockNow(); hideLock(); } catch (e) { showLock('lock', lockCard.hidden ? '' : 'That didn\'t lock it. Tap to try again.'); }
+  }
+  document.getElementById('lock-form').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    lockErr.textContent = '';
+    if (lockJob === 'unlock') await unlockAndLoad();
+    else await lockIfNeeded();
+  });
+  lockOther.addEventListener('click', () => { hideLock(); askForKey('Paste your key. It replaces the locked one on this phone and gets locked with ' + FACE + '.'); });
+
   (async () => {
-    if (await Data.start()) await load();
+    const found = await Data.start();
+    if (found === 'locked') await unlockAndLoad();
+    else if (found) { await load(); await lockIfNeeded(); }
     else { askForKey(); document.documentElement.dataset.loaded = 'nokey'; }
   })();
 })();

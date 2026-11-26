@@ -454,7 +454,7 @@ function inspect({ W, H, TOP, BOTTOM }) {
   };
   items = items.filter((el) => { const r = rect(el); return r.width > 0 && r.height > 0; });
   // When the Connect screen or a sheet is up it covers everything else, so only what's on it counts.
-  const cover = [document.getElementById('connect')].concat(Array.from(document.querySelectorAll('.sheet'))).find(vis);
+  const cover = [document.getElementById('lockcard'), document.getElementById('connect')].concat(Array.from(document.querySelectorAll('.sheet'))).find(vis);
   if (cover) items = items.filter((el) => cover.contains(el));
   const pastTop = (el) => { const s = sc(el); return !!s && s.scrollTop > 1; };
   const notAtBottom = (el) => { const s = sc(el); return !!s && s.scrollTop + s.clientHeight < s.scrollHeight - 1; };
@@ -590,6 +590,93 @@ async function newContext(browser, scheme, size, extra) {
   });
   return ctx;
 }
+// ---- The data key's Face ID lock (Josh's pick, Nov 26), with a made-up Face ID that works like an iPhone's ----
+// The made-up passkey gives its secret only on Face ID after it's made (like iOS), and can be told to say
+// "not now" (like a phone that wants a tap first) with fakeface.no in storage.
+async function faceLock(browser, base, edges, phone) {
+  const F = 'Face ID lock';
+  console.log('Checking the Face ID lock');
+  const ctx = await newContext(browser, 'light', phone, { hasTouch: true, isMobile: true });
+  await ctx.addInitScript(() => {
+    const no = () => { try { return localStorage.getItem('fakeface.no') === '1'; } catch (e) { return false; } };
+    const count = (k) => { try { localStorage.setItem(k, String(+(localStorage.getItem(k) || 0) + 1)); } catch (e) { /* */ } };
+    const refuse = () => { const e = new Error('not now'); e.name = 'NotAllowedError'; return e; };
+    const cred = (secret) => ({ rawId: new Uint8Array([9, 8, 7, 6]).buffer, getClientExtensionResults: () => ({ prf: secret ? { enabled: true, results: { first: secret } } : { enabled: true } }) });
+    const fake = {
+      async create() { count('fakeface.made'); if (no()) throw refuse(); return cred(null); },
+      async get(o) { count('fakeface.asked'); if (no()) throw refuse(); const salt = new Uint8Array(o.publicKey.extensions.prf.eval.first); return cred(salt.map((b) => b ^ 0x5a).buffer); },
+    };
+    Object.defineProperty(navigator, 'credentials', { value: fake, configurable: true });
+    window.PublicKeyCredential = window.PublicKeyCredential || function () {};
+    window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable = async () => true;
+  });
+  const ready = (pg) => pg.waitForFunction(() => document.documentElement.dataset.loaded === 'yes', null, { timeout: 8000 }).then(() => true).catch(() => false);
+  const plainKeyKept = (pg) => pg.evaluate(() => Object.keys(localStorage).some((k) => /saving-key/.test(localStorage.getItem(k) || '')));
+
+  // 1. Paste a key: it's locked with Face ID straight away and never kept as plain text.
+  let pg = await ctx.newPage();
+  await pg.goto(base); await pg.addStyleTag({ content: edges });
+  await pg.waitForFunction(() => document.documentElement.dataset.loaded);
+  await pg.fill('#connect-key', 'saving-key');
+  await pg.tap('#connect-go');
+  expect(F, await ready(pg), 'the Hub did not open after pasting a key');
+  const st = await pg.evaluate(() => ({ mode: (JSON.parse(localStorage.getItem('hub2.lock.v1')) || {}).mode, plain: localStorage.getItem('hub2.databoxKey') }));
+  expect(F, st.mode === 'faceid' && !st.plain, 'a pasted key should be locked with Face ID, with no plain copy (got ' + JSON.stringify(st) + ')');
+  expect(F, !(await plainKeyKept(pg)), 'the key is kept somewhere on the phone as plain text');
+  expect(F, await pg.locator('#lockcard').isHidden(), 'the lock screen should not show once the key is locked');
+  await pg.close();
+
+  // 2. Opening the Hub again asks Face ID and opens with no tap.
+  pg = await ctx.newPage();
+  await pg.goto(base);
+  expect(F, await ready(pg), 'the Hub did not open with Face ID');
+  expect(F, await pg.locator('#lockcard').isHidden() && await pg.locator('#connect').isHidden(), 'Face ID worked, but a lock or key screen still showed');
+  const pass = await pg.evaluate(() => document.querySelector('[data-tab="todo"]') && document.documentElement.dataset.todo);
+  expect(F, pass === 'ready', 'the TO-DO page did not load after Face ID');
+  await pg.close();
+
+  // 3. Face ID says "not now": the unlock screen shows, looks right, and its button opens the Hub.
+  pg = await ctx.newPage();
+  await pg.addInitScript(() => { if (!sessionStorage.getItem('once')) { sessionStorage.setItem('once', '1'); localStorage.setItem('fakeface.no', '1'); } });
+  await pg.goto(base); await pg.addStyleTag({ content: edges });
+  await pg.waitForFunction(() => document.documentElement.dataset.lock === 'unlock', null, { timeout: 8000 }).catch(() => problem(F, 'the unlock screen did not show when Face ID said not now'));
+  expect(F, /Unlock with/.test(await pg.locator('#lock-go').textContent()), 'the unlock button should say "Unlock with ..."');
+  await look(pg, F + ' unlock screen', phone);
+  await pg.screenshot({ path: path.join(OUT, 'light-unlock.png') });
+  await pg.evaluate(() => localStorage.removeItem('fakeface.no'));
+  await pg.tap('#lock-go');
+  expect(F, await ready(pg), 'tapping Unlock did not open the Hub');
+  expect(F, await pg.locator('#lockcard').isHidden(), 'the unlock screen stayed up after Face ID');
+  await pg.close();
+  await ctx.close();
+
+  // 4. A key kept as plain text by an earlier version: the Hub asks to lock it, and locking removes the plain copy.
+  const c2 = await newContext(browser, 'dark', phone, { hasTouch: true, isMobile: true });
+  await c2.addInitScript(() => {
+    if (!sessionStorage.getItem('seeded')) { sessionStorage.setItem('seeded', '1'); localStorage.setItem('hub2.databoxKey', 'saving-key'); localStorage.setItem('fakeface.no', '1'); }
+    const no = () => localStorage.getItem('fakeface.no') === '1';
+    const refuse = () => { const e = new Error('not now'); e.name = 'NotAllowedError'; return e; };
+    const cred = (secret) => ({ rawId: new Uint8Array([1, 2]).buffer, getClientExtensionResults: () => ({ prf: secret ? { enabled: true, results: { first: secret } } : {} }) });
+    Object.defineProperty(navigator, 'credentials', { configurable: true, value: {
+      async create() { if (no()) throw refuse(); return cred(new Uint8Array(32).fill(3).buffer); },
+      async get() { if (no()) throw refuse(); return cred(new Uint8Array(32).fill(3).buffer); } } });
+    window.PublicKeyCredential = window.PublicKeyCredential || function () {};
+    window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable = async () => true;
+  });
+  pg = await c2.newPage();
+  await pg.goto(base); await pg.addStyleTag({ content: edges });
+  await pg.waitForFunction(() => document.documentElement.dataset.lock === 'lock', null, { timeout: 8000 }).catch(() => problem(F, 'a plain-text key did not ask to be locked'));
+  await look(pg, F + ' lock screen (dark)', phone);
+  await pg.screenshot({ path: path.join(OUT, 'dark-lock-key.png') });
+  await pg.evaluate(() => localStorage.removeItem('fakeface.no'));
+  await pg.tap('#lock-go');
+  await pg.waitForFunction(() => document.documentElement.dataset.lock === 'done', null, { timeout: 5000 }).catch(() => problem(F, 'tapping Lock did not lock the key'));
+  const s2 = await pg.evaluate(() => ({ mode: (JSON.parse(localStorage.getItem('hub2.lock.v1')) || {}).mode, plain: localStorage.getItem('hub2.databoxKey') }));
+  expect(F, s2.mode === 'faceid' && !s2.plain, 'locking should leave no plain copy (got ' + JSON.stringify(s2) + ')');
+  await pg.close();
+  await c2.close();
+}
+
 // The missed-charge pop-up opens by itself over whatever page he's on. Flows that aren't testing it close it.
 async function closeMissed(page) {
   await page.waitForFunction(() => document.documentElement.dataset.finance === 'ready', null, { timeout: 8000 }).catch(() => {});
@@ -1211,6 +1298,8 @@ async function run() {
   const edges = `:root{--safe-top:${TOP}px!important;--safe-bottom:${BOTTOM}px!important}`;
   const phone = { W, H, TOP, BOTTOM };
   const pc = { W: PC.W, H: PC.H, TOP: 0, BOTTOM: 0 };
+
+  await faceLock(browser, base, edges, phone);
 
   for (const scheme of ['light', 'dark']) {
     console.log('Checking ' + scheme + ' mode (phone)');

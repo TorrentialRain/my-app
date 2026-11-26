@@ -135,6 +135,19 @@
   </div>
 
 
+  <!-- The data key's Face ID lock: unlocking each time the Hub opens, or locking a key that isn't locked yet. -->
+  <div id="lockcard" class="connect" hidden>
+    <div class="connect-card">
+      <h1 id="lock-title">Unlock your Hub</h1>
+      <p id="lock-why">Look at your phone to open your data.</p>
+      <form id="lock-form" autocomplete="off">
+        <button type="submit" id="lock-go">Unlock with Face ID</button>
+        <button type="button" id="lock-other" class="quiet">Use a different key</button>
+      </form>
+      <p id="lock-error" class="error" role="alert"></p>
+    </div>
+  </div>
+
   <!-- TO-DO sheets -->
   <div class="sheet" id="sheet-add" hidden role="dialog" aria-modal="true" aria-labelledby="add-title">
     <form class="sheet-card" id="add-form" autocomplete="off" data-scrolls>
@@ -233,7 +246,8 @@
     </button>
   </nav>
 
-  <script src="data.js?v=6"></script>
+  <script src="lock.js?v=1"></script>
+  <script src="data.js?v=7"></script>
   <script src="changes.js?v=5"></script>
   <script src="money.js?v=7"></script>
   <script src="finsave.js?v=2"></script>
@@ -241,6 +255,6 @@
   <script src="plan.js?v=8"></script>
   <script src="finance.js?v=7"></script>
   <script src="robot.js?v=1"></script>
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>
