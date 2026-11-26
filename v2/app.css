@@ -351,10 +351,10 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
 .rows .t { font-size: 16px; }
 .rows .n { font-size: 14px; }
 .rows .q-head { padding: 14px 2px 4px; border: 0; font-size: 13px; line-height: 18px; font-weight: 700; letter-spacing: 0.02em; color: var(--ink2); }
-.rows .q-label { align-self: flex-start; margin-top: 6px; min-height: 40px; padding: 0 16px; border: 0; border-radius: 12px; background: var(--on); color: var(--on-ink); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
+.rows .q-label { align-self: flex-start; margin-top: 6px; min-height: 44px; padding: 0 16px; border: 0; border-radius: 12px; background: var(--on); color: var(--on-ink); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
 /* Questions inbox count: a small badge on every Questions button (his pick, Nov 25). */
 [data-open="sheet-questions"] { position: relative; }
-.qbadge { position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--on); color: var(--on-ink); font-size: 12px; line-height: 20px; font-weight: 700; text-align: center; box-shadow: 0 0 0 2px var(--bg, #fff); pointer-events: none; }
+.qbadge { position: absolute; top: -9px; right: -9px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--on); color: var(--on-ink); font-size: 12px; line-height: 20px; font-weight: 700; text-align: center; box-shadow: 0 0 0 2px var(--bg, #fff); pointer-events: none; }
 .qbadge[hidden] { display: none; }
 .toast {
   position: fixed; left: calc(var(--safe-left) + 16px); right: calc(var(--safe-right) + 16px); bottom: calc(var(--safe-bottom) + var(--bar-h) + 92px);
