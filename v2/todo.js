@@ -468,7 +468,8 @@
 
   // The Questions inbox (his pick, Nov 25): everything waiting on him, answerable any time, kept until it's
   // answered. Charges still to label come from Finance (Label now opens Finance's fix sheet); written
-  // questions come from the task list. The count shows as a badge on every Questions button.
+  // questions come from the task list. The count shows on the Questions buttons that already exist, and a dot
+  // on the TO-DO tab says something is waiting. No new buttons.
   const missedCharges = () => (window.Finance && Finance.missed ? Finance.missed() : []);
   function fillQuestions() {
     const qs = questions(tasks), ms = missedCharges();
@@ -488,6 +489,14 @@
       el.hidden = !n;
       b.setAttribute('aria-label', n ? 'Questions: ' + n + ' waiting' : 'Questions');
     });
+    // A small dot on the TO-DO tab in the page bar while anything waits (his pick, Nov 26: nothing new on screen).
+    const tab = document.querySelector('.bar .tab[data-tab="todo"]');
+    if (tab) {
+      let dot = tab.querySelector('.qdot');
+      if (!dot) { dot = document.createElement('span'); dot.className = 'qdot'; dot.setAttribute('aria-hidden', 'true'); tab.appendChild(dot); }
+      dot.hidden = !n;
+      tab.setAttribute('aria-label', n ? 'TO-DO, ' + n + ' waiting in Questions' : 'TO-DO');
+    }
     const sh = document.getElementById('sheet-questions');
     if (sh && !sh.hidden) fillQuestions();
   }

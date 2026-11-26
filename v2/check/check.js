@@ -1198,6 +1198,10 @@ async function run() {
     // The Questions inbox: the badge counts what's waiting, and the charge sits there to label any time.
     const qb = await page.locator('.td-fabs [data-open="sheet-questions"] .qbadge').textContent().catch(() => '');
     expect(scheme + ' questions inbox', qb === '2', 'the Questions badge should count 1 question and 1 charge (got "' + qb + '")');
+    const dot = await page.locator('.bar .tab[data-tab="todo"] .qdot').isVisible().catch(() => false);
+    expect(scheme + ' questions inbox', dot, 'the TO-DO tab should show a dot while questions wait');
+    const dotsElsewhere = await page.locator('.bar .tab:not([data-tab="todo"]) .qdot').count();
+    expect(scheme + ' questions inbox', dotsElsewhere === 0, 'only the TO-DO tab should get a dot');
     await page.tap('.td-fabs [data-open="sheet-questions"]');
     await settle(page, 300);
     const inbox = await page.locator('#q-list').textContent();

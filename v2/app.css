@@ -356,6 +356,11 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
 [data-open="sheet-questions"] { position: relative; }
 .qbadge { position: absolute; top: -9px; right: -9px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--on); color: var(--on-ink); font-size: 12px; line-height: 20px; font-weight: 700; text-align: center; box-shadow: 0 0 0 2px var(--bg, #fff); pointer-events: none; }
 .qbadge[hidden] { display: none; }
+/* A dot on the TO-DO tab while questions wait (his pick, Nov 26). It sits at the icon's top right corner. */
+.tab { position: relative; }
+.qdot { position: absolute; top: 6px; left: calc(50% + 8px); width: 9px; height: 9px; border-radius: 5px; background: var(--todo); box-shadow: 0 0 0 2px var(--bar); pointer-events: none; }
+.qdot[hidden] { display: none; }
+@media (min-width: 900px) { .qdot { top: 9px; left: 30px; } }
 .toast {
   position: fixed; left: calc(var(--safe-left) + 16px); right: calc(var(--safe-right) + 16px); bottom: calc(var(--safe-bottom) + var(--bar-h) + 92px);
   z-index: 30; padding: 12px 16px; border-radius: 14px; background: #1c1c1e; color: #ffffff; font-size: 15px; line-height: 20px;
