@@ -154,6 +154,8 @@ body { position: fixed; inset: 0; overflow: hidden; }
     calc(var(--safe-bottom) + 20px)
     calc(var(--safe-left) + 20px);
 }
+/* The Face ID lock screen sits above everything, pop-ups included, until the key is open or locked. */
+#lockcard { z-index: 40; }
 .connect-card { width: 100%; }
 .connect h1 { margin: 0 0 8px; font-size: 28px; font-weight: 700; }
 .connect p { margin: 0 0 16px; font-size: 16px; line-height: 1.4; color: var(--muted); }

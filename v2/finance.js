@@ -296,7 +296,7 @@
   function missedList() { return W && W._v ? M.missed(W._v.fin, W._v.months, W.today) : { all: [], now: [] }; }
   function maybeMissed() {
     if (!ready || document.hidden || document.body.classList.contains('sheet-up')) return;
-    if ($('#connect') && !$('#connect').hidden) { setTimeout(maybeMissed, 1500); return; } // after the key screen
+    if (($('#connect') && !$('#connect').hidden) || ($('#lockcard') && !$('#lockcard').hidden)) { setTimeout(maybeMissed, 1500); return; } // after the key or lock screen
     if (missedList().now.some((m) => !shownMissed.has(m.id))) missedSheet();
   }
   function missedSheet() {
