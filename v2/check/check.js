@@ -85,12 +85,6 @@ const CALENDAR = {
   storage: Object.assign({ name: 'Storage Schedule', events: [allDay('s1', 'Foothills Josh F 10-6', 0)] }, RANGE),
   bb: Object.assign({ name: 'University of Alaska', events: [ev('b1', 'New Event 8/26/26', 0, 17, 30, 18, 30)] }, RANGE),
 };
-const BRIEF = { current: { date: TODAY, headline: 'Sample day: work until 3, then the Japanese class.', setAt: at(0, -2),
-  html: '<!doctype html><html><head><style>body{}</style></head><body><div class="band top"><div class="inner"><h1>Sample day</h1><svg><text>skip</text></svg>' +
-    '<div class="acts"><div class="act"><p class="t">10 AM – 3 PM</p><p>The Midtown shift.</p></div></div></div></div>' +
-    '<div class="band bottom"><div class="inner"><h2>Needs attention</h2><ol class="list"><li><span class="num">1</span><div class="body"><p class="title"><a href="https://example.com/">Read chapter 7</a></p><p>Due tomorrow, <a href="https://example.com/">on your TO-DO</a>.</p></div></li></ol>' +
-    '<h2>Resolved</h2><ol class="list"><li><span class="num">1</span><div class="body"><p class="title">Bus pass printed</p><p>Done yesterday.</p></div></li></ol><p>Money: nothing new.</p></div></div>' +
-    '<script>document.title = "a brief must never run code"</script></body></html>' } };
 // Made-up money: a paycheck six days ago, a week of charges (one person payment with no reason yet, one pending,
 // one bought twice the same day), two accounts, savings, a debt with a payment due, wishlists, a store rule.
 const dayN = (n) => Plan.dayKey(NOW + n * 864e5);
@@ -127,7 +121,6 @@ const SAMPLE = {
   'data/fin.json': FIN,
   'data/fin.config.months.json': MONTHS,
   'data/calendar.json': CALENDAR,
-  'data/brief.json': BRIEF,
 };
 const flat = (tab) => Todo.listFor(TASKS, tab, NOW).flat();
 const EXPECT = {
@@ -211,9 +204,6 @@ function planRules() {
   expect(W, day.allDay.map((x) => x.name).join() === 'Dorm Night', 'all-day events should sit in the all-day row');
   const r = Plan.rangeOf(CALENDAR);
   expect(W, Plan.loaded(r, TODAY) && !Plan.loaded(r, Plan.addDays(TODAY, 40)), 'a day outside the calendar copy should count as not copied yet');
-  expect(W, Plan.headline(BRIEF, NOW, day) === BRIEF.current.headline, "today's brief headline should be the top line");
-  const old = { current: Object.assign({}, BRIEF.current, { date: Plan.addDays(TODAY, -1) }) };
-  expect(W, Plan.headline(old, NOW, day) !== BRIEF.current.headline, "yesterday's brief must not show as today's");
   expect(W, new Date(Plan.dayStart('2027-03-14')).toISOString() === '2027-03-14T09:00:00.000Z' && new Date(Plan.dayStart('2027-03-15')).toISOString() === '2027-03-15T08:00:00.000Z', 'days should start at midnight Alaska time, also across the clock change');
   expect(W, Plan.weekStart('2026-11-25') === '2026-11-22', 'weeks should start on Sunday');
 }
@@ -892,7 +882,10 @@ async function phonePlan(page, scheme, size) {
   const text = await planText(page);
   expect(P, text.includes('Work (Midtown)') && text.includes('Creekside Eatery Breakfast') && text.includes('Dorm Night'), 'today\'s events do not show by name');
   expect(P, !text.includes('Print the bus pass') && !text.includes('Foothills Josh F') && !text.includes('New Event 8/26'), 'something that should be left out shows (a ticked task\'s calendar copy, the store\'s calendar or the Blackboard copy)');
-  expect(P, (await page.locator('.pl-hl').textContent()).trim() === BRIEF.current.headline, 'the brief line should show today\'s brief headline');
+  // The top bar: message Claude, with today's due count in sight (the Hub has no brief of its own, Nov 26).
+  expect(P, (await page.locator('.pl-hl').textContent()).trim() === 'Message Claude about your calendar', 'the top bar should offer to message Claude about the calendar');
+  expect(P, (await page.locator('.pl-ask [data-line="plan"]').textContent()).trim() === Plan.dueLine(Plan.dueToday(TASKS, NOW).length), "the top bar should show today's due count");
+  expect(P, (await page.locator('.pl-msg, #sheet-brief').count()) === 0, 'the old brief and the small message button should be gone');
   const late = page.locator('.pl-late');
   expect(P, (await late.isVisible()) && (await late.textContent()).trim() === LATE_N + ' overdue', 'today should show a yellow "' + LATE_N + ' overdue" button');
   await lookPlan(page, P + ' day', size, scheme + '-plan-day');
@@ -903,48 +896,46 @@ async function phonePlan(page, scheme, size) {
   await settle(page, 200);
   const tip = await page.evaluate(() => { const b = document.querySelector('.pl-bubble'); return { shown: !b.hidden, text: b.innerText }; });
   expect(P, tip.shown && /Work \(Midtown\)/.test(tip.text), 'tapping a block did not show its name (' + JSON.stringify(tip) + ')');
-  expect(P, !(await page.locator('#sheet-brief').isVisible()), 'tapping a block should only show its name, not open anything');
+  expect(P, !(await page.locator('#sheet-overdue').isVisible()), 'tapping a block should only show its name, not open anything');
   await page.screenshot({ path: path.join(OUT, scheme + '-plan-tap.png') });
   await page.tap('.pl-date');
   await settle(page, 150);
   expect(P, await page.locator('.pl-bubble').isHidden(), 'the name bubble did not go away');
-  // The brief slides up; it shows the lists, the brief's own words as plain text, and never runs anything from it.
-  await page.tap('.pl-brief');
-  await settle(page, 350);
-  expect(P, await page.locator('#sheet-brief').isVisible(), 'tapping the brief line did not open the brief');
-  const bt = (await page.locator('#brief-body').innerText()).toLowerCase();
-  expect(P, /Overdue · 2/i.test(bt) && bt.includes('unit 9: quiz #8') && bt.includes('needs attention') && bt.includes('read chapter 7') && bt.includes('money: nothing new'), 'the brief is missing its lists or its own words');
-  expect(P, !(await page.locator('#brief-body a, #brief-body script, #brief-body svg').count()) && (await page.title()) !== 'a brief must never run code', 'the brief must show as plain words only (no links, no code)');
-  expect(P, (await page.locator('#brief-body .due.late').count()) === LATE_N, 'every overdue task in the brief should have its date in yellow');
-  expect(P, !(await page.locator('#brief-body .due.late').allTextContents()).some((t) => /overdue/i.test(t)), 'an overdue date in the brief should not say "Overdue"');
-  await underlines(page, P + ' brief', '#brief-body .pl-row');
-  await lookSheet(page, P + ' brief', size, '#sheet-brief');
-  await page.screenshot({ path: path.join(OUT, scheme + '-plan-brief.png') });
+  // The top bar opens the message box.
+  await page.tap('.pl-ask');
+  await settle(page, 300);
+  expect(P, await page.locator('#sheet-planmsg').isVisible(), 'tapping the top bar did not open the message box');
+  await page.tap('#sheet-planmsg [data-close]');
+  await settle(page, 250);
+  // The yellow button opens a plain overdue list.
+  await page.tap('.pl-late');
+  await settle(page, 400);
+  expect(P, await page.locator('#sheet-overdue').isVisible(), 'the overdue button did not open the overdue list');
+  expect(P, (await page.locator('#overdue-body .pl-row.late').count()) === LATE_N, 'the overdue list should show every overdue task');
+  expect(P, (await page.locator('#overdue-body .due.late').count()) === LATE_N, 'every overdue task should have its date in yellow');
+  expect(P, !(await page.locator('#overdue-body .due.late').allTextContents()).some((t) => /overdue/i.test(t)), 'an overdue date should not say "Overdue"');
+  await underlines(page, P + ' overdue list', '#overdue-body .pl-row');
+  await lookSheet(page, P + ' overdue list', size, '#sheet-overdue');
+  await page.screenshot({ path: path.join(OUT, scheme + '-plan-overdue.png') });
   // Swipe down to close (a finger, as far as the test browser can play one).
   const swiped = await page.evaluate(async () => {
-    const card = document.querySelector('#sheet-brief .sheet-card');
+    const card = document.querySelector('#sheet-overdue .sheet-card');
     if (typeof Touch !== 'function' || typeof TouchEvent !== 'function') return 'no touch';
     const t = (y) => new Touch({ identifier: 1, target: card, clientX: 200, clientY: y });
     card.dispatchEvent(new TouchEvent('touchstart', { touches: [t(300)], bubbles: true, cancelable: true }));
     card.dispatchEvent(new TouchEvent('touchmove', { touches: [t(460)], bubbles: true, cancelable: true }));
     card.dispatchEvent(new TouchEvent('touchend', { touches: [], bubbles: true, cancelable: true }));
     await new Promise((r) => setTimeout(r, 300));
-    return document.getElementById('sheet-brief').hidden ? 'closed' : 'open';
+    return document.getElementById('sheet-overdue').hidden ? 'closed' : 'open';
   }).catch((e) => 'error: ' + e.message);
-  if (swiped === 'closed') console.log('  ok: swiping down closes the brief');
+  if (swiped === 'closed') console.log('  ok: swiping down closes the overdue list');
   else {
-    if (swiped === 'open') problem(P, 'swiping down did not close the brief');
+    if (swiped === 'open') problem(P, 'swiping down did not close the overdue list');
     else console.log('  note: the test browser could not play a swipe (' + swiped + '), so the × button was checked instead');
-    await page.tap('#sheet-brief [data-close]');
+    await page.tap('#sheet-overdue [data-close]');
     await settle(page, 300);
   }
-  expect(P, await page.locator('#sheet-brief').isHidden(), 'the brief did not close');
-  // The yellow button opens the brief at the overdue list.
-  await page.tap('.pl-late');
-  await settle(page, 400);
-  expect(P, await page.locator('#sheet-brief').isVisible(), 'the overdue button did not open the brief');
-  await page.tap('#sheet-brief [data-close]');
-  await settle(page, 300);
+  expect(P, await page.locator('#sheet-overdue').isHidden(), 'the overdue list did not close');
   // Arrows move a day; Today comes back.
   const d0 = await page.locator('.pl-date').textContent();
   await page.tap('.pl-next');
@@ -982,22 +973,22 @@ async function pcPlan(pp, scheme, size) {
   await planReady(pp);
   const lay = await pp.evaluate(() => {
     const r = (s) => document.querySelector(s).getBoundingClientRect();
-    const d = r('.pl-daycard'), w = r('.pl-weekcard'), k = r('.pl-key'), b = r('.pl-brief');
-    return { side: d.width > 0 && w.width > 0 && d.right <= w.left && Math.abs(d.top - w.top) < 2, key: k.width > 0 && k.right <= d.left, briefTop: b.bottom <= d.top,
+    const d = r('.pl-daycard'), w = r('.pl-weekcard'), k = r('.pl-key'), b = r('.pl-ask');
+    return { side: d.width > 0 && w.width > 0 && d.right <= w.left && Math.abs(d.top - w.top) < 2, key: k.width > 0 && k.right <= d.left, askTop: b.bottom <= d.top,
       bg: (() => { const m = getComputedStyle(document.getElementById('page-plan')).backgroundColor.match(/[\d.]+/g).map(Number); return Math.round(0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]); })(),
       switches: document.querySelectorAll('#page-plan input[type="checkbox"], #page-plan [role="switch"]').length };
   });
   expect(P, lay.side, 'the day and the week should sit side by side');
-  expect(P, lay.key && lay.briefTop, 'the calendar list should be on the left and the brief line on top');
+  expect(P, lay.key && lay.askTop, 'the calendar list should be on the left and the message bar on top');
   expect(P, lay.switches === 0, 'Plan should have no hide switches');
   expect(P, lay.bg < 50, 'a PC should always be dark (got ' + lay.bg + ')');
   await lookPlan(pp, P, size, scheme + '-pc-plan');
-  await pp.click('.pl-brief');
+  await pp.click('.pl-late');
   await settle(pp, 300);
-  expect(P, await pp.locator('#sheet-brief').isVisible(), 'the brief did not open on a PC');
-  await underlines(pp, P + ' brief', '#brief-body .pl-row');
-  await lookSheet(pp, P + ' brief', size, '#sheet-brief');
-  await pp.screenshot({ path: path.join(OUT, scheme + '-pc-plan-brief.png') });
+  expect(P, await pp.locator('#sheet-overdue').isVisible(), 'the overdue list did not open on a PC');
+  await underlines(pp, P + ' overdue list', '#overdue-body .pl-row');
+  await lookSheet(pp, P + ' overdue list', size, '#sheet-overdue');
+  await pp.screenshot({ path: path.join(OUT, scheme + '-pc-plan-overdue.png') });
   await pp.keyboard.press('Escape');
   await settle(pp, 200);
 }
@@ -1094,7 +1085,7 @@ async function phoneFinance(page, scheme, size) {
   // Plan's message box.
   await page.tap('.tab[data-tab="plan"]');
   await settle(page);
-  await page.tap('.pl-msg');
+  await page.tap('.pl-ask');
   await settle(page, 250);
   expect(scheme + ' Plan message', await page.locator('#sheet-planmsg').isVisible(), 'the Plan message button did not open its box');
   await lookSheet(page, scheme + ' Plan message', size, '#sheet-planmsg');
@@ -1416,7 +1407,7 @@ async function run() {
   await sp.waitForFunction(() => /^server|^error/.test(document.querySelector('.fi-pending').dataset.why || ''), null, { timeout: 6000 }).catch(() => problem(FS, 'the lost reply was not noticed'));
   await sp.tap('.tab[data-tab="plan"]');
   await settle(sp);
-  await sp.tap('.pl-msg');
+  await sp.tap('.pl-ask');
   await settle(sp, 250);
   await sp.fill('#sheet-planmsg textarea', 'Move my dentist to Friday at 3 PM');
   await sp.tap('#sheet-planmsg button[type="submit"]');
@@ -1507,8 +1498,8 @@ async function realRun() {
       if (size.TOP) { await tap(`[data-view-pick="${v}"]`); await settle(pg, 250); }
       await lookPlan(pg, 'real ' + label + ' Plan ' + v, size);
     }
-    await tap('.pl-brief'); await settle(pg, 350);
-    await look(pg, 'real ' + label + ' Plan brief', size);
+    await tap('.pl-ask'); await settle(pg, 350);
+    await look(pg, 'real ' + label + ' Plan message box', size);
     if (ctx.wrote || ctx.badPaths.length) problem('real ' + label, 'the app tried to save while only looking');
     await ctx.close();
   }

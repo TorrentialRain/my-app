@@ -1,4 +1,5 @@
-// The Plan page of the new Hub: today's brief line, a day view that scrolls like Google Calendar, and a week grid.
+// The Plan page of the new Hub: a top bar to message Claude about the calendar (with today's due count), a day view
+// that scrolls like Google Calendar, and a week grid. The Hub has no brief of its own (his pick, Nov 26).
 // Plan only READS. Nothing on this page saves or changes the data box.
 (function () {
   const TZ = 'America/Anchorage';
@@ -178,20 +179,7 @@
     return { key, allDay, timed: layout(timed) };
   }
 
-  // The line at the top: the robot's headline when it is today's; otherwise one made from today's calendar.
-  function headline(brief, now, today) {
-    const b = brief && brief.current;
-    if (b && b.date === dayKey(now) && b.headline) return String(b.headline);
-    const timed = today.timed.filter((x) => !x.task);
-    if (!timed.length) return today.allDay.some((x) => !x.task) ? 'Nothing at a set time today.' : 'Nothing on the calendar today.';
-    const next = timed.find((x) => x.end > now);
-    if (!next) return 'All done on the calendar for today.';
-    const left = timed.filter((x) => x.end > now).length;
-    return (next.start <= now ? 'Now: ' + next.name + ' until ' + timeText(next.end) : 'Next: ' + next.name + ' at ' + timeText(next.start)) +
-      (left > 1 ? '. ' + (left - 1) + ' more after that.' : '.');
-  }
-
-  const Pure = { KINDS, kindOf, dayKey, dayStart, addDays, weekStart, eventsOf, dueOf, overdue, dueToday, dueLine, rangeOf, loaded, dayOf, headline, shortDay };
+  const Pure = { KINDS, kindOf, dayKey, dayStart, addDays, weekStart, eventsOf, dueOf, overdue, dueToday, dueLine, rangeOf, loaded, dayOf, shortDay };
   if (typeof module !== 'undefined') module.exports = Pure;
   if (typeof window === 'undefined') return;
 
@@ -211,7 +199,7 @@
   window.addEventListener('resize', () => { cancelAnimationFrame(fitting); fitting = requestAnimationFrame(() => { const pg = document.getElementById('page-plan'); if (pg) fitNames(pg); }); });
   const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
-  let calendar = null, brief = null, ready = false;
+  let calendar = null, ready = false;
   let view = store.get('hub2.planView', 'day') === 'week' ? 'week' : 'day';
   let picked = dayKey(Date.now());       // the day being looked at; opens on today
   let shownToday = picked;
@@ -329,7 +317,7 @@
     let top = '';
     if (picked === today) {
       const late = overdue(tasks, now).length;
-      if (late) top += '<button type="button" class="pl-late" data-open="sheet-brief" data-jump="overdue">' + late + ' overdue</button>';
+      if (late) top += '<button type="button" class="pl-late" data-open="sheet-overdue" data-jump="overdue">' + late + ' overdue</button>';
     }
     if (!loaded(range, picked)) top += '<p class="pl-off">Calendar not copied for this day yet. Due tasks still show.</p>';
     top += d.allDay.map((it) => '<div class="pl-chip-ev' + (it.late ? ' late' : '') + '" role="button" tabindex="0" style="' + style(it) + '"' + tipAttrs(it, whenOf(it)) + '>' +
@@ -356,7 +344,7 @@
     const cols = per.map((d, i) => {
       const k = days[i];
       const chips = [];
-      if (k === today && lateN) chips.push('<div class="pl-wchip late" role="button" tabindex="0" data-open="sheet-brief" data-jump="overdue" data-tip="' + lateN + ' overdue" data-when="Tap Brief to see them all">' + lateN + ' late</div>');
+      if (k === today && lateN) chips.push('<div class="pl-wchip late" role="button" tabindex="0" data-open="sheet-overdue" data-jump="overdue" data-tip="' + lateN + ' overdue" data-when="Tap to see them all">' + lateN + ' late</div>');
       const room = 3 - chips.length;
       const show = d.allDay.length > room ? d.allDay.slice(0, room - 1) : d.allDay;
       for (const it of show) chips.push('<div class="pl-wchip' + (it.late ? ' late' : '') + '" role="button" tabindex="0" style="' + style(it) + '"' + tipAttrs(it, whenOf(it)) + '>' + esc(it.name) + '</div>');
@@ -389,69 +377,14 @@
     $('.pl-weekname', page).textContent = 'Week of ' + shortDay(ws).replace(/^\w+ /, '');
   }
 
-  // ---- The brief: the line at the top, and the full brief that slides up ----
-  function briefParts(html) {
-    const clean = (n) => (n ? n.textContent.replace(/\s+/g, ' ').trim() : '');
-    let doc;
-    try { doc = new DOMParser().parseFromString(String(html || ''), 'text/html'); } catch (e) { return []; }
-    $$('script,style,svg,link,meta,title', doc).forEach((n) => n.remove());
-    const parts = [];
-    const acts = $$('.acts .act', doc).map((a) => {
-      const t = $('.t', a);
-      return { title: clean(t), text: $$('p', a).filter((p) => p !== t).map(clean).filter(Boolean).join(' ') };
-    }).filter((x) => x.title || x.text);
-    if (acts.length) parts.push({ head: 'The day', rows: acts });
-    let cur = null;
-    const bottom = $$('h2', doc).length ? $$('h2', doc)[0].parentElement : null;
-    if (bottom) {
-      for (const n of Array.from(bottom.children)) {
-        if (n.tagName === 'H2') { cur = { head: clean(n), rows: [] }; parts.push(cur); continue; }
-        if (!cur) { cur = { head: 'More', rows: [] }; parts.push(cur); }
-        if (n.tagName === 'OL' || n.tagName === 'UL') {
-          for (const li of $$('li', n)) {
-            const t = $('.title', li);
-            const text = $$('p', li).filter((p) => p !== t).map(clean).filter(Boolean).join(' ');
-            cur.rows.push({ title: t ? clean(t) : '', text: t ? text : (text || clean(li).replace(/^\d+\s*/, '')) });
-          }
-        } else if (clean(n)) cur.rows.push({ title: '', text: clean(n) });
-      }
-    }
-    if (!parts.length) { // a brief in another shape: plain paragraphs
-      const rows = $$('p, li', doc).map(clean).filter(Boolean).map((text) => ({ title: '', text }));
-      if (rows.length) parts.push({ head: 'The brief', rows });
-    }
-    return parts.filter((p) => p.rows.length);
-  }
-  function renderBrief(items, tasks, now) {
-    const todayKey = dayKey(now);
-    const today = dayOf(items, todayKey, 0);
+  // ---- The top bar's due count, and the overdue list that slides up ----
+  function renderTop(tasks, now) {
     const due = dueToday(tasks, now);
     const late = overdue(tasks, now);
-    $('.pl-hl', page).textContent = headline(brief, now, today);
     $('[data-line="plan"]', page).textContent = dueLine(due.length);
     $('.pl-chip', page).classList.toggle('none', !due.length);
-    // The sheet
-    const b = brief && brief.current;
-    const fresh = !!(b && b.date === todayKey);
-    $('#brief-date').textContent = longDay(todayKey);
-    const sq = (kind) => '<span class="sq" style="background:' + (KINDS[kind] || KINDS.main).color + '" aria-hidden="true"></span>';
-    const evs = today.timed.filter((x) => !x.task).map((x) => '<li class="pl-row">' + sq(x.kind) + '<span class="t">' + esc(x.name) + '</span><span class="w">' + esc(timeText(x.start)) + '</span></li>')
-      .concat(today.allDay.filter((x) => !x.task).map((x) => '<li class="pl-row">' + sq(x.kind) + '<span class="t">' + esc(x.name) + '</span><span class="w">All day</span></li>'));
-    let h = '';
-    if (fresh && b.headline) h += '<p class="pl-bhead">' + esc(b.headline) + '</p>';
-    h += '<h3>Today</h3><ul class="pl-rows">' + (evs.join('') || '<li class="pl-row"><span class="t muted">Nothing on the calendar.</span></li>') + '</ul>';
-    h += '<h3>Due today · ' + due.length + '</h3><ul class="pl-rows">' + (due.map((x) => '<li class="pl-row">' + sq(x.kind) + '<span class="t">' + esc(x.name) + '</span><span class="w">' + esc(x.when) + '</span></li>').join('') ||
-      '<li class="pl-row"><span class="t muted">Nothing else due today.</span></li>') + '</ul>';
-    h += '<h3 id="brief-overdue">Overdue · ' + late.length + '</h3><ul class="pl-rows">' + (late.map((x) => '<li class="pl-row late"><span class="t">' + esc(x.name) + '</span><span class="due late">' + esc(x.tag) + '</span></li>').join('') ||
+    $('#overdue-body').innerHTML = '<ul class="pl-rows">' + (late.map((x) => '<li class="pl-row late"><span class="t">' + esc(x.name) + '</span><span class="due late">' + esc(x.tag) + '</span></li>').join('') ||
       '<li class="pl-row"><span class="t muted">Nothing overdue.</span></li>') + '</ul>';
-    if (fresh) {
-      for (const p of briefParts(b.html)) {
-        h += '<h3>' + esc(p.head) + '</h3><ul class="pl-rows">' + p.rows.map((r) => '<li class="pl-row col">' + (r.title ? '<span class="t">' + esc(r.title) + '</span>' : '') + (r.text ? '<span class="n">' + esc(r.text) + '</span>' : '') + '</li>').join('') + '</ul>';
-      }
-    } else {
-      h += '<p class="hint">This morning\'s written brief isn\'t in yet. The lists above are from your calendar and tasks.</p>';
-    }
-    $('#brief-body').innerHTML = h;
   }
 
   function renderKey() {
@@ -476,7 +409,7 @@
     $$('[data-view-pick]', page).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.viewPick === view)));
     $('.pl-date', page).textContent = picked === todayKey ? longDay(todayKey) : longDay(picked);
     $('.pl-today', page).hidden = weekStart(picked) === weekStart(todayKey) && (view === 'week' || pc.matches || picked === todayKey);
-    renderBrief(items, tasks, now);
+    renderTop(tasks, now);
     renderDay(items, tasks, now, range);
     renderWeek(items, tasks, now, range);
     renderKey();
@@ -541,23 +474,21 @@
   });
   page.addEventListener('scroll', hideTip, true);
   bubble.addEventListener('click', hideTip);
-  // The overdue button (and the week's "late" chip) open the brief at the overdue list.
+  // The overdue button (and the week's "late" chip) open the overdue list.
   page.addEventListener('click', (e) => {
-    const j = e.target.closest('[data-jump]');
-    if (!j) return;
-    openBrief();
-    requestAnimationFrame(() => { const h = $('#brief-overdue'); if (h) h.scrollIntoView({ block: 'start' }); });
+    if (!e.target.closest('[data-jump]')) return;
+    openOverdue();
   });
 
-  // The brief sheet: slides up over Plan. Swipe down (or tap outside, or ×) to close.
-  const sheet = $('#sheet-brief');
+  // The overdue sheet: slides up over Plan. Swipe down (or tap outside, or ×) to close.
+  const sheet = $('#sheet-overdue');
   const card = $('.sheet-card', sheet);
-  function openBrief() {
+  function openOverdue() {
     $$('.sheet').forEach((s) => { s.hidden = s !== sheet; });
     document.body.classList.add('sheet-up');
     card.scrollTop = 0;
   }
-  function closeBrief() {
+  function closeOverdue() {
     sheet.hidden = true;
     if (!$$('.sheet').some((s) => !s.hidden)) document.body.classList.remove('sheet-up');
   }
@@ -572,7 +503,7 @@
     if (y0 === null) return;
     card.style.transition = '';
     card.style.transform = '';
-    if (dy > 90) closeBrief();
+    if (dy > 90) closeOverdue();
     y0 = null; dy = 0;
   });
 
@@ -584,15 +515,10 @@
 
   window.Plan = {
     Pure,
-    closeBrief,
+    closeOverdue,
     async load(Data) {
-      const [cal, br] = await Promise.all([
-        Data.read('data/calendar.json'),
-        // No brief yet is fine: the line is made from the calendar instead.
-        Data.read('data/brief.json').catch(() => null),
-      ]);
+      const cal = await Data.read('data/calendar.json');
       calendar = cal || {};
-      brief = br;
       ready = true;
       render();
     },

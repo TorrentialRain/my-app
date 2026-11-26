@@ -403,13 +403,13 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
 .pl-tools { grid-area: tools; gap: 10px; }
 .pl-tools .round { background: var(--card); box-shadow: var(--shadow); color: var(--ink); }
 
-/* The brief line: always in sight, the whole thing opens the full brief. The sun tile stands past the top edge. */
-.pl-brief {
+/* The top bar: always in sight; the whole thing opens the message box. Its tile stands past the top edge. */
+.pl-ask {
   position: relative; margin-top: 10px; min-height: 56px; width: 100%; border: 0; border-radius: 20px; background: var(--card); box-shadow: var(--shadow);
   color: var(--ink); font: inherit; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 10px 14px 10px 78px;
 }
-.pl-sun { position: absolute; left: 14px; top: -12px; width: 50px; height: 50px; border-radius: 15px; background: #0369a1; display: flex; align-items: center; justify-content: center; transform: rotate(-4deg); box-shadow: 0 6px 14px rgba(3,105,161,0.3); }
-@media (prefers-reduced-motion: reduce) { .pl-sun { top: 3px; transform: none; } }
+.pl-tile { position: absolute; left: 14px; top: -12px; width: 50px; height: 50px; border-radius: 15px; background: #0369a1; display: flex; align-items: center; justify-content: center; transform: rotate(-4deg); box-shadow: 0 6px 14px rgba(3,105,161,0.3); }
+@media (prefers-reduced-motion: reduce) { .pl-tile { top: 3px; transform: none; } }
 .pl-bt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .pl-bl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .pl-cap { font-size: 13px; line-height: 18px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--deep); }
@@ -492,12 +492,11 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
 .pl-bubble .bn { font-size: 15px; line-height: 20px; font-weight: 600; overflow-wrap: anywhere; }
 .pl-bubble .bw { font-size: 13px; line-height: 18px; opacity: 0.85; }
 
-/* The full brief */
+/* Plan sheets: the overdue list and the message box */
 .pl-sheet { --card: #ffffff; max-height: calc(100% - var(--safe-top) - 64px); border-radius: 28px 28px 0 0; transition: transform .25s; }
 @media (prefers-color-scheme: dark), (min-width: 900px) { .pl-sheet { --card: #161b20; } }
 .pl-sheet .grab { align-self: center; width: 40px; height: 5px; border-radius: 3px; background: var(--ink2); opacity: 0.5; flex: none; }
 .pl-sheet h3 { margin: 14px 0 4px; font-size: 13px; line-height: 18px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--deep); }
-.pl-bhead { margin: 0; font-size: 17px; line-height: 23px; font-weight: 600; }
 .pl-rows { list-style: none; margin: 0; padding: 0; }
 .pl-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 0.5px solid var(--line); font-size: 16px; line-height: 21px; }
 .pl-row.col { flex-direction: column; align-items: flex-start; gap: 2px; }
@@ -516,7 +515,7 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
   .pl-wrap { width: 100%; max-width: 1360px; margin: 0 auto; display: grid; grid-template-columns: 220px minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); gap: 16px 24px; }
   .pl-head { grid-column: 2; grid-template-columns: 1fr auto auto; grid-template-areas: "title nav tools" "date nav tools"; }
   .pl-seg { display: none; }
-  .pl-brief { grid-column: 2; margin-top: 12px; }
+  .pl-ask { grid-column: 2; margin-top: 12px; }
   .pl-body { grid-column: 1 / span 2; display: grid; grid-template-columns: 220px minmax(320px, 400px) minmax(0, 1fr); gap: 24px; }
   .pl-wrap[data-view] .pl-daycard, .pl-wrap[data-view] .pl-weekcard { display: flex; }
   .pl-key { flex-direction: column; gap: 4px; align-self: start; padding: 14px 16px; background: var(--card); border-radius: 22px; box-shadow: var(--shadow); }
