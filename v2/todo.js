@@ -250,6 +250,7 @@
   function render() {
     const now = Date.now();
     recompute();
+    badge();
     tabButtons(now);
     const groups = listFor(tasks, tab, now);
     const only = tab !== 'overdue' && !!onlyOverdue[tab];
@@ -465,12 +466,38 @@
     closeSheets();
   });
 
+  // The Questions inbox (his pick, Nov 25): everything waiting on him, answerable any time, kept until it's
+  // answered. Charges still to label come from Finance (Label now opens Finance's fix sheet); written
+  // questions come from the task list. The count shows as a badge on every Questions button.
+  const missedCharges = () => (window.Finance && Finance.missed ? Finance.missed() : []);
   function fillQuestions() {
-    const qs = questions(tasks);
-    $('#q-list').innerHTML = qs.length
-      ? qs.map((q) => '<li><span class="t">' + esc(q.text) + '</span>' + (q.about ? '<span class="n">About: ' + esc(q.about) + '</span>' : '') + '</li>').join('')
-      : '<li class="empty">No questions right now.</li>';
+    const qs = questions(tasks), ms = missedCharges();
+    const money = (a) => (a < 0 ? '−$' : '+$') + Math.abs(a).toFixed(2);
+    $('#q-list').innerHTML = (ms.length ? '<li class="q-head">Charges to label</li>' + ms.map((m) => '<li class="q-charge"><span class="t">' + esc(m.name) + ' · ' + money(m.a) + '</span>' +
+        '<span class="n">' + esc(m.day) + ' · ' + esc(m.account) + '</span><button type="button" class="q-label" data-label-charge="' + esc(m.id) + '">Label now</button></li>').join('') : '') +
+      (qs.length ? (ms.length ? '<li class="q-head">Questions</li>' : '') + qs.map((q) => '<li><span class="t">' + esc(q.text) + '</span>' + (q.about ? '<span class="n">About: ' + esc(q.about) + '</span>' : '') + '</li>').join('') : '') ||
+      '<li class="empty">Nothing waiting on you.</li>';
   }
+  function questionCount() { return questions(tasks).length + missedCharges().length; }
+  function badge() {
+    const n = questionCount();
+    document.querySelectorAll('[data-open="sheet-questions"]').forEach((b) => {
+      let el = b.querySelector('.qbadge');
+      if (!el) { el = document.createElement('span'); el.className = 'qbadge'; el.setAttribute('aria-hidden', 'true'); b.appendChild(el); }
+      el.textContent = n > 9 ? '9+' : String(n);
+      el.hidden = !n;
+      b.setAttribute('aria-label', n ? 'Questions: ' + n + ' waiting' : 'Questions');
+    });
+    const sh = document.getElementById('sheet-questions');
+    if (sh && !sh.hidden) fillQuestions();
+  }
+  document.addEventListener('hub:questions', badge);
+  document.getElementById('q-list').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-label-charge]');
+    if (!b || !window.Finance) return;
+    closeSheets();
+    Finance.labelNow(b.dataset.labelCharge);
+  });
   function fillArchive() {
     const items = archive(tasks, Date.now());
     $('#archive-list').innerHTML = items.length

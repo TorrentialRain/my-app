@@ -129,6 +129,9 @@
     const raw = String(s || '');
     for (const [re, name] of BRANDS) if (re.test(raw)) return name;
     let x = raw.split(' · ')[0].trim();
+    const chk = x.match(/^check\s*#?\s*(\d+)/i);
+    if (chk) return 'Check #' + chk[1];                        // each check keeps its number, so they're told apart
+    if (/^venmo\s+none\b/i.test(x)) return 'Venmo payment';   // the bank shows no name for some Venmo payments
     const toPerson = x.match(/^cash app\*? ?([a-z]+)( [a-z])?\b/i);
     if (toPerson && !/^(joshua|to|from)$/i.test(toPerson[1])) x = 'Cash App to ' + toPerson[1];
     x = x.replace(/^(CHK |POS |ACH )?(PREAUTH |RETURN |PURCHASE |DEBIT )?/i, '').replace(/^(DD|SQ|TST|PY|WL|CTLP|LS)\b\*? ?/i, '').replace(/^PAYPAL \*/i, '');
@@ -383,6 +386,27 @@
     return out;
   }
 
+  // ---------- Missed charges (his pick, Nov 25) ----------
+  // A charge nobody could sort: flagged for review, or money sent to a person with no label. It counts in
+  // Wants until he labels it. When he opens the Hub, a pop-up lists the new ones: Label now, or Label later.
+  // Every one not labelled yet also sits in the Questions inbox, answerable any time, until it's labelled.
+  // One rule feeds the pop-up, the inbox and Activity's "What was it for?" tag, so they can never disagree.
+  function needsLabel(t, rules) {
+    if (!t || t.lb === 'josh' || t.a >= 0 || myRule(t, rules)) return false;
+    const c = rawCat(t);
+    // A review flag only counts while nothing sorts the charge: once a store word or his answer gives it a
+    // real category (PayRange is laundry), the flag is stale and the charge isn't asked about again.
+    if (t.rv) return c === 'other' || c === 'people';
+    return c === 'people' && !t.lb;
+  }
+  function missed(fin, months, today) {
+    const rules = storeRules(fin);
+    const list = allTx(months).filter((t) => t.d <= today && needsLabel(t, rules))
+      .map((t) => ({ id: t.id, name: nameOf(t), d: t.d, a: t.a, account: SHORT[t.k] || t.k || '', later: !!t.later }));
+    list.sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : 0));
+    return { all: list, now: list.filter((m) => !m.later) };
+  }
+
   // ---------- Activity ----------
   // Every charge, newest first, with the Balance (all accounts) after it.
   function activity(fin, months, today, bal) {
@@ -397,7 +421,7 @@
       const rows = list.map((t) => {
         const c = catOf(t, rules), b = bucketOf(t, rules);
         const row = { id: t.id, name: nameOf(t), cat: c, catName: (CATS[c] || CATS.other).name, bucket: b, bucketName: bucketName(b, fin), amount: t.a, balance: after,
-          pending: !!t.p, account: SHORT[t.k] || t.k || '', ask: c === 'people' && t.lb !== 'josh' && t.a < 0, mine: t.lb === 'josh', ruled: !!myRule(t, rules) };
+          pending: !!t.p, account: SHORT[t.k] || t.k || '', ask: needsLabel(t, rules), mine: t.lb === 'josh', ruled: !!myRule(t, rules) };
         if (after != null) after = r2(after - t.a);
         return row;
       });
@@ -492,7 +516,7 @@
   }
 
   const Money = { TZ, CATS, BUCKETS, PICK_CATS, PICK_BUCKETS, GROUPS, r2, todayISO, addDays, longDay, dayName, monthDay, money, money0, signed,
-    allTx, catOf, bucketOf, bucketName, nameOf, cleanName, storeKey, balances, period, nextPayday, budget, pieFor, payPeriods, activity, lastWeek, debts, wishlists, work };
+    allTx, catOf, bucketOf, bucketName, nameOf, cleanName, storeKey, balances, period, nextPayday, budget, pieFor, payPeriods, activity, lastWeek, debts, wishlists, needsLabel, missed, work };
   if (typeof window !== 'undefined') window.Money = Money;
   if (typeof module !== 'undefined') module.exports = Money;
 })();

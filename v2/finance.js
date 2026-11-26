@@ -68,6 +68,7 @@
   function render() {
     if (!base.fin) return;
     work();
+    document.dispatchEvent(new Event('hub:questions')); // the inbox count on the Questions buttons
     $$('.fi-tabs, .fi-side', page).forEach((el) => { el.innerHTML = tabsHtml(); });
     lineEl.textContent = 'Next paycheck ' + M.longDay(W.nextPaycheck);
     lineEl.classList.remove('bad');
@@ -261,6 +262,7 @@
     if (f && !matchMedia('(pointer: coarse)').matches) f.focus();
   }
   function closeSheet(el) {
+    fromMissed = false;
     (el || sheet).hidden = true;
     if (!$$('.sheet').some((s) => !s.hidden)) document.body.classList.remove('sheet-up');
   }
@@ -268,9 +270,11 @@
   const catNames = Object.fromEntries(Object.entries(M.CATS).map(([k, c]) => [k, c.name]));
   function findTx(id) { return M.allTx(W._v.months).find((t) => t.id === id); }
 
-  function fixSheet(id) {
+  function fixSheet(id, tick) {
     const t = findTx(id);
     if (!t) return;
+    // A check or money sent to a person is a one-off: no "always" rule for it.
+    const oneOff = /^check #/i.test(M.cleanName(t.s || '')) || M.catOf(t, []) === 'people';
     const rules = (W._v.fin.storeRules || {}).items || [];
     const cat = M.catOf(t, rules), bucket = M.bucketOf(t, rules) === 'gym' ? 'subs' : M.bucketOf(t, rules);
     const store = M.cleanName(t.s || '');
@@ -279,8 +283,32 @@
       '<label class="fld"><span>Name</span><input name="name" value="' + esc(t.name || '') + '" placeholder="' + esc(M.nameOf(t)) + '"></label>' +
       '<label class="fld"><span>Category</span><select name="cat">' + opts(M.PICK_CATS, catNames, cat) + '</select></label>' +
       '<label class="fld"><span>Bucket</span><select name="bucket">' + opts(M.PICK_BUCKETS, M.BUCKETS, bucket) + '</select></label>' +
-      '<label class="fi-check"><input type="checkbox" name="always"><i class="fi-box" aria-hidden="true"></i><span>Always do this for ' + esc(store) + '</span></label>' +
+      (oneOff ? '' : '<label class="fi-check"><input type="checkbox" name="always"' + (tick ? ' checked' : '') + '><i class="fi-box" aria-hidden="true"></i><span>Always do this for ' + esc(store) + '</span></label>') +
       '<button type="submit" class="wide">Save</button></form>');
+  }
+  // ---------- Missed charges pop-up (his pick, Nov 25) ----------
+  // When he opens the Hub and some charges couldn't be sorted, this pops up once: Label now opens the fix
+  // sheet (and comes back here for the rest), Label later leaves it in the Questions inbox for any time.
+  // Closing it changes nothing; it asks again next time he opens the Hub.
+  const shownMissed = new Set();
+  let fromMissed = false;
+  function missedList() { return W && W._v ? M.missed(W._v.fin, W._v.months, W.today) : { all: [], now: [] }; }
+  function maybeMissed() {
+    if (!ready || document.hidden || document.body.classList.contains('sheet-up')) return;
+    if ($('#connect') && !$('#connect').hidden) { setTimeout(maybeMissed, 1500); return; } // after the key screen
+    if (missedList().now.some((m) => !shownMissed.has(m.id))) missedSheet();
+  }
+  function missedSheet() {
+    const L = missedList(), n = L.now.length;
+    fromMissed = false;
+    if (!n) { if (!sheet.hidden) closeSheet(); return; }
+    L.now.forEach((m) => shownMissed.add(m.id));
+    const title = 'You have ' + n + ' missed charge' + (n === 1 ? '' : 's');
+    const rows = L.now.map((m) => '<li class="fi-missed" data-missed-id="' + esc(m.id) + '"><span><b>' + esc(m.name) + '</b><span>' + esc(M.longDay(m.d)) + ' · ' + esc(m.account) + '</span></span>' +
+      '<span class="num out">' + M.signed(m.a) + '</span>' +
+      '<div class="fi-btns"><button type="button" class="wide" data-label-now="' + esc(m.id) + '">Label now</button><button type="button" class="fi-small" data-label-later="' + esc(m.id) + '">Label later</button></div></li>').join('');
+    openSheet(title, '<p class="hint">Claude couldn\'t sort ' + (n === 1 ? 'this charge' : 'these charges') + '. Until you label them, they count in Wants.</p>' +
+      '<ul class="fi-rules">' + rows + '</ul><p class="fi-note">Label later keeps it in your Questions inbox, to answer any time.</p>');
   }
   function whoSheet() {
     const D = W.debts;
@@ -349,6 +377,8 @@
     if (!b) return;
     if (b.hasAttribute('data-go-debt')) { closeSheet(); tab = 'debt'; render(); page.scrollTop = 0; return; }
     if (b.dataset.boughtYes) { add({ type: 'bought', itemId: b.dataset.boughtYes }); closeSheet(); }
+    if (b.dataset.labelNow) { fixSheet(b.dataset.labelNow, true); fromMissed = true; return; }
+    if (b.dataset.labelLater) { const t = findTx(b.dataset.labelLater); add({ type: 'labelLater', txId: b.dataset.labelLater, name: t ? M.nameOf(t) : '' }); missedSheet(); return; }
   });
   sheet.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -357,7 +387,7 @@
     if (f.dataset.fix) {
       const t = findTx(f.dataset.fix);
       add({ type: 'fixCharge', txId: f.dataset.fix, name: v('name'), cat: v('cat'), bucket: v('bucket') });
-      if (t && f.elements.always.checked) add({ type: 'addRule', rule: { id: S.newId('r'), store: M.cleanName(t.s || ''), cat: v('cat'), u: v('bucket'), at, from: 'Josh, fixing a charge in the new Hub' } });
+      if (t && f.elements.always && f.elements.always.checked) add({ type: 'addRule', rule: { id: S.newId('r'), store: M.cleanName(t.s || ''), cat: v('cat'), u: v('bucket'), at, from: 'Josh, fixing a charge in the new Hub' } });
     } else if (f.hasAttribute('data-add-debt-form')) {
       const owed = amt(v('owed'));
       if (!v('name') || !owed) { f.reportValidity(); return; }
@@ -373,6 +403,7 @@
       if (!a) { f.reportValidity(); return; }
       add({ type: 'setAside', itemId: f.dataset.asideForm, amount: a, paycheck: W.budget.P.start });
     } else return;
+    if (fromMissed && f.dataset.fix) { missedSheet(); return; }
     closeSheet();
   });
 
@@ -494,6 +525,7 @@
       lastRead = Date.now();
     } catch (e) { /* keep what's on screen */ }
     render();
+    maybeMissed();
   }
   document.addEventListener('visibilitychange', catchUp);
   window.addEventListener('online', catchUp);
@@ -510,9 +542,13 @@
       ready = true;
       document.documentElement.dataset.finance = 'ready';
       if (S.list().length) saveSoon(500);
+      setTimeout(maybeMissed, 400); // after the pages are placed, so it opens over whichever page he's on
     },
     showError(text) { bodyEl.innerHTML = '<section class="fi-card"><p class="fi-note">' + esc(text) + '</p></section>'; },
     pick(t) { if (TABS.some(([k]) => k === t)) { tab = t; render(); } },
+    // For the Questions inbox: charges still to label, and Label now from there.
+    missed() { return missedList().all.map((m) => Object.assign({ day: M.longDay(m.d) }, m)); },
+    labelNow(id) { fixSheet(id, true); },
   };
   window.Finance = Finance;
 })();

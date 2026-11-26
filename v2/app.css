@@ -350,6 +350,12 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
 .rows li { padding: 11px 2px; border-bottom: 0.5px solid var(--hairline); display: flex; flex-direction: column; gap: 3px; font-size: 16px; line-height: 21px; }
 .rows .t { font-size: 16px; }
 .rows .n { font-size: 14px; }
+.rows .q-head { padding: 14px 2px 4px; border: 0; font-size: 13px; line-height: 18px; font-weight: 700; letter-spacing: 0.02em; color: var(--ink2); }
+.rows .q-label { align-self: flex-start; margin-top: 6px; min-height: 40px; padding: 0 16px; border: 0; border-radius: 12px; background: var(--on); color: var(--on-ink); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
+/* Questions inbox count: a small badge on every Questions button (his pick, Nov 25). */
+[data-open="sheet-questions"] { position: relative; }
+.qbadge { position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--on); color: var(--on-ink); font-size: 12px; line-height: 20px; font-weight: 700; text-align: center; box-shadow: 0 0 0 2px var(--bg, #fff); pointer-events: none; }
+.qbadge[hidden] { display: none; }
 .toast {
   position: fixed; left: calc(var(--safe-left) + 16px); right: calc(var(--safe-right) + 16px); bottom: calc(var(--safe-bottom) + var(--bar-h) + 92px);
   z-index: 30; padding: 12px 16px; border-radius: 14px; background: #1c1c1e; color: #ffffff; font-size: 15px; line-height: 20px;
@@ -696,6 +702,10 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
 .fi-small { min-height: 44px; min-width: 64px; padding: 0 14px; border: 0; border-radius: 14px; background: var(--chip); color: var(--ink); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
 .fi-small.on { background: var(--on); color: var(--on-ink); }
 .fi-btns { display: flex; gap: 10px; flex-wrap: wrap; }
+/* Missed-charge pop-up: each charge, then its two buttons under it */
+.fi-rules li.fi-missed { flex-wrap: wrap; padding: 12px 0; }
+.fi-missed .fi-btns { flex-basis: 100%; }
+.fi-missed .fi-btns .wide, .fi-missed .fi-btns .fi-small { min-height: 44px; font-size: 15px; }
 .fi-btns .wide { flex: 1; }
 
 /* Wishlists and Debt */

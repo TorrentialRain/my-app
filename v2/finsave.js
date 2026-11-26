@@ -31,6 +31,14 @@
         stamp(t, c.id);
       }
     } },
+    // Label later: the missed-charge pop-up stops showing it; it waits in the Questions inbox (his pick, Nov 25).
+    labelLater: { file: 'months', put(m, c) {
+      for (const k of Object.keys(m || {})) for (const t of ((m[k] || {}).txns || [])) {
+        if (t.id !== c.txId || has(t, c.id)) continue;
+        t.later = c.at;
+        stamp(t, c.id);
+      }
+    } },
     addDebt: { file: 'fin', put(f, c) {
       f.debts = f.debts || { items: [], payments: [] };
       f.debts.items = f.debts.items || []; f.debts.payments = f.debts.payments || [];
@@ -110,6 +118,7 @@
   function describe(c) {
     return ({
       fixCharge: 'Fix a charge' + (c.name ? ' ("' + c.name + '")' : ''),
+      labelLater: 'Label a missed charge later' + (c.name ? ' ("' + c.name + '")' : '') + ': it waits in the Questions inbox',
       addDebt: 'Add the debt "' + ((c.item || {}).name || '') + '"',
       addWish: 'Add "' + ((c.item || {}).name || '') + '" to a wishlist',
       setAside: 'Set money aside for a wishlist item',

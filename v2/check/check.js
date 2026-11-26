@@ -278,6 +278,18 @@ function finRules() {
   const lb = Money.balances(lateFin, lateM, '2026-01-11');
   expect(F, lb && lb.current === 20, 'a charge after the balance was read did not come off (' + (lb && lb.current) + ' vs 20)');
   expect(F, lb && lb.series['2026-01-09'] === 55 && lb.series['2026-01-10'] === 30, 'a charge before the balance was read was counted twice going back');
+  // Missed charges (his pick, Nov 25): money sent to a person with no label, or a flagged charge nothing sorts.
+  const MS = Money.missed(FIN, MONTHS, TODAY);
+  expect(F, MS.now.length === 1 && MS.now[0].id === 't07', 'the sample friend payment should be the one missed charge (got ' + JSON.stringify(MS.now.map((m) => m.id)) + ')');
+  const laterM = FinSave.apply('months', MONTHS, [{ id: 'cl1', at: at(0), type: 'labelLater', txId: 't07' }]);
+  const ML = Money.missed(FIN, laterM, TODAY);
+  expect(F, ML.now.length === 0 && ML.all.length === 1, 'Label later should stop the pop-up but keep the charge in the Questions inbox');
+  const labelM = FinSave.apply('months', laterM, [{ id: 'cl2', at: at(0), type: 'fixCharge', txId: 't07', cat: 'food', bucket: '30' }]);
+  expect(F, Money.missed(FIN, labelM, TODAY).all.length === 0, 'a labelled charge should leave the Questions inbox');
+  const rvM = JSON.parse(JSON.stringify(MONTHS)); for (const k of Object.keys(rvM)) for (const t of rvM[k].txns) if (t.id === 't02' || t.id === 't11') { t.rv = 1; if (t.id === 't11') t.cat = t.c = 'other'; }
+  const rvIds = Money.missed(FIN, rvM, TODAY).all.map((m) => m.id);
+  expect(F, rvIds.includes('t11') && !rvIds.includes('t02'), 'a flagged charge should be missed unless something already sorts it (a store rule, a store word or his answer)');
+  expect(F, Money.cleanName('Check #3206') === 'Check #3206' && Money.cleanName('VENMO NONE 8558124430 NY') === 'Venmo payment', 'a check lost its number, or a nameless Venmo payment kept a junk name');
   const rows = w.activity.flatMap((d) => d.rows);
   expect(F, rows.filter((r) => r.double).length === 2, 'the same charge twice on one day should be flagged');
   expect(F, rows.some((r) => r.ask), 'money sent to a person should ask what it was for');
@@ -550,6 +562,15 @@ async function newContext(browser, scheme, size, extra) {
   });
   return ctx;
 }
+// The missed-charge pop-up opens by itself over whatever page he's on. Flows that aren't testing it close it.
+async function closeMissed(page) {
+  await page.waitForFunction(() => document.documentElement.dataset.finance === 'ready', null, { timeout: 8000 }).catch(() => {});
+  await page.waitForTimeout(800);
+  if (await page.locator('#sheet-fin').isVisible() && /missed charge/.test(await page.locator('#fin-sheet-title').textContent())) {
+    await page.click('#sheet-fin .sheet-top [data-close]');
+    await page.waitForTimeout(250);
+  }
+}
 async function openConnected(ctx, base, edges) {
   const page = await ctx.newPage();
   await page.goto(base);
@@ -566,6 +587,7 @@ async function openConnected(ctx, base, edges) {
   }
   await page.waitForFunction(() => document.documentElement.dataset.loaded === 'yes' && document.documentElement.dataset.todo === 'ready', null, { timeout: 8000 })
     .catch(() => problem('open', 'the TO-DO page did not get ready'));
+  await closeMissed(page);
   return page;
 }
 const cardIds = (page, sel) => page.evaluate((sel) => Array.from(document.querySelectorAll(sel || '.td-list .card')).map((c) => c.dataset.id), sel);
@@ -1158,6 +1180,32 @@ async function run() {
     expect(scheme + ' connect', /can only read/.test(await page.locator('#connect-why').textContent()), 'a key that can only read was not spotted on the key screen');
     if (await page.locator('#connect-cancel').isVisible()) await page.tap('#connect-cancel');
     if (!(await page.locator('#connect').isHidden())) problem(scheme + ' connect', 'the Connect screen did not close');
+
+    // 2b. Missed charges (his pick, Nov 25): the pop-up opens by itself once the key screen is gone.
+    await settle(page, 2200);
+    const mt = (await page.locator('#sheet-fin').isVisible()) ? (await page.locator('#fin-sheet-title').textContent()) : '';
+    expect(scheme + ' missed charges', mt === 'You have 1 missed charge', 'opening the Hub with a charge nobody sorted should pop up "You have 1 missed charge" (got "' + mt + '")');
+    if (mt) {
+      await lookSheet(page, scheme + ' missed charges', phone, '#sheet-fin');
+      await page.screenshot({ path: path.join(OUT, scheme + '-missed-charges.png') });
+      await page.tap('#sheet-fin [data-label-now]');
+      await settle(page, 300);
+      expect(scheme + ' missed charges', /Fix this charge/.test(await page.locator('#fin-sheet-title').textContent()), 'Label now should open "Fix this charge"');
+      expect(scheme + ' missed charges', (await page.locator('#sheet-fin [name="always"]').count()) === 0, 'money sent to a person should not offer an "always" store rule');
+      await page.tap('#sheet-fin .sheet-top [data-close]');
+      await settle(page, 250);
+    }
+    // The Questions inbox: the badge counts what's waiting, and the charge sits there to label any time.
+    const qb = await page.locator('.td-fabs [data-open="sheet-questions"] .qbadge').textContent().catch(() => '');
+    expect(scheme + ' questions inbox', qb === '2', 'the Questions badge should count 1 question and 1 charge (got "' + qb + '")');
+    await page.tap('.td-fabs [data-open="sheet-questions"]');
+    await settle(page, 300);
+    const inbox = await page.locator('#q-list').textContent();
+    expect(scheme + ' questions inbox', /Charges to label/.test(inbox) && /Label now/.test(inbox) && /Is the sample still on\?/.test(inbox), 'the Questions inbox should list the charge to label and the question (got "' + inbox + '")');
+    await lookSheet(page, scheme + ' questions inbox', phone, '#sheet-questions');
+    await page.screenshot({ path: path.join(OUT, scheme + '-questions-inbox.png') });
+    await page.tap('#sheet-questions [data-close]');
+    await settle(page, 250);
     const ph = await darkness(page);
     if (scheme === 'light') expect(scheme + ' phone colors', ph.body > 200 && ph.todo > 200, 'a phone set to light should show the light colors (got ' + JSON.stringify(ph) + ')');
     else expect(scheme + ' phone colors', ph.body < 50 && ph.todo < 50, 'a phone set to dark should show the dark colors (got ' + JSON.stringify(ph) + ')');
