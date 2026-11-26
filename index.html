@@ -1,110 +1,26 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-  <title>My App</title>
-  <meta name="theme-color" content="#0b0b0f">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="My App">
-  <link rel="manifest" href="manifest.webmanifest">
-  <link rel="apple-touch-icon" href="icons/icon-180.png">
-  <link rel="icon" type="image/png" href="icons/icon-192.png">
-  <style>[hidden]{display:none!important}</style>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Outfit:wght@500;600;700&display=swap">
-  <link rel="stylesheet" href="styles.css?v=11">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Josh's Hub</title>
+  <!-- The old Hub was retired on Nov 26, 2026. This address now just opens the new Hub. -->
+  <meta http-equiv="refresh" content="0; url=v2/">
+  <link rel="canonical" href="v2/">
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; font: 16px -apple-system, system-ui, sans-serif; display: grid; place-items: center; min-height: 100vh; background: #000; color: #fff; }
+    a { color: inherit; }
+  </style>
 </head>
 <body>
-  <!-- Sign-in cover (Josh's Nov 17, 2026 pick: dark, with the JF label card in red). It covers the whole app until the
-       sign-on opens. Signed in with "Stay signed in" on, it shows for about a second each time the app opens, then fades
-       into the Hub (Finance > Spending). Face ID unlocks it when the app opens fresh. -->
-  <div id="lock" class="lock" data-mode="splash">
-    <div class="cv-card">
-      <div class="cv-time"><span id="cv-hm"></span><small id="cv-ap"></small></div>
-      <div class="cv-mono" aria-label="JF">JF</div>
-      <div class="cv-date" id="cv-date"></div>
-    </div>
-    <form id="lock-form" class="lock-form" autocomplete="on" hidden>
-      <h1 id="lock-title" class="sr">Sign in</h1>
-      <p id="lock-hint" class="lock-hint"></p>
-      <input id="lock-user" name="username" type="text" placeholder="Username" aria-label="Username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
-      <input id="lock-pass" name="password" type="password" placeholder="Password" aria-label="Password" autocomplete="current-password" required>
-      <input id="lock-pass2" name="password2" type="password" placeholder="Password again" aria-label="Password again" autocomplete="new-password" hidden>
-      <label class="stay"><span>Stay signed in</span><input id="lock-stay" type="checkbox" role="switch" checked><span class="sw" aria-hidden="true"></span></label>
-      <p id="lock-error" class="lock-error" role="alert"></p>
-      <button id="lock-go" type="submit">Sign in</button>
-    </form>
-    <div id="lock-unlock" class="lock-form" hidden>
-      <p id="unlock-error" class="lock-error" role="alert"></p>
-      <button id="faceid-go" type="button">Unlock with Face ID</button>
-      <button id="use-pass" type="button" class="link">Use password</button>
-    </div>
-    <div id="lock-setup" class="lock-form" hidden>
-      <p class="lock-hint">Use Face ID to get back in when the app opens fresh?</p>
-      <p id="setup-error" class="lock-error" role="alert"></p>
-      <button id="faceid-setup" type="button">Use Face ID</button>
-      <button id="faceid-skip" type="button" class="link">Not now</button>
-    </div>
-  </div>
-
-  <div id="app" hidden>
-    <!-- The Hub fills the whole screen. Its pages are loaded from the private data box, not from this repo. -->
-    <iframe id="hub-frame" title="Hub" hidden></iframe>
-
-    <!-- Shown instead of the Hub while it loads, or if it can't be loaded. -->
-    <div id="hub-wait" class="hub-wait">
-      <p id="hub-msg">Loading…</p>
-    </div>
-
-    <!-- Small round button, bottom right, that opens Settings. -->
-    <button type="button" id="gear" aria-label="Settings" aria-expanded="false">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="16" cy="7" r="2.5"/><circle cx="8" cy="17" r="2.5"/></svg>
-    </button>
-
-    <!-- Settings, full screen over the Hub. -->
-    <div id="sheet" class="sheet" role="dialog" aria-modal="true" aria-label="Settings" hidden>
-      <header class="sheet-top">
-        <h1>Settings</h1>
-        <button type="button" id="sheet-close" aria-label="Close settings">Done</button>
-      </header>
-      <div class="sheet-body">
-        <div class="card" id="box-card">
-          <h2>Data box</h2>
-          <p id="box-status">Checking…</p>
-          <form id="box-form" class="box-form" hidden>
-            <input id="box-key" type="password" placeholder="Paste your data box key" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
-            <button type="submit" id="box-connect">Connect</button>
-          </form>
-          <p id="box-error" class="lock-error" role="alert"></p>
-          <p id="sync-status" class="footnote left"></p>
-          <button type="button" id="pw-open" class="box-btn ghost" aria-expanded="false">Change password</button>
-          <form id="pw-form" class="box-form" hidden>
-            <input id="pw-user" name="username" type="text" placeholder="Username" aria-label="Username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
-            <input id="pw-old" name="current-password" type="password" placeholder="Current password" aria-label="Current password" autocomplete="current-password" required>
-            <input id="pw-new" name="new-password" type="password" placeholder="New password" aria-label="New password" autocomplete="new-password" required>
-            <input id="pw-new2" name="new-password2" type="password" placeholder="New password again" aria-label="New password again" autocomplete="new-password" required>
-            <button type="submit" id="pw-go">Save new password</button>
-          </form>
-          <p id="pw-msg" class="lock-error" role="alert"></p>
-        </div>
-        <div class="list">
-          <div class="row" id="backup-now" role="button"><span>Back up now</span><span class="chev">›</span></div>
-          <label class="row" id="import-row"><span>Import a backup or Hub export</span><span class="chev">›</span><input id="import-file" type="file" accept="application/json,.json" hidden></label>
-          <div class="row" id="box-forget" role="button"><span>Disconnect data box</span><span class="chev">›</span></div>
-          <div class="row" id="faceid-row" role="button" hidden><span id="faceid-label">Set up Face ID</span><span class="chev">›</span></div>
-          <div class="row" id="lock-now" role="button"><span>Lock app (sign out)</span><span class="chev">›</span></div>
-        </div>
-        <p id="import-status" class="footnote"></p>
-        <p class="footnote">My App · shell v11</p>
-      </div>
-    </div>
-  </div>
-  <script src="vault.js?v=11"></script>
-  <script src="store.js?v=11"></script>
-  <script src="hubdb.js?v=11"></script>
-  <script src="app.js?v=11"></script>
+  <p>The Hub has moved. <a href="v2/">Open the new Hub</a>.</p>
+  <script>
+    // Take the old app's offline helper off this phone, then go to the new Hub.
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then((rs) => rs.forEach((r) => { if (!r.scope.includes('/v2/')) r.unregister(); })).catch(() => {});
+    }
+    location.replace('v2/');
+  </script>
 </body>
 </html>
