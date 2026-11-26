@@ -132,7 +132,7 @@
       if (openHere) html += tileInfo(tiles.find((x) => x.key === openTile));
     });
     const NC = Bd.notCovered || {};
-    const gaps = [['planned', ' of your Quick-budget plans'], ['wish', ' set aside for wishlists'], ['subs', ' of Subscriptions'], ['gas', ' of Gas'], ['debt', ' of the debt payment due'], ['more', ' more']]
+    const gaps = [['planned', ' of your Quick-budget plans'], ['wish', ' set aside for wishlists'], ['subs', ' of Subscriptions'], ['gas', ' of Gas'], ['more', ' more']]
       .filter(([k]) => NC[k] > 0.005).map(([k, w]) => M.money(NC[k]) + w);
     const gapText = gaps.length ? ' Not covered until payday: ' + (gaps.length > 1 ? gaps.slice(0, -1).join(', ') + ' and ' + gaps[gaps.length - 1] : gaps[0]) + '.' : '';
     const short = Bd.shortBy > 0.005 ? '<p class="fi-warn">Your accounts are ' + M.money(Bd.shortBy) + ' short of this paycheck\'s plan.' + gapText + '</p>' : '';

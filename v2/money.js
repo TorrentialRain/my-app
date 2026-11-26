@@ -290,10 +290,13 @@
     let uncovered = drain(short);
 
     const excLeft = r2(exLeft.reduce((s, x) => s + x.left, 0));
-    const unpaid = (((fin && fin.debts) || {}).payments || []).filter((p) => !p.paid);
-    const debtDue = r2(unpaid.filter((p) => p.due && p.due < P.next).reduce((s, p) => s + +p.amount, 0));
-    const wishHeld = r2(wishItems(fin).filter((i) => !i.bought).reduce((s, i) => s + (+i.saved || 0), 0));
-    const alsoHeld = r2(excLeft + debtDue + wishHeld);
+    // Wishlist money already moved into a savings pot outside these accounts (like Cash App Savings) is held
+    // there, not here, so it isn't held a second time out of the balance (found Nov 25).
+    const keptElsewhere = (i) => (i.setAside || []).filter((x) => x.in).reduce((s, x) => s + (+x.amount || 0), 0);
+    const wishHeld = r2(wishItems(fin).filter((i) => !i.bought).reduce((s, i) => s + Math.max(0, (+i.saved || 0) - keptElsewhere(i)), 0));
+    // Debt is kept apart from the balance: a debt payment counts like a purchase when it comes out, so nothing is
+    // held back for payments due before payday (Josh, Nov 25: "I think of debt like a purchase").
+    const alsoHeld = r2(excLeft + wishHeld);
     const balance = bal ? bal.current : null;
     const held = () => hold.needs + hold.gas + hold.subs + hold.medical + hold.wants + hold.spoils + alsoHeld;
     // Money that left outside the buckets (more than the bank has): the buckets give it back the same way.
@@ -301,9 +304,9 @@
     // Still more on paper than in the accounts: the accounts themselves are short. His rule that Gas and
     // Subscriptions never cover other spending is about one bucket going over; it doesn't let them show money
     // that isn't there. So, in this order, what isn't covered: Quick-budget plans, wishlist money set aside,
-    // Subscriptions, Gas, and last the debt payments due before payday (Josh's yes, Nov 25).
+    // then Subscriptions, and Gas last (Josh's yes, Nov 25).
     const shortBy = balance != null && held() > balance + 0.005 ? r2(held() - balance) : 0;
-    const notCovered = { planned: 0, wish: 0, subs: 0, gas: 0, debt: 0, more: 0 };
+    const notCovered = { planned: 0, wish: 0, subs: 0, gas: 0, more: 0 };
     if (shortBy) {
       let rest = shortBy;
       const take = (k, have) => { const t = r2(Math.min(Math.max(0, have), rest)); notCovered[k] = t; rest = r2(rest - t); return t; };
@@ -311,11 +314,10 @@
       take('wish', wishHeld);
       hold.subs -= take('subs', hold.subs);
       hold.gas -= take('gas', hold.gas);
-      take('debt', debtDue);
       notCovered.more = r2(Math.max(0, rest));
     }
     // Money counted as held that isn't really in the accounts (so buckets + held - missing = the accounts).
-    const missing = r2(notCovered.planned + notCovered.wish + notCovered.debt + notCovered.more);
+    const missing = r2(notCovered.planned + notCovered.wish + notCovered.more);
     const toInvest = balance == null ? null : r2(balance - held());
     for (const k in hold) hold[k] = r2(hold[k]);
 
@@ -339,7 +341,7 @@
       spoils: { set: [['Half of Wants', spoilsAdd]], spent: parts.spoils, covered: cov.spoils },
       invest: { set: [['20% of the paycheck', s20]], note: 'What\'s left in the bank after every bucket and everything held. Ready to move to savings.' },
     };
-    return { P, C, tiles, breakdown, hold, cov, subsParts, subsRes, medOf, ex: exLeft, excLeft, debtDue, wishHeld, alsoHeld, balance, toInvest,
+    return { P, C, tiles, breakdown, hold, cov, subsParts, subsRes, medOf, ex: exLeft, excLeft, wishHeld, alsoHeld, balance, toInvest,
       shortBy, notCovered, missing, uncovered: r2(Math.max(0, uncovered)) };
   }
 

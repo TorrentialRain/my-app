@@ -257,6 +257,17 @@ function finRules() {
     const sumL = shown + Math.max(0, L.toInvest || 0) + L.alsoHeld - L.missing;
     expect(F, Math.abs(sumL - L.balance) < 0.02, 'when short, the buckets do not add up to the accounts (' + sumL.toFixed(2) + ' vs ' + L.balance + ')');
   }
+  // Debt is kept apart from the balance: a payment due before payday holds nothing back (Josh, Nov 25).
+  const dueFin = JSON.parse(JSON.stringify(FIN));
+  dueFin.debts = dueFin.debts || {}; dueFin.debts.payments = (dueFin.debts.payments || []).concat([{ id: 'pchk', debtId: 'dchk', name: 'Check payment', amount: 40, due: at(1).slice(0, 10), paid: false }]);
+  const DB = Money.work(dueFin, MONTHS, null, new Date(NOW)).budget;
+  if (B && DB) expect(F, Math.abs((DB.toInvest || 0) - (B.toInvest || 0)) < 0.01 && DB.alsoHeld === B.alsoHeld, 'a debt payment due before payday held money back from the buckets');
+  // Wishlist money kept in a savings pot outside the accounts isn't held a second time out of the balance.
+  const potFin = JSON.parse(JSON.stringify(FIN));
+  potFin.wishlists = { lists: [{ id: 'lp', name: 'Pot', items: [{ id: 'wp', name: 'Pot item', amount: 100, saved: 30, setAside: [{ amount: 30, at: at(-1), in: 'Cash App Savings' }] }] }] };
+  const noFin = JSON.parse(JSON.stringify(FIN)); noFin.wishlists = { lists: [] };
+  const PB = Money.work(potFin, MONTHS, null, new Date(NOW)).budget, NB = Money.work(noFin, MONTHS, null, new Date(NOW)).budget;
+  if (PB && NB) expect(F, PB.wishHeld === NB.wishHeld && PB.toInvest === NB.toInvest, 'wishlist money in a savings pot was held out of the balance too');
   // A charge made on the same day as a balance reading, but after it, still comes off the balance (found Nov 25).
   const lateFin = { tracker: { anchors: { 'Cash App': { amount: 50, date: '2026-01-10', set: '2026-01-10T12:00:00Z' } } } };
   const lateM = { '2026-01': { txns: [
