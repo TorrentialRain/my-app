@@ -150,15 +150,17 @@
     return out;
   }
   function dailySeries(tx, anchor, upTo) {
-    const byDay = {};
-    for (const t of tx) byDay[t.d] = (byDay[t.d] || 0) + t.a;
+    // A charge on the reading's own day, made after the balance was read (t later than set), comes off after it.
+    const late = (t) => t.d === anchor.date && t.t && anchor.set && t.t > anchor.set;
+    const byDay = {}; let lateSum = 0;
+    for (const t of tx) { if (late(t)) lateSum += t.a; else byDay[t.d] = (byDay[t.d] || 0) + t.a; }
     const days = Object.keys(byDay).sort();
     const first = days.length && days[0] < anchor.date ? days[0] : anchor.date;
     let last = days.length && days[days.length - 1] > anchor.date ? days[days.length - 1] : anchor.date;
     if (upTo && upTo > last) last = upTo;
-    const out = {}; let b = +anchor.amount || 0; out[anchor.date] = r2(b); let d = anchor.date;
+    const out = {}; let b = +anchor.amount || 0; out[anchor.date] = r2(b + lateSum); let d = anchor.date;
     while (d > first) { b -= (byDay[d] || 0); d = addDays(d, -1); out[d] = r2(b); }
-    b = +anchor.amount || 0; d = anchor.date;
+    b = (+anchor.amount || 0) + lateSum; d = anchor.date;
     while (d < last) { d = addDays(d, 1); b += (byDay[d] || 0); out[d] = r2(b); }
     return out;
   }

@@ -257,6 +257,16 @@ function finRules() {
     const sumL = shown + Math.max(0, L.toInvest || 0) + L.alsoHeld - L.missing;
     expect(F, Math.abs(sumL - L.balance) < 0.02, 'when short, the buckets do not add up to the accounts (' + sumL.toFixed(2) + ' vs ' + L.balance + ')');
   }
+  // A charge made on the same day as a balance reading, but after it, still comes off the balance (found Nov 25).
+  const lateFin = { tracker: { anchors: { 'Cash App': { amount: 50, date: '2026-01-10', set: '2026-01-10T12:00:00Z' } } } };
+  const lateM = { '2026-01': { txns: [
+    { d: '2026-01-09', a: -1, k: 'Cash App' },
+    { d: '2026-01-10', a: -5, k: 'Cash App', t: '2026-01-10T08:00:00Z' },
+    { d: '2026-01-10', a: -20, k: 'Cash App', t: '2026-01-10T18:00:00Z' },
+    { d: '2026-01-11', a: -10, k: 'Cash App' }] } };
+  const lb = Money.balances(lateFin, lateM, '2026-01-11');
+  expect(F, lb && lb.current === 20, 'a charge after the balance was read did not come off (' + (lb && lb.current) + ' vs 20)');
+  expect(F, lb && lb.series['2026-01-09'] === 55 && lb.series['2026-01-10'] === 30, 'a charge before the balance was read was counted twice going back');
   const rows = w.activity.flatMap((d) => d.rows);
   expect(F, rows.filter((r) => r.double).length === 2, 'the same charge twice on one day should be flagged');
   expect(F, rows.some((r) => r.ask), 'money sent to a person should ask what it was for');
