@@ -55,6 +55,7 @@
   }
 
   let key = null;
+  let cantLock = false;
   const READONLY = 'This key can only read, so it can\'t save. On GitHub, its Contents permission for my-app-data has to be "Read and write".';
   let keySource = null;
 
@@ -137,11 +138,18 @@
       return true;
     },
     // Is the key in use here not locked yet?
-    needsLock() { return !!key && !!window.KeyLock && !KeyLock.has(); },
+    needsLock() { return !!key && !!window.KeyLock && !KeyLock.has() && !cantLock; },
+    // This browser can't keep a locked key at all: the key is used for this visit only and never saved.
+    cantLock() { return cantLock; },
     // Lock the key in use and remove any plain copy. Throws 'needtap' when the phone wants a tap first.
     async lockNow() {
       if (!key || !window.KeyLock) return null;
-      const mode = await KeyLock.lock(key);
+      let mode;
+      try { mode = await KeyLock.lock(key); } catch (e) {
+        if (e.code !== 'nostore') throw e;
+        cantLock = true; // never kept as plain text: this visit only
+        mode = 'memory';
+      }
       try { localStorage.removeItem(OWN_KEY); } catch (e) { /* nothing plain kept */ }
       keySource = 'own';
       return mode;

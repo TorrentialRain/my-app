@@ -31,10 +31,17 @@
       open.onerror = () => reject(open.error);
       open.onsuccess = () => {
         const db = open.result;
-        const tx = db.transaction('k', mode);
-        const req = fn(tx.objectStore('k'));
+        let tx, req;
+        try {
+          tx = db.transaction('k', mode);
+          req = fn(tx.objectStore('k'));
+        } catch (e) {
+          // Some browsers can't keep a lock in storage at all (it throws right away): say so, never hang.
+          db.close(); reject(fail('nostore', 'This browser can\'t keep a lock.')); return;
+        }
         tx.oncomplete = () => { db.close(); resolve(req && req.result); };
         tx.onerror = () => { db.close(); reject(tx.error); };
+        tx.onabort = () => { db.close(); reject(fail('nostore', 'This browser can\'t keep a lock.')); };
       };
     });
   }
