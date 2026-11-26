@@ -560,6 +560,9 @@ async function newContext(browser, scheme, size, extra) {
       static now() { return Real.now() + shift; }
     }
     window.Date = CheckDate;
+    // The test browser has no Face ID; say so, like a phone or computer without one. (The Face ID lock's
+    // own check puts in a made-up Face ID after this.) Without it, making a passkey waits for a face forever.
+    if (window.PublicKeyCredential) window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable = async () => false;
   }, startAt);
   ctx.wrote = 0; ctx.refused = 0; ctx.badPaths = [];
   const box = ctx.box = { files: {}, ver: {}, n: 0, trap: null };
