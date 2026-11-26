@@ -149,7 +149,7 @@
   // ---------- Balances (fix 1: every balance has a date; charges after it always count) ----------
   function allTx(months) {
     const out = [];
-    for (const k of Object.keys(months || {})) for (const t of ((months[k] || {}).txns || [])) if (t && t.d && typeof t.a === 'number') out.push(t);
+    for (const k of Object.keys(months || {})) for (const t of ((months[k] || {}).txns || [])) if (t && t.d && typeof t.a === 'number' && !t.undone) out.push(t); // undone: a robot-added charge he undid
     return out;
   }
   function dailySeries(tx, anchor, upTo) {
@@ -451,8 +451,8 @@
   // ---------- Debt ----------
   function debts(fin, today) {
     const D = (fin && fin.debts) || {};
-    const pays = D.payments || [];
-    const items = (D.items || []).map((d) => {
+    const pays = (D.payments || []).filter((p) => !p.undone);
+    const items = (D.items || []).filter((d) => !d.undone).map((d) => {
       const mine = pays.filter((p) => p.debtId === d.id);
       const next = mine.filter((p) => !p.paid).sort((a, b) => (a.due < b.due ? -1 : 1))[0] || null;
       const paidSum = mine.filter((p) => p.paid).reduce((s, p) => s + +p.amount, 0);
@@ -473,7 +473,7 @@
   function wishItems(fin) {
     const lists = ((fin && fin.wishlists) || {}).lists || [];
     const out = [];
-    for (const l of lists) for (const i of (l.items || [])) out.push(Object.assign({ list: l.id, listName: l.name }, i));
+    for (const l of lists) for (const i of (l.items || [])) if (!i.undone) out.push(Object.assign({ list: l.id, listName: l.name }, i));
     return out;
   }
   function wishlists(fin) {

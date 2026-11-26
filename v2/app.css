@@ -765,3 +765,26 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
   .fi-grid { gap: 26px 12px; padding-top: 16px; }
   .fi-tile { min-height: 84px; padding: 26px 12px 10px; }
 }
+
+/* The robot's keep and undo tags (his pick, Nov 25): on the thing the robot changed, until he keeps it,
+   undoes it, or 7 days pass. Purple is the robot's own color, so a tag never looks like his own data. */
+:root { --rb: #5b3fd0; --rb-bg: #efeafd; --rb-ink: #1c1c1e; --rb-on: #ffffff; }
+@media (prefers-color-scheme: dark), (min-width: 900px) { :root { --rb: #b9a8ff; --rb-bg: #251f3b; --rb-ink: #ffffff; --rb-on: #140f26; } }
+.rb-tag { display: flex; align-items: center; gap: 2px; min-height: 44px; padding: 0 2px 0 12px; border-radius: 14px; background: var(--rb-bg); color: var(--rb-ink); font-size: 14px; line-height: 19px; text-align: left; }
+.rb-what { flex: 1; min-width: 0; padding: 6px 0; overflow-wrap: anywhere; }
+.rb-what b { color: var(--rb); font-weight: 700; }
+.rb-tag button { flex: none; width: 44px; height: 44px; border: 0; padding: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.rb-dot { width: 32px; height: 32px; border-radius: 16px; display: flex; align-items: center; justify-content: center; }
+.rb-keep .rb-dot { background: var(--rb); color: var(--rb-on); }
+.rb-undo .rb-dot { border: 2px solid var(--rb); color: var(--rb); }
+.fi-row + .rb-tag { margin: 0 12px 10px; }
+.fi-chips + .rb-tag, .fi-debtcard > .rb-tag, .fi-notes li > .rb-tag { margin-top: 10px; }
+.rb-strip { display: flex; flex-direction: column; gap: 8px; }
+.rb-strip .rb-tag { background: var(--card); box-shadow: var(--shadow); border-left: 4px solid var(--rb); border-radius: 16px; }
+.rb-mark { outline: 2px solid var(--rb); outline-offset: -2px; }
+@media (min-width: 900px) {
+  .pl-wrap { grid-template-rows: auto auto auto minmax(0, 1fr); }
+  .rb-strip { grid-column: 2; grid-row: 3; }
+  .pl-body { grid-row: 4; }
+  .pl-wrap:not(.has-rb) .pl-body { margin-top: -16px; }
+}

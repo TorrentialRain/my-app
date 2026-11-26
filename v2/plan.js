@@ -207,7 +207,7 @@
 
   function colorsOf(it) { return it.late ? LATE : (KINDS[it.kind] || KINDS.main); }
   function tipAttrs(it, when) {
-    return ' data-tip="' + esc(it.name) + '" data-when="' + esc(when || '') + '"';
+    return ' data-tip="' + esc(it.name) + '" data-when="' + esc(when || '') + '"' + (it.id && !it.task ? ' data-ev="' + esc(it.id) + '"' : '');
   }
   function whenOf(it) {
     if (it.task) return (it.late ? 'Overdue · ' : 'Due ') + it.tag;

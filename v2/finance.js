@@ -106,7 +106,7 @@
   }
   function totals() {
     const B = W.bal;
-    const each = B ? B.each.map((a) => '<span class="fi-chip">' + esc(a.name) + ' ' + M.money(a.amount) + '</span>').join('') : '';
+    const each = B ? B.each.map((a) => '<span class="fi-chip" data-acct="' + esc(a.account) + '">' + esc(a.name) + ' ' + M.money(a.amount) + '</span>').join('') : '';
     const sav = W.savings.rows.map((r) => '<span class="fi-chip">' + esc(r.name) + ' ' + M.money(r.amount) + (r.goal ? ' · For the ' + esc(r.goal) : '') + '</span>').join('');
     const asOf = W.savings.rows.map((r) => r.asOf).filter(Boolean).sort().pop();
     return '<div class="fi-two">' +
@@ -181,7 +181,7 @@
   // ----- Activity -----
   function activity() {
     const B = W.bal;
-    const each = B ? B.each.map((a) => '<span class="fi-chip">' + esc(a.name) + ' ' + M.money(a.amount) + '</span>').join('') : '';
+    const each = B ? B.each.map((a) => '<span class="fi-chip" data-acct="' + esc(a.account) + '">' + esc(a.name) + ' ' + M.money(a.amount) + '</span>').join('') : '';
     const most = Math.max(1, ...W.week.days.map((d) => d.spent));
     const week = W.week.days.map((d) => '<li><span>' + esc(d.label) + '</span><span class="fi-wbar"><i style="width:' + (d.spent / most * 100).toFixed(1) + '%"></i></span><span class="num">' + M.money(d.spent) + '</span></li>').join('');
     const days = W.activity.slice(0, actDays).map((d) => {
@@ -226,7 +226,7 @@
     const D = W.debts;
     const next = D.nextDue ? '<p class="fi-note">Next due ' + M.longDay(D.nextDue.due) + ' · ' + M.money(D.nextDue.amount) + '</p>' : '';
     const free = !D.open.length ? '<span class="fi-chip on">' + (D.debtFreeSince ? 'Debt-free since ' + M.longDay(D.debtFreeSince) : 'Debt-free') + '</span>' : '';
-    const cards = D.open.map((d) => '<section class="fi-card fi-debtcard"><div class="fi-cardhead"><div><h2>' + esc(d.name) + '</h2>' + (d.owedTo ? '<p class="fi-note">Owed to ' + esc(d.owedTo) + '</p>' : '') + '</div><div class="fi-right"><b>' + M.money(d.owed) + ' left</b><span class="fi-note">Of ' + M.money(d.total) + '</span></div></div>' +
+    const cards = D.open.map((d) => '<section class="fi-card fi-debtcard" data-debt="' + esc(d.id) + '"><div class="fi-cardhead"><div><h2>' + esc(d.name) + '</h2>' + (d.owedTo ? '<p class="fi-note">Owed to ' + esc(d.owedTo) + '</p>' : '') + '</div><div class="fi-right"><b>' + M.money(d.owed) + ' left</b><span class="fi-note">Of ' + M.money(d.total) + '</span></div></div>' +
       (d.next ? '<p class="fi-line2">Next: ' + M.money(d.next.amount) + ' on ' + M.longDay(d.next.due) + '</p>' : '') +
       '<span class="fi-bar g-debt"><i style="width:' + (d.paidShare * 100).toFixed(1) + '%"></i></span><p class="fi-note">' + Math.round(d.paidShare * 100) + '% paid off</p>' +
       (d.fromEmail ? '<span class="fi-chip">Added from email</span>' : '') + '</section>').join('');
@@ -246,7 +246,7 @@
   }
   function noteRow(n) {
     const st = n.status === 'done' ? ['Done', 'on'] : n.status === 'question' ? ['Question', 'q'] : ['Waiting', ''];
-    return '<li><p>' + esc(n.text) + '</p><div class="fi-nmeta"><span class="fi-tag ' + st[1] + '">' + st[0] + '</span><span class="fi-note">' + (n.at ? M.longDay(M.todayISO(new Date(n.at))) : '') + '</span></div>' + (n.answer ? '<p class="fi-note">' + esc(n.answer) + '</p>' : '') + '</li>';
+    return '<li data-note="' + esc(n.id) + '"><p>' + esc(n.text) + '</p><div class="fi-nmeta"><span class="fi-tag ' + st[1] + '">' + st[0] + '</span><span class="fi-note">' + (n.at ? M.longDay(M.todayISO(new Date(n.at))) : '') + '</span></div>' + (n.answer ? '<p class="fi-note">' + esc(n.answer) + '</p>' : '') + '</li>';
   }
 
   function card(title, inner) { return '<section class="fi-card"><div class="fi-cardhead"><h2>' + esc(title) + '</h2></div>' + inner + '</section>'; }
@@ -531,13 +531,14 @@
   window.addEventListener('online', catchUp);
 
   const Finance = {
-    async load(Data) {
+    // keepTab: a reload after an undo stays on the tab he is looking at.
+    async load(Data, opts) {
       store = Data;
       S.start();
       const [fin, months, notes] = await Promise.all([Data.read('data/fin.json'), Data.read('data/fin.config.months.json'), Data.readOptional('data/notes.json')]);
       base = { fin: fin || {}, months: months || {}, notes };
       lastRead = Date.now();
-      tab = 'spending'; // Finance always opens on Spending (his pick, Nov 24)
+      if (!(opts && opts.keepTab)) tab = 'spending'; // Finance always opens on Spending (his pick, Nov 24)
       render();
       ready = true;
       document.documentElement.dataset.finance = 'ready';

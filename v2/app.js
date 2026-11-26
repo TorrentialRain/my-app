@@ -118,6 +118,8 @@
       Todo.load(Data).catch((e) => { say('todo', e.message, true); Todo.showError(e.message); keyTrouble(e); }),
       Plan.load(Data).catch((e) => { say('plan', e.message, true); Plan.showError(e.message); keyTrouble(e); }),
       Finance.load(Data).catch((e) => { say('finance', e.message, true); Finance.showError(e.message); keyTrouble(e); }),
+      // The robot's keep and undo tags. A problem here never stops the pages.
+      window.Robot ? Robot.load(Data).catch(() => {}) : null,
     ]);
     document.documentElement.dataset.loaded = 'yes';
   }

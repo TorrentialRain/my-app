@@ -39,7 +39,7 @@ const TASKS = {
   b: { title: 'Call about the phone bill', status: 'open', kind: 'task', section: 'active', due: at(-3), priority: 6 },
   c: { title: 'Get the oil changed', status: 'open', kind: 'task', section: 'active', due: null, priority: 7,
     subtasks: [{ text: 'Book a time', done: true }, { text: 'Drop the car off', done: false }] },
-  l: { title: 'A long task name that has to wrap onto a second line without running under its picture or off the screen', status: 'open', kind: 'task', section: 'active', due: null, priority: 8 },
+  l: { title: 'A long task name that has to wrap onto a second line without running under its picture or off the screen', status: 'open', kind: 'task', section: 'active', due: null, priority: 8, myNote: 'From the class email' },
   m: { title: 'Bring the Genki book', status: 'open', kind: 'task', section: 'active', course: 'JPN A101', due: at(4), priority: 9 },
   d: { title: 'Hear back about the dorm repair', status: 'open', kind: 'task', section: 'onhold', due: null, priority: 10 },
   e: { title: 'Study for the kanji quiz', status: 'open', kind: 'task', section: 'jpn', course: 'JPN A101', due: at(6), priority: 1 },
@@ -59,6 +59,7 @@ const SUGS = {
 const Plan = require('../plan.js');
 const Money = require('../money.js');
 const FinSave = require('../finsave.js');
+const Robot = require('../robot.js');
 const TODAY = Plan.dayKey(NOW);
 const T = (dayOff, h, m) => new Date(Plan.dayStart(Plan.addDays(TODAY, dayOff)) + ((h * 60 + (m || 0)) * 60000)).toISOString();
 const ev = (id, summary, dayOff, h1, m1, h2, m2) => ({ id, summary, start: { dateTime: T(dayOff, h1, m1) }, end: { dateTime: T(dayOff, h2, m2) } });
@@ -102,6 +103,7 @@ const TX = [
   ['t11', -1, -18.4, 'First National Bank Alaska', 'Sample Bookshop with a rather long name that keeps going', 'shopping', '30'],
   ['t12', 0, -6.25, 'Cash App', 'Sample Coffee · Cash App Card', 'food', '30', 1],
 ].map(([id, n, a, k, s, cat, u, p]) => ({ id, d: dayN(n), a, k, s, cat, c: cat, u, m: 0, p: p || 0 }));
+TX.find((t) => t.id === 't12').name = 'Coffee'; // the robot's label, which its tag can undo
 const MONTHS = {};
 for (const t of TX) (MONTHS[t.d.slice(0, 7)] = MONTHS[t.d.slice(0, 7)] || { txns: [] }).txns.push(t);
 const FIN = {
@@ -114,8 +116,26 @@ const FIN = {
   exceptions: { items: [{ id: 'x1', name: 'Concert ticket', amount: 45, bucket: '30', when: dayN(8) }] },
   storeRules: { items: [{ id: 'r1', store: 'Corner Store', cat: 'groceries', u: '50', at: at(-3) }] },
 };
+// The robot's changes, as it logs them: each shows a keep and undo tag on the changed thing (robot.js).
+const MONTH12 = dayN(0).slice(0, 7);
+const LOG = { items: [
+  { id: 'rb1', at: at(0, -1), who: 'robot', what: 'Added a note from the class email', why: 'A UAA email', file: 'data/tasks.json',
+    robot: { kind: 'task', ref: 'l', sets: [{ path: ['l', 'myNote'], after: 'From the class email' }] } },
+  { id: 'rb2', at: at(0, -1), who: 'robot', what: 'Named this charge Coffee', why: 'Same store as last week', file: 'data/fin.config.months.json',
+    robot: { kind: 'charge', ref: 't12', sets: [{ path: [MONTH12, 'txns', { id: 't12' }, 'name'], after: 'Coffee' }] } },
+  { id: 'rb3', at: at(0, -2), who: 'robot', what: 'Set Cash App to the balance in the email', why: 'Balance email', file: 'data/fin.json',
+    robot: { kind: 'balance', ref: 'Cash App', sets: [{ path: ['tracker', 'anchors', 'Cash App', 'amount'], before: 25.1, after: 21.6 }] } },
+  { id: 'rb4', at: at(0, -2), who: 'robot', what: 'Took the $40 payment off', why: 'Payment email', file: 'data/fin.json',
+    robot: { kind: 'debt', ref: 'd1', sets: [{ path: ['debts', 'items', { id: 'd1' }, 'owed'], before: 160, after: 120 }] } },
+  { id: 'rb5', at: at(0, -3), who: 'robot', what: 'Moved Creekside Eatery Dinner to 4:30 PM', why: 'Dining hours email', file: null,
+    robot: { kind: 'event', ref: 'main:din', calendar: true } },
+  { id: 'rb6', at: at(-8), who: 'robot', what: 'Too old to show', file: 'data/tasks.json', robot: { kind: 'task', ref: 'b', sets: [{ path: ['b', 'priority'], before: 1, after: 6 }] } },
+  { id: 'rb7', at: at(-1), who: 'robot', what: 'Already kept', file: 'data/tasks.json', robot: { kind: 'task', ref: 'c', sets: [{ path: ['c', 'priority'], before: 1, after: 7 }] } },
+  { id: 'rb7a', at: at(-1, 1), who: 'Josh, in the new Hub', what: 'Kept: Already kept', answers: 'rb7', answer: 'kept' },
+] };
 const SAMPLE = {
   'meta/app.json': { name: 'sample' },
+  'data/log.json': LOG,
   'data/tasks.json': TASKS,
   'data/suggestions.json': SUGS,
   'data/fin.json': FIN,
@@ -1135,8 +1155,32 @@ async function darkness(page) {
   });
 }
 
+// ---- 1d. The robot's keep and undo rules, on their own ----
+function robotRules() {
+  console.log('Checking the keep and undo rules');
+  const R = 'robot rules';
+  const open = Robot.openLines(LOG, NOW).map((l) => l.id);
+  expect(R, same(open.slice().sort(), ['rb1', 'rb2', 'rb3', 'rb4', 'rb5']), 'tags should show for open robot changes from the last 7 days only: got ' + open);
+  const L = (sets, file) => ({ id: 'x', who: 'robot', file: file || 'data/fin.json', robot: { kind: 'debt', ref: 'd1', sets } });
+  const owed = [{ path: ['debts', 'items', { id: 'd1' }, 'owed'], before: 160, after: 120 }];
+  let r = Robot.undo('data/fin.json', FIN, L(owed), at(0));
+  expect(R, r.result === 'undone' && r.data.debts.items[0].owed === 160 && FIN.debts.items[0].owed === 120, 'undo should put the old value back (on a copy)');
+  const again = Robot.undo('data/fin.json', r.data, L(owed), at(0));
+  expect(R, again.result === 'undone' && again.data === null, 'undoing twice should change nothing the second time');
+  const moved = JSON.parse(JSON.stringify(FIN)); moved.debts.items[0].owed = 99;
+  r = Robot.undo('data/fin.json', moved, L(owed.concat([{ path: ['tracker', 'anchors', 'Cash App', 'amount'], before: 25.1, after: 21.6 }])), at(0));
+  expect(R, r.result === 'changed' && r.data === null, 'if anything changed since the robot did it, undo must touch nothing (newest data wins)');
+  r = Robot.undo('data/tasks.json', TASKS, L([{ path: ['l', 'myNote'], after: 'From the class email' }], 'data/tasks.json'), at(0));
+  expect(R, r.result === 'undone' && !('myNote' in r.data.l) && r.shrink > 0, 'undoing a field the robot added should take that field away, and only it');
+  r = Robot.undo('data/tasks.json', TASKS, L([{ path: ['m'], added: true }], 'data/tasks.json'), at(0));
+  expect(R, r.data && r.data.m.status === 'dropped' && r.data.m.droppedBy === 'undo' && Object.keys(r.data).length === Object.keys(TASKS).length, 'undoing a task the robot added should move it to Deleted, not wipe it');
+  r = Robot.undo('data/fin.config.months.json', MONTHS, L([{ path: [MONTH12, 'txns', { id: 't12' }], added: true }], 'data/fin.config.months.json'), at(0));
+  expect(R, r.data && !Money.allTx(r.data).some((t) => t.id === 't12') && Robot.size(r.data) > Robot.size(MONTHS), 'undoing a charge the robot added should leave it out of the pages without deleting it');
+}
+
 async function run() {
   rules();
+  robotRules();
   planRules();
   finRules();
   await saveRules();
@@ -1368,6 +1412,56 @@ async function run() {
   await waitSaved(S + ' after a lost reply');
   file = sctx.box.files['data/tasks.json'];
   expect(S, file.c.status === 'done' && file.m.status === 'done' && (file.c.changeIds || []).length === 1, 'after a lost reply the change landed ' + (file.c.changeIds || []).length + ' times, or the next change did not save');
+
+  // The robot's keep and undo tags: on the changed thing; X puts it back, the check keeps it; each answer is one log line.
+  const RB = 'keep and undo';
+  const rbSaved = (where) => sp.waitForFunction(() => document.documentElement.dataset.robot === 'saved', null, { timeout: 8000 })
+    .catch(async () => problem(where, 'the answer did not save (' + (await sp.evaluate(() => document.documentElement.dataset.robot)) + ')'));
+  const answers = () => (sctx.box.files['data/log.json'].items || []).filter((l) => l.answers);
+  await tapTab(sp, 'all');
+  expect(RB, await sp.locator('.card[data-id="l"] .rb-tag').isVisible(), 'the robot\'s note on a task should carry a keep and undo tag');
+  expect(RB, !(await sp.locator('.card[data-id="b"] .rb-tag, .card[data-id="c"] .rb-tag').count()), 'a tag older than 7 days, or already kept, should not show');
+  await look(sp, RB + ' TO-DO tag', phone);
+  await sp.screenshot({ path: path.join(OUT, 'light-todo-robot-tag.png') });
+  await sp.tap('.card[data-id="l"] .rb-undo');
+  await rbSaved(RB + ' undo a task change');
+  expect(RB, !('myNote' in sctx.box.files['data/tasks.json'].l), 'undo should take the robot\'s note off the task');
+  await settle(sp, 400);
+  expect(RB, !(await sp.locator('.card[data-id="l"] .rb-tag').count()) && !/class email/.test(await sp.locator('.card[data-id="l"]').textContent()), 'after undo the tag and the note should be gone from the card');
+  await sp.tap('.tab[data-tab="finance"]');
+  await settle(sp);
+  await finReady(sp);
+  await sp.tap('.fi-tabs [data-fi-tab="spending"]');
+  await settle(sp, 200);
+  expect(RB, await sp.locator('#page-finance .fi-chips + .rb-tag').first().isVisible(), 'the robot\'s balance fix should carry a tag');
+  await sp.tap('.fi-tabs [data-fi-tab="activity"]');
+  await settle(sp, 200);
+  expect(RB, await sp.locator('[data-tx="t12"] + .rb-tag').isVisible(), 'the robot\'s charge name should carry a tag under its row');
+  await look(sp, RB + ' Activity tags', phone);
+  await sp.screenshot({ path: path.join(OUT, 'light-finance-robot-tags.png') });
+  const monthsBefore = JSON.stringify(sctx.box.files['data/fin.config.months.json']);
+  await sp.tap('[data-tx="t12"] + .rb-tag .rb-keep');
+  await rbSaved(RB + ' keep a charge name');
+  expect(RB, JSON.stringify(sctx.box.files['data/fin.config.months.json']) === monthsBefore, 'keep should change nothing in the money files');
+  expect(RB, answers().filter((l) => l.answers === 'rb2' && l.answer === 'kept').length === 1, 'keep should add one line to the change log');
+  await sp.tap('.fi-tabs [data-fi-tab="debt"]');
+  await settle(sp, 200);
+  await sp.tap('[data-debt="d1"] .rb-undo');
+  await rbSaved(RB + ' undo a debt change');
+  expect(RB, sctx.box.files['data/fin.json'].debts.items.find((d) => d.id === 'd1').owed === 160, 'undo should put the debt back to what it was');
+  await settle(sp, 400);
+  expect(RB, /\$160\.00 left/.test(await sp.locator('[data-debt="d1"]').textContent()), 'the Debt page should show the amount put back');
+  await sp.tap('.tab[data-tab="plan"]');
+  await settle(sp);
+  await planReady(sp);
+  expect(RB, await sp.locator('[data-rb-plan] .rb-tag').isVisible() && await sp.locator('[data-ev="main:din"].rb-mark').count() > 0, 'a calendar change should list its tag above the calendar and outline the event');
+  await lookPlan(sp, RB + ' Plan tag', phone, 'light-plan-robot-tag');
+  await sp.tap('[data-rb-plan] .rb-undo');
+  await rbSaved(RB + ' undo a calendar change');
+  expect(RB, answers().some((l) => l.answers === 'rb5' && l.answer === 'undone' && l.request === true) && !(await sp.locator('[data-rb-plan]').isVisible()), 'undoing a calendar change should ask the robot to put it back, and the tag should go');
+  expect(RB, answers().filter((l) => l.answers !== 'rb7').length === 4 && new Set(answers().map((l) => l.answers)).size === answers().length, 'each answer should be one log line');
+  await sp.tap('.tab[data-tab="todo"]');
+  await settle(sp);
 
   // Finance saving: a Quick-budget note, a fixed charge, and a Plan message, each saved once, each with a change-log line.
   const FS = 'Finance saving';
