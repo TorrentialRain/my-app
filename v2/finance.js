@@ -228,6 +228,7 @@
     const free = !D.open.length ? '<span class="fi-chip on">' + (D.debtFreeSince ? 'Debt-free since ' + M.longDay(D.debtFreeSince) : 'Debt-free') + '</span>' : '';
     const cards = D.open.map((d) => '<section class="fi-card fi-debtcard" data-debt="' + esc(d.id) + '"><div class="fi-cardhead"><div><h2>' + esc(d.name) + '</h2>' + (d.owedTo ? '<p class="fi-note">Owed to ' + esc(d.owedTo) + '</p>' : '') + '</div><div class="fi-right"><b>' + M.money(d.owed) + ' left</b><span class="fi-note">Of ' + M.money(d.total) + '</span></div></div>' +
       (d.next ? '<p class="fi-line2">Next: ' + M.money(d.next.amount) + ' on ' + M.longDay(d.next.due) + '</p>' : '') +
+      (d.auto ? '<p class="fi-line2">Moved out of savings since ' + M.longDay(d.since) + '. Moving money back in pays it down.</p>' : '') +
       '<span class="fi-bar g-debt"><i style="width:' + (d.paidShare * 100).toFixed(1) + '%"></i></span><p class="fi-note">' + Math.round(d.paidShare * 100) + '% paid off</p>' +
       (d.fromEmail ? '<span class="fi-chip">Added from email</span>' : '') + '</section>').join('');
     const paid = D.done.length ? '<section class="fi-card fi-last"><button type="button" class="fi-fold" data-show-paid aria-expanded="' + showPaid + '">Paid off · ' + D.done.length + ic(ICON.chev, 18) + '</button>' +

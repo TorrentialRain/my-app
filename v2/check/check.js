@@ -254,6 +254,24 @@ function finRules() {
     expect(F, Math.abs(sum - B.balance) < 0.02, 'the buckets do not add up to the accounts (' + sum.toFixed(2) + ' vs ' + B.balance + ')');
     expect(F, B.tiles.some((t) => t.key === 'debt' && t.name === 'Total debt'), 'there is no Total debt bucket');
   }
+  // Money taken out of savings is debt owed to Savings; putting money back pays it down, never below zero;
+  // wishlist money kept in a savings pot is left out both ways (Josh, Nov 26).
+  {
+    const sv = (id, d, a, n, extra) => Object.assign({ id, d, a, n, s: n, u: 'savings', k: 'Sample Bank' }, extra || {});
+    const sf = { savings: { other: [{ name: 'Sample Pot', amount: 30, goal: 'Sample Item' }] },
+      wishlists: { lists: [{ id: 'l1', name: 'Sample list', items: [{ id: 'w1', name: 'Sample Item', amount: 60, saved: 30, setAside: [{ amount: 30, in: 'Sample Pot' }] }] }] },
+      debts: { items: [{ id: 'dh', name: 'Took money from savings', owedTo: 'Savings', owed: 40, total: 40 }] } };
+    const sm = { '2026-01': { txns: [sv('s1', '2026-01-02', 100, 'From savings'), sv('s2', '2026-01-03', -150, 'To savings'),
+      sv('s3', '2026-01-04', 40, 'From savings'), sv('s4', '2026-01-05', -10, 'To savings'),
+      sv('s5', '2026-01-06', -30, 'Moved to Sample Pot'), sv('s6', '2026-01-07', 30, 'From Sample Pot'), sv('s7', '2026-01-08', 25, 'Spent on its item', { wish: 'w1' })] } };
+    const o = Money.owedToSavings(sf, sm);
+    expect(F, o && o.owed === 30 && o.total === 40 && o.owedTo === 'Savings', 'money out of savings did not show as owed to Savings (' + JSON.stringify(o && [o.owed, o.total]) + ')');
+    const SD = Money.debts(sf, '2026-01-09', sm);
+    expect(F, SD.totalOwed === 30 && SD.open.length === 1, 'a hand-made debt to savings was counted on top of the worked-out one');
+    const back = JSON.parse(JSON.stringify(sm)); back['2026-01'].txns.push(sv('s8', '2026-01-09', -50, 'To savings'));
+    const ob = Money.owedToSavings(sf, back);
+    expect(F, ob && ob.owed === 0 && ob.paidOff === '2026-01-09', 'putting money back into savings did not pay off what was owed');
+  }
   // When the accounts hold less than the plan, no bucket may show money that isn't there, Gas and
   // Subscriptions included (Josh's yes, Nov 25), and the buckets still add up to the accounts.
   const lowFin = JSON.parse(JSON.stringify(FIN));

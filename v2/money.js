@@ -449,10 +449,40 @@
   }
 
   // ---------- Debt ----------
-  function debts(fin, today) {
+  // Money taken out of savings is debt owed to Savings (Josh, Nov 26), worked out from the records every time,
+  // so nothing has to remember to add it: a move out adds to it, a move back in pays it down (never below zero).
+  // Wishlist money kept in a savings pot (like the GPU money in Cash App Savings) is left out both ways:
+  // spending it on its item isn't debt (his pick, Nov 26: "No to wishlist").
+  function wishPots(fin) {
+    const names = new Set();
+    for (const i of wishItems(fin)) for (const s of (i.setAside || [])) if (s.in) names.add(String(s.in).toLowerCase());
+    const other = ((fin && fin.savings) || {}).other;
+    for (const o of (Array.isArray(other) ? other : [])) if (o && o.goal && o.name) names.add(String(o.name).toLowerCase());
+    return [...names];
+  }
+  function owedToSavings(fin, months) {
+    const rules = storeRules(fin);
+    const pots = wishPots(fin);
+    const isWish = (t) => !!t.wish || pots.some((p) => ((t.n || '') + ' ' + (t.s || '')).toLowerCase().includes(p));
+    const moves = allTx(months).filter((t) => bucketOf(t, rules) === 'savings' && !isWish(t)).sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : 0));
+    let owed = 0, total = 0, since = null, paidOff = null;
+    for (const t of moves) {
+      if (t.a > 0) { if (owed <= 0.005) { total = 0; since = t.d; } owed += t.a; total += t.a; }
+      else if (owed > 0.005) { owed = Math.max(0, owed + t.a); if (owed <= 0.005) { owed = 0; paidOff = t.d; } }
+    }
+    owed = r2(owed); total = r2(total);
+    if (!total) return null;
+    return { id: 'owed-to-savings', name: 'Taken from savings', owedTo: 'Savings', owed, total, paidShare: total > 0 ? Math.max(0, Math.min(1, 1 - owed / total)) : 1,
+      next: null, fromEmail: false, auto: true, since, paidOff: owed > 0.005 ? null : paidOff,
+      note: 'Worked out from money moved out of savings since ' + (since ? monthDay(since) : 'the start') + '. Moving money back into savings pays it down.' };
+  }
+  // A hand-made debt to savings is covered by the worked-out one above, so it isn't counted twice.
+  const isSavingsDebt = (d) => /^savings$/i.test((d.owedTo || '').trim()) || /from savings/i.test(d.name || '');
+  function debts(fin, today, months) {
     const D = (fin && fin.debts) || {};
     const pays = (D.payments || []).filter((p) => !p.undone);
-    const items = (D.items || []).filter((d) => !d.undone).map((d) => {
+    const auto = months ? owedToSavings(fin, months) : null;
+    const items = (D.items || []).filter((d) => !d.undone && !(auto && isSavingsDebt(d) && +d.owed > 0.005)).map((d) => {
       const mine = pays.filter((p) => p.debtId === d.id);
       const next = mine.filter((p) => !p.paid).sort((a, b) => (a.due < b.due ? -1 : 1))[0] || null;
       const paidSum = mine.filter((p) => p.paid).reduce((s, p) => s + +p.amount, 0);
@@ -461,6 +491,7 @@
       return { id: d.id, name: d.name, owedTo: d.owedTo || '', owed, total, paidShare: total > 0 ? Math.max(0, Math.min(1, 1 - owed / total)) : 1,
         next: next ? { amount: +next.amount, due: next.due } : null, fromEmail: d.source === 'email', note: d.note || '' };
     });
+    if (auto) items.push(auto);
     const open = items.filter((d) => d.owed > 0.005).sort((a, b) => ((a.next && a.next.due) || '9') < ((b.next && b.next.due) || '9') ? -1 : 1);
     const totalOwed = r2(open.reduce((s, d) => s + d.owed, 0));
     const totalAll = open.reduce((s, d) => s + d.total, 0);
@@ -492,7 +523,7 @@
     const rules = storeRules(fin);
     const bal = balances(fin, months, today);
     const B = budget(fin, months, today, bal);
-    const D = debts(fin, today);
+    const D = debts(fin, today, months);
     if (B) B.tiles.push({ key: 'debt', name: 'Total debt', group: 'debt', left: D.totalOwed, of: D.totalOwed, paidShare: D.paidShare });
     const periods = payPeriods(fin, months, today);
     return {
@@ -516,7 +547,7 @@
   }
 
   const Money = { TZ, CATS, BUCKETS, PICK_CATS, PICK_BUCKETS, GROUPS, r2, todayISO, addDays, longDay, dayName, monthDay, money, money0, signed,
-    allTx, catOf, bucketOf, bucketName, nameOf, cleanName, storeKey, balances, period, nextPayday, budget, pieFor, payPeriods, activity, lastWeek, debts, wishlists, needsLabel, missed, work };
+    allTx, catOf, bucketOf, bucketName, nameOf, cleanName, storeKey, balances, period, nextPayday, budget, pieFor, payPeriods, activity, lastWeek, debts, owedToSavings, wishlists, needsLabel, missed, work };
   if (typeof window !== 'undefined') window.Money = Money;
   if (typeof module !== 'undefined') module.exports = Money;
 })();
