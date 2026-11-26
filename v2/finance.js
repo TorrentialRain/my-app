@@ -240,7 +240,7 @@
     const notes = W.notes.slice().reverse().map(noteRow).join('');
     const planned = W.planned.map((x) => '<li><span><b>' + esc(x.name) + '</b><span>' + (x.when ? M.longDay(x.when) : 'Next paycheck') + ' · From ' + esc(M.BUCKETS[x.bucket] || 'Wants') + '</span></span><span class="num">' + M.money(x.amount) + '</span></li>').join('');
     return '<div class="fi-cols"><div class="fi-col"><section class="fi-card"><form class="fi-noteform" data-note-form autocomplete="off"><label class="fld"><span>New note</span><textarea rows="3" maxlength="600" placeholder="For example: Lent $40 to a friend, paying me back December 5"></textarea></label>' +
-      '<p class="fi-note">Claude reads notes at 7:42 AM and 8:42 PM once the new money robot is running. Until then, ask Claude in chat to read them.</p><button type="submit" class="wide">Send</button></form></section>' +
+      '<p class="fi-note">Claude reads notes at 7:42 AM and 8:42 PM.</p><button type="submit" class="wide">Send</button></form></section>' +
       (planned ? '<section class="fi-card"><div class="fi-cardhead"><h2>Planned</h2></div><ul class="fi-rules">' + planned + '</ul></section>' : '') + '</div><div class="fi-col">' +
       '<section class="fi-card"><div class="fi-cardhead"><h2>Notes</h2></div>' + (notes ? '<ul class="fi-notes">' + notes + '</ul>' : '<p class="fi-note">No notes yet.</p>') + '</section></div></div>';
   }
