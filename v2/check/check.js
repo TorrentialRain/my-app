@@ -1494,7 +1494,7 @@ async function pcFinance(pp, scheme, size) {
     const r = (s) => document.querySelector(s).getBoundingClientRect();
     const p = document.getElementById('page-finance');
     const side = r('.fi-side'), main = r('.fi-main'), chart = r('.fi-chart'), bk = r('.fi-buckets');
-    const cols = [...document.querySelectorAll('.fi-cols > .fi-col')].map((c) => Math.round(c.getBoundingClientRect().height) + ' (' + [...c.children].map((k) => (k.className.split(' ').pop()) + ' ' + Math.round(k.getBoundingClientRect().height)).join(', ') + ')');
+    const cols = [...document.querySelectorAll('.fi-cols > .fi-col')].map((c) => Math.round(c.getBoundingClientRect().height) + ' (' + [...c.children].map((k) => (k.className.split(' ').pop()) + ' ' + Math.round(k.getBoundingClientRect().height) + (k.children.length > 1 && k.children.length < 6 ? ' [' + [...k.children].map((j) => Math.round(j.getBoundingClientRect().height)).join('/') + ']' : '')).join(', ') + ')');
     const m = getComputedStyle(p).backgroundColor.match(/[\d.]+/g).map(Number);
     return { left: side.width > 0 && side.right <= main.left, sideBySide: chart.right <= bk.left && Math.abs(chart.top - bk.top) < 4,
       fits: p.scrollHeight <= p.clientHeight + 1, over: p.scrollHeight - p.clientHeight, cols: cols.join(' and '), phoneTabs: getComputedStyle(document.querySelector('.fi-tabs')).display,

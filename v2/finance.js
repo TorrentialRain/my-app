@@ -93,14 +93,17 @@
       if (!width) return;
       // How far the left side alone runs past the bottom (less than 0: room to spare).
       const over = page.scrollHeight - page.clientHeight - Math.max(0, right - left);
-      const next = Math.max(150, Math.min(300, Math.round(pcH - over * (600 / width))));
+      const next = Math.max(100, Math.min(300, Math.round(pcH - over * (600 / width))));
       if (Math.abs(next - pcH) < 2) return;
       pcH = next;
       bodyEl.querySelector('.fi-chart').outerHTML = chart();
     }
   }
   let refit = 0;
-  window.addEventListener('resize', () => { clearTimeout(refit); refit = setTimeout(fitGraph, 150); });
+  const refitSoon = () => { clearTimeout(refit); refit = setTimeout(fitGraph, 150); };
+  window.addEventListener('resize', refitSoon);
+  // A robot tag added after the page is drawn makes the left side taller, so the graph is fitted again then too.
+  if (window.ResizeObserver) new ResizeObserver(refitSoon).observe(bodyEl);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => fitGraph());
 
   // ----- Spending -----
