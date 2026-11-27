@@ -819,6 +819,7 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
   .fi-side .fi-tab { width: 100%; min-height: 48px; justify-content: flex-start; padding: 0 14px; }
   .fi-main { flex: 1; gap: 12px; }
   .fi-wgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fi-card.fi-wish { padding: 14px 76px 16px 16px; gap: 8px; }
   .fi-fabs { bottom: 24px; }
   .fi-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 540px); gap: 24px; align-items: start; }
   .fi-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
