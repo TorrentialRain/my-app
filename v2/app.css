@@ -677,6 +677,8 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
 .fi-pintext { fill: #000000; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .fi-pindot { fill: var(--card); stroke: #30d158; stroke-width: 2.5; }
 .fi-two { display: flex; flex-direction: column; gap: 14px; }
+/* The savings amount is the same blue as the graph's savings line, as in the approved PC mockup (Nov 26). */
+.fi-two > .fi-card:last-child .fi-big { color: #64a0ff; }
 .fi-list .fi-out .sq { background: transparent; box-shadow: inset 0 0 0 2px var(--debt); }
 .fi-list .fi-kept { font-weight: 600; }
 
