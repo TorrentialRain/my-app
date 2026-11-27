@@ -59,6 +59,8 @@
   }
   const longDayFmt = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'long', month: 'short', day: 'numeric' });
   function longDay(key) { const [y, m, d] = key.split('-').map(Number); return longDayFmt.format(new Date(Date.UTC(y, m - 1, d))); }
+  const shortLongFmt = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric' });
+  function shortLong(key) { const [y, m, d] = key.split('-').map(Number); return shortLongFmt.format(new Date(Date.UTC(y, m - 1, d))); }
 
   // ---------- Tasks (the same rules as TO-DO) ----------
   const isTask = (t) => t && t.kind !== 'question';
@@ -131,17 +133,21 @@
   const dueLine = (n) => (n ? n + ' due today' : 'Nothing due today');
 
   // The days the calendar copy covers. Days outside it say "not copied yet", never "nothing on".
+  // Each calendar is checked on its own (fix, Nov 26): the main calendar is copied a year ahead and the others
+  // 45 days, so a day counts as copied when ANY calendar covers it, and it shows every calendar that does.
   function rangeOf(calendar) {
-    let from = null, to = null;
+    const cals = [];
     for (const cal of Object.values(calendar || {})) {
       if (!cal || !kindOf(cal.name) || !cal.from || !cal.to) continue;
-      const f = String(cal.from).slice(0, 10), t = String(cal.to).slice(0, 10);
-      if (!from || f > from) from = f;
-      if (!to || t < to) to = t;
+      cals.push({ name: cal.name, from: String(cal.from).slice(0, 10), to: String(cal.to).slice(0, 10) });
     }
-    return { from, to };
+    const from = cals.length ? cals.map((c) => c.from).sort()[0] : null;
+    const to = cals.length ? cals.map((c) => c.to).sort().pop() : null;
+    return { from, to, cals };
   }
-  const loaded = (r, key) => !r.from || (key >= r.from && key <= r.to);
+  // The calendars copied for one day.
+  const coveredBy = (r, key) => (r.cals || []).filter((c) => key >= c.from && key <= c.to).map((c) => c.name);
+  const loaded = (r, key) => !(r.cals && r.cals.length) || coveredBy(r, key).length > 0;
 
   // Side by side, like Google Calendar: things that overlap share the width.
   function layout(list) {
@@ -179,7 +185,7 @@
     return { key, allDay, timed: layout(timed) };
   }
 
-  const Pure = { KINDS, kindOf, dayKey, dayStart, addDays, weekStart, eventsOf, dueOf, overdue, dueToday, dueLine, rangeOf, loaded, dayOf, shortDay };
+  const Pure = { KINDS, kindOf, dayKey, dayStart, addDays, weekStart, eventsOf, dueOf, overdue, dueToday, dueLine, rangeOf, loaded, coveredBy, dayOf, shortDay };
   if (typeof module !== 'undefined') module.exports = Pure;
   if (typeof window === 'undefined') return;
 
@@ -407,8 +413,10 @@
     const range = rangeOf(calendar);
     wrap.dataset.view = view;
     $$('[data-view-pick]', page).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.viewPick === view)));
-    $('.pl-date', page).textContent = picked === todayKey ? longDay(todayKey) : longDay(picked);
-    $('.pl-today', page).hidden = weekStart(picked) === weekStart(todayKey) && (view === 'week' || pc.matches || picked === todayKey);
+    const away = !(weekStart(picked) === weekStart(todayKey) && (view === 'week' || pc.matches || picked === todayKey));
+    // On the phone the date shares its line with Today, so it shortens ("Wed, Nov 25") while Today shows.
+    $('.pl-date', page).textContent = away && !pc.matches ? shortLong(picked) : longDay(picked);
+    $$('.pl-today', page).forEach((b) => { b.hidden = !away; });
     renderTop(tasks, now);
     renderDay(items, tasks, now, range);
     renderWeek(items, tasks, now, range);
@@ -438,13 +446,15 @@
     bubble.innerHTML = '<span class="bn">' + esc(name) + '</span>' + (el.dataset.when ? '<span class="bw">' + esc(el.dataset.when) + '</span>' : '');
     bubble.hidden = false;
     const r = el.getBoundingClientRect(), b = bubble.getBoundingClientRect();
-    const vw = window.innerWidth, vh = window.innerHeight;
+    // On a PC that grows to fill the screen, positions are worked out in screen points, then turned back into style pixels.
+    const k = window.hubScale ? window.hubScale() : 1, z = parseFloat(document.documentElement.style.zoom) || 1;
+    const vw = window.innerWidth * k / z, vh = window.innerHeight * k / z;
     let x = r.left + r.width / 2 - b.width / 2;
     x = Math.max(12, Math.min(vw - b.width - 12, x));
     let y = r.top - b.height - 8;
     if (y < 60) y = Math.min(vh - b.height - 12, r.bottom + 8);
-    bubble.style.left = x + 'px';
-    bubble.style.top = y + 'px';
+    bubble.style.left = x / k + 'px';
+    bubble.style.top = y / k + 'px';
     clearTimeout(showTip.t);
     showTip.t = setTimeout(hideTip, 4000);
   }

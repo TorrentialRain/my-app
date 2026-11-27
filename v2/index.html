@@ -4,9 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
   <title>Hub</title>
-  <meta name="theme-color" content="#f6f1ec" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
-  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#000000">
+  <meta name="color-scheme" content="dark">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -14,7 +13,8 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="../icons/icon-180.png">
   <link rel="icon" type="image/png" href="../icons/icon-192.png">
-  <link rel="stylesheet" href="app.css?v=21">
+  <link rel="preload" href="fonts/inter-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="app.css?v=22">
 </head>
 <body>
   <!-- The new Hub (rebuild). Lives beside the old app and reads the same data box.
@@ -30,8 +30,8 @@
             </div>
             <div class="td-tools">
               <button type="button" class="only" data-only-overdue aria-pressed="false">Only overdue<span class="sw" aria-hidden="true"><span></span></span></button>
-              <button type="button" class="round pc-only" data-open="sheet-questions" aria-label="Questions"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.2 9a3 3 0 0 1 5.8 1c0 2-3 2.6-3 4.5"/><circle cx="12" cy="18.5" r="0.8" fill="currentColor"/></svg></button>
-              <button type="button" class="round pc-only" data-open="sheet-menu" aria-label="Menu: Print, Archive, Settings, Change key"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>
+              <button type="button" class="round" data-open="sheet-questions" aria-label="Questions"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.2 9a3 3 0 0 1 5.8 1c0 2-3 2.6-3 4.5"/><circle cx="12" cy="18.5" r="0.8" fill="currentColor"/></svg></button>
+              <button type="button" class="round" data-open="sheet-menu" aria-label="Menu: Print, Archive, Settings, Change key"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>
               <button type="button" class="addbtn pc-only" data-open="sheet-add"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add task</button>
             </div>
           </header>
@@ -50,8 +50,6 @@
         </div>
       </div>
       <div class="td-fabs phone-only" data-floats>
-        <button type="button" class="round" data-open="sheet-questions" aria-label="Questions"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.2 9a3 3 0 0 1 5.8 1c0 2-3 2.6-3 4.5"/><circle cx="12" cy="18.5" r="0.8" fill="currentColor"/></svg></button>
-        <button type="button" class="round" data-open="sheet-menu" aria-label="Menu: Print, Archive, Settings, Change key"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>
         <button type="button" class="plus" data-open="sheet-add" aria-label="Add task"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
       </div>
       <div class="td-trash" hidden aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></div>
@@ -73,16 +71,20 @@
     <section class="page plan" id="page-plan" data-page="plan" aria-label="Plan">
       <!-- Plan only reads. Nothing on this page saves. -->
       <div class="pl-wrap" data-view="day">
+        <!-- Plan header (his pick, Nov 26): on the phone one row, "Plan" and the date on the left, back arrow, Day/Week, forward arrow on the right.
+             Today sits next to the date when away from today. On a PC nothing changes: Today stays beside the arrows. -->
         <header class="pl-head">
-          <h1 class="title">Plan</h1>
-          <div class="pl-seg" role="group" aria-label="View">
-            <button type="button" data-view-pick="day" aria-pressed="true">Day</button>
-            <button type="button" data-view-pick="week" aria-pressed="false">Week</button>
+          <div class="pl-titles">
+            <h1 class="title">Plan</h1>
+            <div class="pl-dline"><p class="pl-date"></p><button type="button" class="pl-today phone-only" hidden><span>Today</span></button></div>
           </div>
-          <p class="pl-date"></p>
           <div class="pl-nav">
-            <button type="button" class="pl-today" hidden>Today</button>
+            <button type="button" class="pl-today pc-only" hidden><span>Today</span></button>
             <button type="button" class="round pl-prev" aria-label="Earlier"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+            <div class="pl-seg" role="group" aria-label="View">
+              <button type="button" data-view-pick="day" aria-pressed="true">Day</button>
+              <button type="button" data-view-pick="week" aria-pressed="false">Week</button>
+            </div>
             <button type="button" class="round pl-next" aria-label="Later"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
           </div>
           <div class="pl-tools pc-only">
@@ -249,12 +251,12 @@
   <script src="lock.js?v=2"></script>
   <script src="data.js?v=8"></script>
   <script src="changes.js?v=5"></script>
-  <script src="money.js?v=7"></script>
+  <script src="money.js?v=8"></script>
   <script src="finsave.js?v=2"></script>
-  <script src="todo.js?v=11"></script>
-  <script src="plan.js?v=8"></script>
-  <script src="finance.js?v=8"></script>
+  <script src="todo.js?v=12"></script>
+  <script src="plan.js?v=9"></script>
+  <script src="finance.js?v=9"></script>
   <script src="robot.js?v=1"></script>
-  <script src="app.js?v=11"></script>
+  <script src="app.js?v=12"></script>
 </body>
 </html>

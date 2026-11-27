@@ -1,7 +1,12 @@
 // The new Hub's check. Runs before every update (see the "New Hub check" workflow).
 // It opens the app in Safari's engine at Josh's phone size (428 x 926), with the status bar (47)
-// and the home swipe area (34) marked off, in light and dark, and on a PC screen (1440 x 900), and fails if:
-//   - the phone doesn't follow its own light or dark setting, or a PC isn't dark (a PC is always dark, Josh's pick)
+// and the home swipe area (34) marked off, with the phone set to light and to dark, and on a PC screen (1440 x 900,
+// and 1920 x 1080 for filling the screen), and fails if:
+//   - anything isn't dark: the app is dark only, on the phone and a PC, whatever the phone is set to (Josh's pick, Nov 26)
+//   - any text size, corner or edge is outside the shared set (Josh's pick, Nov 26)
+//   - a floating button sits over card text at any scroll spot, or a Plan header button sits off its row
+//   - a part of an approved mockup is missing (the graph's pins, key, savings line, dollar labels and date row;
+//     the buckets' fill; the TO-DO and Plan headers), or the graph is squished or stretched at any width
 //   - the data doesn't load, or a page doesn't show
 //   - tapping the bar or swiping doesn't land on the right page, or the app doesn't reopen on the last page
 //   - anything is cut off, overlaps, or sits under the status bar, the page bar or the home swipe area
@@ -144,7 +149,7 @@ const SAMPLE = {
 };
 const flat = (tab) => Todo.listFor(TASKS, tab, NOW).flat();
 const EXPECT = {
-  todo: flat('all').length + ' open · ' + flat('all').filter(([, t]) => Todo.isOverdue(t, NOW)).length + ' overdue',
+  todo: Object.values(TASKS).filter((t) => t.kind !== 'question' && t.status === 'open').length + ' open · ' + flat('overdue').length + ' overdue',
   finance: 'Next paycheck ' + Money.longDay(Money.work(FIN, MONTHS, null, new Date(NOW)).nextPaycheck), plan: Plan.dueLine(Plan.dueToday(TASKS, NOW).length),
 };
 const LATE_N = Plan.overdue(TASKS, NOW).length;
@@ -224,6 +229,17 @@ function planRules() {
   expect(W, day.allDay.map((x) => x.name).join() === 'Dorm Night', 'all-day events should sit in the all-day row');
   const r = Plan.rangeOf(CALENDAR);
   expect(W, Plan.loaded(r, TODAY) && !Plan.loaded(r, Plan.addDays(TODAY, 40)), 'a day outside the calendar copy should count as not copied yet');
+  // The main calendar is copied a year ahead and the others 45 days: a day past 45 days with only the main
+  // calendar on it counts as copied, and only for the main calendar.
+  const longMain = JSON.parse(JSON.stringify(CALENDAR));
+  for (const k of Object.keys(longMain)) longMain[k].to = Plan.addDays(TODAY, 45);
+  longMain.main.to = Plan.addDays(TODAY, 365);
+  longMain.main.events.push(ev('far', 'Far-off plan', 60, 12, 0, 13, 0));
+  const r2 = Plan.rangeOf(longMain), far = Plan.addDays(TODAY, 60);
+  expect(W, Plan.loaded(r2, far), 'a day past 45 days with only the main calendar copied should count as copied (it said "not copied yet")');
+  expect(W, Plan.coveredBy(r2, far).join() === 'My calendar', 'a day past 45 days should be covered by the main calendar only (got ' + Plan.coveredBy(r2, far).join() + ')');
+  expect(W, Plan.dayOf(Plan.eventsOf(longMain), far, 20).timed.some((x) => x.name === 'Far-off plan'), 'a plan 60 days ahead on the main calendar should show on its day');
+  expect(W, !Plan.loaded(r2, Plan.addDays(TODAY, 400)), 'a day past every calendar copy should still count as not copied yet');
   expect(W, new Date(Plan.dayStart('2027-03-14')).toISOString() === '2027-03-14T09:00:00.000Z' && new Date(Plan.dayStart('2027-03-15')).toISOString() === '2027-03-15T08:00:00.000Z', 'days should start at midnight Alaska time, also across the clock change');
   expect(W, Plan.weekStart('2026-11-25') === '2026-11-22', 'weeks should start on Sunday');
 }
@@ -249,9 +265,11 @@ function finRules() {
   const B = w.budget;
   expect(F, B, 'the buckets did not work out from the sample paycheck');
   if (B) {
-    // The buckets' "left" amounts plus what's held add up to what's in the accounts (Total debt isn't part of it).
+    // The buckets' "left" amounts plus what's held never add up to more than what's in the accounts (Total debt isn't
+    // part of it). To invest is the paycheck's 20% at most, not whatever cash is left (his pick, Nov 26).
     const sum = B.tiles.filter((t) => t.key !== 'debt').reduce((a, t) => a + Math.max(0, t.left), 0) + B.alsoHeld - B.missing;
-    expect(F, Math.abs(sum - B.balance) < 0.02, 'the buckets do not add up to the accounts (' + sum.toFixed(2) + ' vs ' + B.balance + ')');
+    expect(F, sum <= B.balance + 0.02, 'the buckets add up to more than the accounts (' + sum.toFixed(2) + ' vs ' + B.balance + ')');
+    expect(F, B.toInvest <= B.C * 0.2 + 0.005, 'To invest shows more than the paycheck\'s 20% (' + B.toInvest + ')');
     expect(F, B.tiles.some((t) => t.key === 'debt' && t.name === 'Total debt'), 'there is no Total debt bucket');
   }
   // Money taken out of savings is debt owed to Savings; putting money back pays it down, never below zero;
@@ -271,6 +289,34 @@ function finRules() {
     const back = JSON.parse(JSON.stringify(sm)); back['2026-01'].txns.push(sv('s8', '2026-01-09', -50, 'To savings'));
     const ob = Money.owedToSavings(sf, back);
     expect(F, ob && ob.owed === 0 && ob.paidOff === '2026-01-09', 'putting money back into savings did not pay off what was owed');
+  }
+  // To invest (his picks, Nov 26): a move into savings comes off the green balance line and off To invest on its
+  // day, and the blue Savings line goes up by the same amount. Money taken out of savings never refills To invest,
+  // and "Where your money went" shows it as taken back out, beside what was kept.
+  {
+    const addTx = (months, t) => { const m = JSON.parse(JSON.stringify(months)); (m[t.d.slice(0, 7)] = m[t.d.slice(0, 7)] || { txns: [] }).txns.push(t); return m; };
+    const day = dayN(-1), before = dayN(-2);
+    const inM = addTx(MONTHS, { id: 'sv1', d: day, a: -40, k: 'First National Bank Alaska', s: 'Transfer to Sample savings', cat: 'savings', c: 'savings', u: 'savings', m: 0, p: 0 });
+    const w1 = Money.work(FIN, MONTHS, null, new Date(NOW)), w2 = Money.work(FIN, inM, null, new Date(NOW));
+    const B1 = w1.budget, B2 = w2.budget;
+    const step = (ser, d0, d1) => ser[d1] - ser[d0];
+    expect(F, Math.abs((step(w2.bal.series, before, day) - step(w1.bal.series, before, day)) + 40) < 0.01, 'a $40 move into savings did not come off the green line on its day');
+    expect(F, w2.savingsLine && Math.abs((step(w2.savingsLine, before, day) - step(w1.savingsLine, before, day)) - 40) < 0.01, 'a $40 move into savings did not lift the blue Savings line by $40 on its day');
+    expect(F, w2.savingsLine && w2.bal.days.filter((d) => d !== day).every((d, i, a) => i === 0 || w2.savingsLine[d] === w2.savingsLine[a[i - 1]] || d === dayN(0)), 'the Savings line moved on a day with no money in or out of savings');
+    expect(F, B2 && B2.movedIn === 40 && Math.abs(B2.investPlan - Math.max(0, B1.investPlan - 40)) < 0.01, 'a $40 move into savings did not come off To invest (plan ' + (B2 && B2.investPlan) + ' vs ' + (B1 && B1.investPlan) + ')');
+    expect(F, B2 && B2.toInvest <= B2.investPlan + 0.005 && B2.toInvest <= Math.max(0, B2.cashLeft) + 0.005, 'To invest is more than its plan or the cash left after the other buckets');
+    // Taken out of savings (and so into the accounts): To invest stays the same, and Debt shows it owed to Savings.
+    const outM = addTx(inM, { id: 'sv2', d: dayN(0), a: 15, k: 'First National Bank Alaska', s: 'Transfer from Sample savings', cat: 'savings', c: 'savings', u: 'savings', m: 0, p: 0 });
+    const outFin = JSON.parse(JSON.stringify(FIN)); outFin.tracker.anchors['First National Bank Alaska'].amount += 15;
+    const w3 = Money.work(outFin, outM, null, new Date(NOW)), B3 = w3.budget;
+    expect(F, B3 && Math.abs(B3.toInvest - B2.toInvest) < 0.01, 'money taken out of savings refilled To invest (' + (B3 && B3.toInvest) + ' vs ' + (B2 && B2.toInvest) + ')');
+    expect(F, w3.debts.open.some((d) => d.owedTo === 'Savings' && d.owed === 15), 'money taken out of savings did not show on Debt as owed to Savings');
+    const pie = Money.pieFor(outFin, outM, B3.P.start, dayN(0)), sav = pie.groups.find((g) => g.group === 'savings');
+    expect(F, sav && sav.putIn === 40 && sav.out === 15 && sav.kept === 25 && sav.total === 40, '"Where your money went" should size Savings by money put in ($40) and show $15 taken back out and $25 kept (got ' + JSON.stringify(sav && [sav.total, sav.out, sav.kept]) + ')');
+    // Spending no other bucket covers comes out of To invest last.
+    const bigM = addTx(MONTHS, { id: 'big', d: dayN(0), a: -900, k: 'First National Bank Alaska', s: 'Sample Big Store', cat: 'shopping', c: 'shopping', u: '30', m: 0, p: 0 });
+    const B4 = Money.work(FIN, bigM, null, new Date(NOW)).budget;
+    expect(F, B4 && B4.uncovered > 0 ? B4.investPlan === Math.max(0, Math.round((B4.C * 0.2 - B4.movedIn - B4.uncovered) * 100) / 100) : true, 'spending no other bucket covered did not come out of To invest');
   }
   // When the accounts hold less than the plan, no bucket may show money that isn't there, Gas and
   // Subscriptions included (Josh's yes, Nov 25), and the buckets still add up to the accounts.
@@ -525,8 +571,108 @@ function inspect({ W, H, TOP, BOTTOM }) {
   return out;
 }
 
+// One shared set of sizes on every page (his pick, Nov 26). Text: 34, 20, 17, 15, 13, 11 (bar labels), and 16 in
+// typing boxes (the size an iPhone needs so it doesn't zoom in). Corners: 22, 14, 12, or fully round. On the phone,
+// titles and full-width cards sit 20 from the screen edge. The tabs stay exactly as they were (his "Og is fine").
+function sizeSet({ W, H }) {
+  const out = [];
+  const TEXT = [11, 13, 15, 17, 20, 34], RAD = [0, 12, 14, 22];
+  const skip = '.tab, .bar, .tdtab, .td-tabs, .fi-tab, .fi-tabs, .fi-side, #print, .ghost, #toast';
+  const vis = (el) => {
+    const s = getComputedStyle(el);
+    if (s.display === 'none' || s.visibility === 'hidden' || +s.opacity === 0) return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && r.right > 0 && r.left < W && r.bottom > 0 && r.top < H;
+  };
+  const name = (el) => (el.id ? '#' + el.id : el.tagName.toLowerCase() + (typeof el.className === 'string' && el.className ? '.' + el.className.split(' ')[0] : (el.className && el.className.baseVal ? '.' + el.className.baseVal.split(' ')[0] : '')));
+  const box = (el) => ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName);
+  const cover = [document.getElementById('lockcard'), document.getElementById('connect')].concat(Array.from(document.querySelectorAll('.sheet'))).find((el) => el && vis(el));
+  for (const el of document.querySelectorAll('body *')) {
+    if (el.closest(skip) || !vis(el) || (cover && !cover.contains(el))) continue;
+    const s = getComputedStyle(el);
+    const own = box(el) || Array.from(el.childNodes).some((n) => n.nodeType === 3 && n.textContent.trim());
+    if (own) {
+      const f = Math.round(parseFloat(s.fontSize) * 10) / 10;
+      if (box(el) ? f !== 16 : !TEXT.includes(f)) out.push(name(el) + ' "' + (el.textContent || el.value || '').trim().slice(0, 24) + '" has text size ' + f + ' (the set is ' + (box(el) ? '16 for typing boxes' : TEXT.join(', ')) + ')');
+    }
+    if (el.closest('svg')) continue;
+    const r = el.getBoundingClientRect(), k = window.hubScale ? window.hubScale() : 1, half = Math.min(r.width, r.height) / k / 2;
+    for (const c of ['TopLeft', 'TopRight', 'BottomRight', 'BottomLeft']) {
+      const v = s['border' + c + 'Radius'];
+      if (!v || v === '0px') continue;
+      const n = parseFloat(v);
+      const round = /%$/.test(v) ? n >= 50 : n >= half - 0.6;
+      if (!round && !RAD.includes(Math.round(n))) { out.push(name(el) + ' has a ' + v + ' corner (the set is 22, 14, 12, or fully round)'); break; }
+    }
+  }
+  if (W < 900 && !cover) {
+    // The page showing now: its title and full-width cards start 20 from the screen edge.
+    const page = Array.from(document.querySelectorAll('.page')).find((p) => { const r = p.getBoundingClientRect(); return Math.abs(r.left) < 2; });
+    if (page) {
+      const h1 = page.querySelector('h1');
+      if (h1 && vis(h1) && Math.abs(h1.getBoundingClientRect().left - 20) > 0.6) out.push('the ' + page.id + ' title sits ' + h1.getBoundingClientRect().left.toFixed(1) + ' from the screen edge (should be 20)');
+      for (const c of page.querySelectorAll('.card:not(.ghost), .pl-card, .fi-card, .td-suggest')) {
+        if (!vis(c)) continue;
+        const r = c.getBoundingClientRect();
+        if (r.width < W * 0.8) continue;
+        if (Math.abs(r.left - 20) > 0.6 || Math.abs(W - r.right - 20) > 0.6) { out.push(name(c) + ' sits ' + r.left.toFixed(1) + ' and ' + (W - r.right).toFixed(1) + ' from the screen edges (should be 20)'); break; }
+      }
+    }
+  }
+  return out;
+}
+const sizeSeen = new Set();
+async function sizes(page, where, size) {
+  for (const p of await page.evaluate(sizeSet, size)) {
+    const key = p.replace(/ "[^"]*"/, '');
+    if (sizeSeen.has(key)) continue;
+    sizeSeen.add(key);
+    problem(where, p);
+  }
+}
+// The + floats bottom right in the space no card text uses (his pick, Nov 26): at every scroll spot, no floating
+// button may sit over any card's text.
+function floatHits() {
+  const out = [];
+  const btns = Array.from(document.querySelectorAll('[data-floats] button')).filter((b) => { const s = getComputedStyle(b); const r = b.getBoundingClientRect(); return s.display !== 'none' && s.visibility !== 'hidden' && r.width > 0 && !b.closest('[hidden]'); });
+  for (const b of btns) {
+    const q = b.getBoundingClientRect();
+    for (const c of document.querySelectorAll('.card:not(.ghost), .td-suggest, .pl-card, .fi-card')) {
+      const walk = document.createTreeWalker(c, NodeFilter.SHOW_TEXT);
+      for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+        if (!n.textContent.trim()) continue;
+        const rg = document.createRange(); rg.selectNodeContents(n);
+        for (const t of rg.getClientRects()) {
+          if (t.width < 1 || t.height < 1) continue;
+          const x = Math.min(t.right, q.right) - Math.max(t.left, q.left), y = Math.min(t.bottom, q.bottom) - Math.max(t.top, q.top);
+          if (x > 1 && y > 1) { out.push('the floating ' + (b.getAttribute('aria-label') || 'button') + ' sits over "' + n.textContent.trim().slice(0, 30) + '"'); break; }
+        }
+      }
+    }
+  }
+  return out;
+}
+async function floatsClear(page, where, scrollSel) {
+  for (const f of [0, 0.2, 0.4, 0.6, 0.8, 1]) {
+    await page.evaluate(([sel, f]) => { const s = document.querySelector(sel); if (s) s.scrollTop = (s.scrollHeight - s.clientHeight) * f; }, [scrollSel, f]);
+    await settle(page, 120);
+    const hits = await page.evaluate(floatHits);
+    if (hits.length) { problem(where, hits[0] + ' (scrolled ' + Math.round(f * 100) + '%)'); break; }
+  }
+  await page.evaluate((sel) => { const s = document.querySelector(sel); if (s) s.scrollTop = 0; }, scrollSel);
+  await settle(page, 120);
+}
+// The bottom bar runs to the bottom edge (no dark strip), and what's behind everything is the bar's own color.
+async function barToEdge(page, where, size) {
+  const b = await page.evaluate(() => {
+    const bar = document.querySelector('.bar'), r = bar.getBoundingClientRect(), after = getComputedStyle(bar, '::after');
+    return { bottom: r.bottom, h: innerHeight, html: getComputedStyle(document.documentElement).backgroundColor, bar: getComputedStyle(bar).backgroundColor, after: after.display !== 'none' && parseFloat(after.height) > 0 };
+  });
+  expect(where, Math.abs(b.bottom - b.h) < 0.6, 'the bottom bar should run to the bottom edge (it ends ' + (b.h - b.bottom).toFixed(1) + ' above it)');
+  expect(where, b.html === b.bar && b.after, 'the color behind the app and below the bar should be the bar\'s own color, so no dark strip can show (behind: ' + b.html + ', bar: ' + b.bar + ')');
+}
 async function settle(page, ms) { await page.waitForTimeout(ms || 450); }
-async function look(page, where, size) { for (const p of await page.evaluate(inspect, size)) problem(where, p); }
+async function look(page, where, size) { for (const p of await page.evaluate(inspect, size)) problem(where, p); await sizes(page, where, size); }
 // Look at the TO-DO list at its top and at its end.
 async function lookBothEnds(page, where, size, shot) {
   await page.evaluate(() => { document.querySelector('.td-scroll').scrollTop = 0; });
@@ -786,6 +932,25 @@ async function phoneTodo(page, scheme, size) {
   await underlines(page, T + ' All', 'cards');
   expect(T, await page.locator('.td-suggest').isVisible(), 'the possible task does not show');
   await lookBothEnds(page, T, size, scheme + '-todo');
+  await floatsClear(page, T + ' All', '.td-scroll');
+  // The approved header (canvas TodoAB): ? and gear in a row under the title, next to Only overdue; only the + floats.
+  const hd = await page.evaluate(() => {
+    const mid = (el) => { const r = el.getBoundingClientRect(); return r.top + r.height / 2; };
+    const only = document.querySelector('.td-tools .only'), tools = Array.from(document.querySelectorAll('.td-tools .round')).filter((b) => b.offsetParent);
+    const fabs = Array.from(document.querySelectorAll('.td-fabs button')).filter((b) => b.offsetParent);
+    const h1 = document.querySelector('#page-todo h1');
+    return { tools: tools.length, row: !!only && tools.every((b) => Math.abs(mid(b) - mid(only)) < 4), under: !!only && !!h1 && only.getBoundingClientRect().top >= h1.getBoundingClientRect().bottom,
+      fabs: fabs.map((b) => b.getAttribute('aria-label')).join(', ') };
+  });
+  expect(T, hd.tools === 2 && hd.row && hd.under, 'the ? and gear should sit in a row under the title, next to Only overdue (' + JSON.stringify(hd) + ')');
+  expect(T, hd.fabs === 'Add task', 'only the + should float (floating now: ' + hd.fabs + ')');
+  // The count line counts every tab, so its overdue number is the Overdue tab's, whichever tab shows (his pick, Nov 26).
+  const lineOver = async () => +((await page.locator('.td-sub').textContent()).match(/(\d+) overdue/) || [0, -1])[1];
+  const onAll = await lineOver();
+  await tapTab(page, 'overdue');
+  const overCards = (await cardIds(page)).length, onOver = await lineOver();
+  await tapTab(page, 'all');
+  expect(T, onAll === overCards && onOver === overCards, 'the count line\'s overdue number should match the Overdue tab (line says ' + onAll + ' on All and ' + onOver + ' on Overdue; the tab has ' + overCards + ')');
 
   await everyTab(page, T);
   await tapTab(page, 'all');
@@ -911,7 +1076,7 @@ async function phoneTodo(page, scheme, size) {
   await settle(page, 200);
 }
 
-// How dark the page is: 0 is black, 255 is white. Used to check that the phone follows its setting and a PC is always dark.
+// How dark the page is: 0 is black, 255 is white. Used to check that the app is always dark.
 // ---- The Plan page ----
 async function planReady(page) {
   await page.waitForFunction(() => document.documentElement.dataset.plan === 'ready', null, { timeout: 8000 }).catch(() => problem('plan', 'the Plan page did not get ready'));
@@ -1017,6 +1182,24 @@ async function phonePlan(page, scheme, size) {
   await planReady(page);
   // Opens on today, in the day view.
   if ((await page.locator('.pl-wrap').getAttribute('data-view')) !== 'day') { await page.tap('[data-view-pick="day"]'); await settle(page, 200); }
+  const headRow = async () => page.evaluate(() => {
+    const mid = (el) => { const r = el.getBoundingClientRect(); return r.top + r.height / 2; };
+    const h1 = document.querySelector('#page-plan .pl-head h1');
+    const btns = Array.from(document.querySelectorAll('#page-plan .pl-nav button')).filter((b) => b.offsetParent && !b.closest('[hidden]') && getComputedStyle(b).display !== 'none' && !b.closest('.pc-only'));
+    const t = document.querySelector('#page-plan .pl-titles').getBoundingClientRect();
+    const off = btns.filter((b) => mid(b) < t.top || mid(b) > t.bottom).map((b) => b.getAttribute('aria-label') || b.textContent.trim());
+    const pill = document.querySelector('#page-plan .pl-dline .pl-today');
+    return { n: btns.length, off, pill: !!pill && !pill.hidden && getComputedStyle(pill).display !== 'none', right: btns.every((b) => b.getBoundingClientRect().left > h1.getBoundingClientRect().right) };
+  });
+  const hr = await headRow();
+  expect(P, hr.n >= 4 && !hr.off.length && hr.right, 'the Plan header should be one row: Plan and the date on the left, back, Day and Week, forward on the right (off the row: ' + hr.off.join(', ') + '; ' + hr.n + ' buttons)');
+  expect(P, !hr.pill, 'the Today button should only show when a day other than today is open');
+  await page.tap('#page-plan .pl-next');
+  await settle(page, 200);
+  const hr2 = await headRow();
+  expect(P, hr2.pill && !hr2.off.length, 'away from today, the header should stay one row with a Today button by the date (' + JSON.stringify(hr2) + ')');
+  await page.tap('#page-plan .pl-dline .pl-today');
+  await settle(page, 200);
   const text = await planText(page);
   expect(P, text.includes('Work (Midtown)') && text.includes('Creekside Eatery Breakfast') && text.includes('Dorm Night'), 'today\'s events do not show by name');
   expect(P, !text.includes('Print the bus pass') && !text.includes('Foothills Josh F') && !text.includes('New Event 8/26'), 'something that should be left out shows (a ticked task\'s calendar copy, the store\'s calendar or the Blackboard copy)');
@@ -1101,8 +1284,7 @@ async function phonePlan(page, scheme, size) {
   await page.tap('.pl-today');
   await settle(page, 200);
   const dk = await page.evaluate(() => { const m = getComputedStyle(document.getElementById('page-plan')).backgroundColor.match(/[\d.]+/g).map(Number); return Math.round(0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]); });
-  if (scheme === 'light') expect(P, dk > 200, 'Plan should be light on a phone set to light (got ' + dk + ')');
-  else expect(P, dk < 50, 'Plan should be dark on a phone set to dark (got ' + dk + ')');
+  expect(P, dk < 50, 'Plan should be dark, even on a phone set to ' + scheme + ' (got ' + dk + ')');
 }
 async function pcPlan(pp, scheme, size) {
   const P = scheme + ' PC Plan';
@@ -1165,6 +1347,7 @@ async function phoneFinance(page, scheme, size) {
   // Spending, top to bottom: graph, Total balance, Savings balance, buckets, then the pie (his pick).
   const order = await page.evaluate(() => ['.fi-chart', '.fi-two', '.fi-buckets', '.fi-pie'].map((s) => Math.round(document.querySelector(s).getBoundingClientRect().top)));
   expect(F, order.every((v, i) => !i || v > order[i - 1]), 'Spending should go graph, balances, buckets, pie (tops: ' + order.join(', ') + ')');
+  await graphParts(page, F);
   for (const t of FIN_TABS) {
     await page.tap(`.fi-tabs [data-fi-tab="${t}"]`);
     await settle(page, 250);
@@ -1231,6 +1414,33 @@ async function phoneFinance(page, scheme, size) {
   await page.tap('#sheet-planmsg [data-close]');
   await settle(page, 200);
 }
+// Every part of the approved graph (canvas: graph C with B's pins) and bucket cards is there, and the graph keeps
+// its shape: never stretched, so it grows taller as it gets wider and its dots stay round.
+async function graphParts(page, where) {
+  const g = await page.evaluate(() => {
+    const svg = document.querySelector('.fi-chart .fi-graph');
+    if (!svg) return null;
+    const vb = svg.viewBox.baseVal, r = svg.getBoundingClientRect();
+    const dates = Array.from(svg.querySelectorAll('[data-date-label]')).map((t) => t.textContent);
+    const tiles = document.querySelectorAll('.fi-buckets .fi-tile').length;
+    const fills = Array.from(document.querySelectorAll('.fi-buckets .fi-tile .fi-fill i')).filter((i) => i.style.height !== '').length;
+    return { ratio: (r.width / r.height) / (vb.width / vb.height), h: r.height, w: r.width,
+      pins: svg.querySelectorAll('.fi-pin rect').length, pinText: Array.from(svg.querySelectorAll('.fi-pintext')).map((t) => t.textContent),
+      ring: svg.querySelectorAll('.fi-pin .fi-pindot').length, stem: svg.querySelectorAll('.fi-pin .fi-pinline').length,
+      dollars: svg.querySelectorAll('.fi-glabel:not([data-date-label])').length, grid: svg.querySelectorAll('.fi-gline').length,
+      savings: !!svg.querySelector('[data-savings-line]'), key: (document.querySelector('.fi-chart .fi-key') || {}).textContent || '',
+      dates, tiles, fills, bars: document.querySelectorAll('.fi-buckets .fi-bar').length,
+      edge: (() => { const c = document.querySelector('.fi-chart').getBoundingClientRect(); return Math.abs(r.left - c.left) < 1 && Math.abs(r.right - c.right) < 1; })() };
+  });
+  if (!g) { problem(where, 'the balance graph is missing'); return; }
+  expect(where, Math.abs(g.ratio - 1) < 0.02, 'the graph is stretched (its shape is ' + g.ratio.toFixed(2) + ' times its drawing\'s, ' + Math.round(g.w) + ' by ' + Math.round(g.h) + ')');
+  expect(where, g.edge, 'the graph should run edge to edge across its card');
+  expect(where, g.pins >= 1 && g.ring === g.pins && g.stem === g.pins && g.pinText.every((t) => /^\+\$[\d,]+$/.test(t)), 'each paycheck should get a pin with just the amount, a short line and a ringed dot (pins: ' + JSON.stringify(g.pinText) + ')');
+  expect(where, g.dollars >= 1 && g.grid >= 1, 'the graph should have faint dollar labels inside it');
+  expect(where, g.savings && /Balance \$/.test(g.key) && /Savings \$/.test(g.key), 'the graph should have the blue Savings line and a key with both amounts (key: "' + g.key + '")');
+  expect(where, g.dates.length >= 2 && g.dates[1] === 'Today', 'the date row should show the first day, the paycheck dates and "Today" (got ' + JSON.stringify(g.dates) + ')');
+  expect(where, g.tiles >= 4 && g.fills === g.tiles && g.bars === 0, 'each bucket card should fill up from the bottom, with no bar (' + g.fills + ' of ' + g.tiles + ' fill, ' + g.bars + ' bars)');
+}
 async function pcFinance(pp, scheme, size) {
   const F = scheme + ' PC Finance';
   await pp.click('.tab[data-tab="finance"]');
@@ -1251,6 +1461,7 @@ async function pcFinance(pp, scheme, size) {
   expect(F, lay.sideBySide, 'Spending should show the graph side and the buckets side by side');
   expect(F, lay.fits, 'Spending should fit on one screen (it runs ' + lay.over + ' pixels past the bottom; the two sides are ' + lay.cols + ' pixels tall)');
   expect(F, lay.bg < 50, 'a PC should always be dark (got ' + lay.bg + ')');
+  await graphParts(pp, F);
   for (const t of FIN_TABS) {
     await pp.click(`.fi-side [data-fi-tab="${t}"]`);
     await settle(pp, 250);
@@ -1266,6 +1477,29 @@ async function pcFinance(pp, scheme, size) {
   expect(F, await pp.locator('#sheet-fin').isHidden(), 'Escape should close the Finance sheet');
 }
 
+async function fillsScreen(browser, base, at1440) {
+  const where = 'dark PC 1920 by 1080';
+  const share = (pg) => pg.evaluate(() => {
+    const z = parseFloat(document.documentElement.style.zoom) || 1, k = window.hubScale ? window.hubScale() : 1;
+    const wrap = document.querySelector('#page-finance .fi-wrap').getBoundingClientRect(), svg = document.querySelector('.fi-graph').getBoundingClientRect();
+    // On-screen size, whichever way this browser reports a zoomed page.
+    const px = (v) => v * z / k;
+    return { wrap: px(wrap.width) / innerWidth, graphH: px(svg.height) / innerHeight, zoom: z };
+  });
+  await at1440.click('.tab[data-tab="finance"]');
+  await settle(at1440);
+  const a = await share(at1440);
+  const ctx = await newContext(browser, 'dark', { W: 1920, H: 1080 }, {});
+  const pg = await openConnected(ctx, base);
+  await pg.click('.tab[data-tab="finance"]');
+  await settle(pg);
+  await finReady(pg);
+  const b = await share(pg);
+  expect(where, Math.abs(b.zoom - 1920 / 1440) < 0.01, 'a wider PC screen should grow everything to match (zoom ' + b.zoom + ')');
+  expect(where, Math.abs(b.wrap - a.wrap) < 0.03 && Math.abs(b.graphH - a.graphH) < 0.03, 'a wider PC screen should keep the same proportions (Finance fills ' + (b.wrap * 100).toFixed(0) + '% wide vs ' + (a.wrap * 100).toFixed(0) + '%, graph ' + (b.graphH * 100).toFixed(0) + '% tall vs ' + (a.graphH * 100).toFixed(0) + '%)');
+  await pg.screenshot({ path: path.join(OUT, 'dark-pc-1920-finance.png') });
+  await ctx.close();
+}
 async function darkness(page) {
   return page.evaluate(() => {
     const read = (el) => { const m = getComputedStyle(el).backgroundColor.match(/[\d.]+/g).map(Number); return Math.round(0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]); };
@@ -1367,8 +1601,8 @@ async function run() {
     await page.tap('#sheet-questions [data-close]');
     await settle(page, 250);
     const ph = await darkness(page);
-    if (scheme === 'light') expect(scheme + ' phone colors', ph.body > 200 && ph.todo > 200, 'a phone set to light should show the light colors (got ' + JSON.stringify(ph) + ')');
-    else expect(scheme + ' phone colors', ph.body < 50 && ph.todo < 50, 'a phone set to dark should show the dark colors (got ' + JSON.stringify(ph) + ')');
+    expect(scheme + ' phone colors', ph.body < 50 && ph.todo < 50, 'the app should be dark, even on a phone set to ' + scheme + ' (got ' + JSON.stringify(ph) + ')');
+    await barToEdge(page, scheme + ' bottom bar', phone);
 
     // 3. Each page by tapping the bar.
     for (let i = 0; i < PAGES.length; i++) {
@@ -1455,6 +1689,7 @@ async function run() {
     await pcPlan(pp, scheme, pc);
     await pcFinance(pp, scheme, pc);
     if (pctx.badPaths.length) problem(scheme + ' PC', 'the app tried to write somewhere it never should: ' + pctx.badPaths.join(', '));
+    if (scheme === 'dark') await fillsScreen(browser, base, pp);
     await pctx.close();
   }
 

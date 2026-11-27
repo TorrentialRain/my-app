@@ -167,7 +167,13 @@
     return { icon: 'check', paint: 'orange' };
   }
 
-  const Pure = { TABS, inTab, listFor, doneFor, archive, questions, possible, dueText, dueFrom, pictureFor, isOverdue };
+  // The line under the title counts every tab, open and overdue, so its overdue number is always the Overdue
+  // tab's number, whichever tab is showing (his pick, Nov 26). Every open task sits in exactly one tab's section.
+  function lineCounts(tasks, now) {
+    const all = Object.values(tasks || {});
+    return { open: all.filter(isOpen).length, overdue: listFor(tasks, 'overdue', now).reduce((n, g) => n + g.length, 0) };
+  }
+  const Pure = { TABS, inTab, listFor, doneFor, archive, questions, possible, dueText, dueFrom, pictureFor, isOverdue, lineCounts };
   if (typeof module !== 'undefined') module.exports = Pure;
   if (typeof window === 'undefined') return;
 
@@ -181,7 +187,6 @@
     get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* this visit only */ } },
   };
-  const calm = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   const page = $('#page-todo');
   const scroller = $('.td-scroll', page);
@@ -255,9 +260,8 @@
     const groups = listFor(tasks, tab, now);
     const only = tab !== 'overdue' && !!onlyOverdue[tab];
     const shown = groups.map((g) => (only ? g.filter(([, t]) => isOverdue(t, now)) : g));
-    const open = groups.reduce((n, g) => n + g.length, 0);
-    const late = groups.reduce((n, g) => n + g.filter(([, t]) => isOverdue(t, now)).length, 0);
-    subEl.textContent = tab === 'overdue' ? (late === 1 ? '1 overdue' : late + ' overdue') : open + ' open · ' + late + ' overdue';
+    const C = lineCounts(tasks, now);
+    subEl.textContent = C.open + ' open · ' + C.overdue + ' overdue';
     onlyBtns.forEach((b) => { b.hidden = tab === 'overdue'; b.setAttribute('aria-pressed', String(only)); });
 
     const html = shown.map((g, gi) => g.map(([id, t]) => card(id, t, now, { group: gi })).join('')).join('');
@@ -573,10 +577,11 @@
     const r = cardEl.getBoundingClientRect();
     const ghost = cardEl.cloneNode(true);
     ghost.classList.add('ghost');
-    ghost.style.width = r.width + 'px';
+    const k = window.hubScale ? window.hubScale() : 1; // a PC grown to fill the screen (see app.js)
+    ghost.style.width = r.width / k + 'px';
     document.body.appendChild(ghost);
     cardEl.classList.add('lifted');
-    dragging = { cardEl, ghost, dx: at.x - r.left, dy: at.y - r.top, target: null, moved: false, group: cardEl.dataset.group };
+    dragging = { cardEl, ghost, k, dx: at.x - r.left, dy: at.y - r.top, target: null, moved: false, group: cardEl.dataset.group };
     document.body.classList.add('dragging');
     document.getElementById('pages').classList.add('held');
     trash.hidden = false;
@@ -586,7 +591,7 @@
   function drag(p) {
     const d = dragging;
     d.p = p;
-    d.ghost.style.transform = 'translate(' + (p.x - d.dx) + 'px,' + (p.y - d.dy) + 'px)';
+    d.ghost.style.transform = 'translate(' + (p.x - d.dx) / d.k + 'px,' + (p.y - d.dy) / d.k + 'px)';
     const el = document.elementFromPoint(p.x, p.y);
     $$('.drop-on').forEach((x) => x.classList.remove('drop-on'));
     d.target = null;
@@ -646,31 +651,7 @@
   document.addEventListener('touchcancel', () => { if (dragging) { dragging.target = null; dragging.moved = false; drop(); } cancelPress(); });
   document.addEventListener('mouseup', onUp);
 
-  // ---------- 3D tilt: pictures shift a little as the phone moves ----------
-  let base0 = null;
-  function onTilt(e) {
-    if (calm.matches || e.beta == null) return;
-    if (!base0) base0 = { b: e.beta, g: e.gamma };
-    const clamp = (v) => Math.max(-1, Math.min(1, v));
-    page.style.setProperty('--tx', clamp((e.gamma - base0.g) / 25).toFixed(3));
-    page.style.setProperty('--ty', clamp((e.beta - base0.b) / 25).toFixed(3));
-  }
-  function startTilt() {
-    if (calm.matches) return;
-    const D = window.DeviceOrientationEvent;
-    if (!D) return;
-    if (typeof D.requestPermission !== 'function') { window.addEventListener('deviceorientation', onTilt); return; }
-    // iPhone: ask once, from a tap. Asked before and said no: don't ask again.
-    if (store.get('hub2.motion', '') === 'denied') return;
-    const ask = () => {
-      page.removeEventListener('click', ask);
-      D.requestPermission().then((r) => {
-        store.set('hub2.motion', r);
-        if (r === 'granted') window.addEventListener('deviceorientation', onTilt);
-      }).catch(() => {});
-    };
-    page.addEventListener('click', ask);
-  }
+  // The 3D tilt lives in the shared frame (app.js), so every page has it.
 
   // ---------- Start ----------
   window.Todo = {
@@ -684,7 +665,6 @@
       sugs = s || {};
       lastRead = Date.now();
       render();
-      startTilt();
       if (Changes.list().length) saveSoon(300); // changes left waiting from last time
     },
     showError(message) {

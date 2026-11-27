@@ -74,6 +74,62 @@
   // Turning the phone or resizing keeps the same page in view.
   window.addEventListener('resize', place);
 
+  // ---- A PC fills the screen in the phone's proportions (his pick, Nov 26) ----
+  // Every PC layout is drawn for a 1440-wide screen, and a wider screen grows all of it to match (text, cards,
+  // pictures, gaps, the graph), so it's never a narrow column in the middle. Narrower PC screens keep their sizes.
+  const pc = window.matchMedia('(min-width: 900px)');
+  function fit() {
+    const w = window.innerWidth;
+    const z = pc.matches && w > 1440 ? w / 1440 : 1;
+    document.documentElement.style.zoom = z === 1 ? '' : z.toFixed(4);
+    document.documentElement.dataset.zoom = z.toFixed(4);
+  }
+  fit();
+  window.addEventListener('resize', () => { fit(); place(); });
+  // Screen points per style pixel, for the few things placed by hand (Plan's name bubble, a dragged TO-DO card).
+  // Measured, because browsers differ in whether a zoomed page reports positions zoomed or not.
+  window.hubScale = function () {
+    const z = parseFloat(document.documentElement.style.zoom) || 1;
+    if (z === 1) return 1;
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;left:0;top:0;width:100px;height:1px;visibility:hidden';
+    document.body.appendChild(probe);
+    const k = probe.getBoundingClientRect().width / 100;
+    probe.remove();
+    return k;
+  };
+
+  // ---- The 3D tilt, on every page (it used to work only on TO-DO) ----
+  // Each card's picture shifts a little as the phone tilts. iPhone asks for motion permission once, from a tap.
+  // Off under Reduce Motion.
+  let base0 = null;
+  function onTilt(e) {
+    if (calm.matches || e.beta == null) return;
+    if (!base0) base0 = { b: e.beta, g: e.gamma };
+    const clamp = (v) => Math.max(-1, Math.min(1, v));
+    const root = document.documentElement.style;
+    root.setProperty('--tx', clamp((e.gamma - base0.g) / 25).toFixed(3));
+    root.setProperty('--ty', clamp((e.beta - base0.b) / 25).toFixed(3));
+  }
+  (function startTilt() {
+    if (calm.matches || pc.matches) return;
+    const D = window.DeviceOrientationEvent;
+    if (!D) return;
+    if (typeof D.requestPermission !== 'function') { window.addEventListener('deviceorientation', onTilt); return; }
+    let asked = '';
+    try { asked = localStorage.getItem('hub2.motion') || ''; } catch (e) { /* not remembered */ }
+    if (asked === 'granted') { window.addEventListener('deviceorientation', onTilt); }
+    if (asked) return;
+    const ask = () => {
+      document.removeEventListener('click', ask, true);
+      D.requestPermission().then((r) => {
+        try { localStorage.setItem('hub2.motion', r); } catch (e) { /* asked again next time */ }
+        if (r === 'granted') window.addEventListener('deviceorientation', onTilt);
+      }).catch(() => {});
+    };
+    document.addEventListener('click', ask, true);
+  })();
+
   // ---- Data (read-only) ----
   const lines = {};
   document.querySelectorAll('[data-line]').forEach((el) => { lines[el.dataset.line] = el; });

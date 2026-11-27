@@ -81,28 +81,113 @@
   function spending() {
     return '<div class="fi-cols"><div class="fi-col">' + chart() + totals() + pie() + '</div><div class="fi-col">' + buckets() + '</div></div>';
   }
+  // Balance over time (his pick, Nov 26: graph C with B's pins). Edge to edge in its card, with faint dollar
+  // lines inside. A pin on each paycheck's peak (and on big one-off income): a green tag with the amount, a short
+  // line down and a ringed dot. A blue Savings line that steps only on days money moves in or out of savings.
+  // The date row: the first day, each pin's day and Today. The picture keeps its shape at every width (dots stay
+  // round), so it grows taller as the screen gets wider.
+  const PC = window.matchMedia('(min-width: 900px)');
+  const GREEN = '#30D158', BLUE = '#64A0FF';
+  PC.addEventListener('change', () => { if (W) render(); }); // the picture's shape differs on the PC
+  function niceStep(span) {
+    const raw = span / 3, mag = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1))));
+    return [1, 2, 2.5, 5, 10].map((k) => k * mag).find((v) => v >= raw) || mag * 10;
+  }
+  function pinsFor(days, vals) {
+    // Paychecks and big one-off income only (his rule, Nov 26). Same-day income merges into one pin.
+    const v = W._v, rules = (v.fin && v.fin.storeRules && v.fin.storeRules.items) || [];
+    const byDay = {};
+    for (const t of M.allTx(v.months)) {
+      if (t.a <= 0 || t.d < days[0] || t.d > days[days.length - 1]) continue;
+      if (M.bucketOf(t, rules) !== 'income') continue;
+      const pay = (W.paydays || []).some((p) => p.day === t.d);
+      if (!pay && t.a < 200) continue;
+      byDay[t.d] = (byDay[t.d] || 0) + t.a;
+    }
+    return Object.keys(byDay).sort().map((d) => ({ day: d, i: days.indexOf(d), amount: byDay[d] })).filter((p) => p.i >= 0);
+  }
   function chart() {
     const B = W.bal;
     if (!B || !B.days.length) return card('Balance over time', '<p class="fi-note">No balance on file yet.</p>');
     const days = range ? B.days.slice(-range) : B.days;
     const vals = days.map((d) => B.series[d]);
-    const lo = Math.min(0, ...vals), hi = Math.max(...vals, 1);
-    const w = 600, h = 180, pad = 6;
-    const x = (i) => pad + (i / Math.max(1, days.length - 1)) * (w - pad * 2);
-    const y = (v) => pad + (1 - (v - lo) / (hi - lo || 1)) * (h - pad * 2);
-    const pts = vals.map((v, i) => x(i).toFixed(1) + ',' + y(v).toFixed(1));
-    const zero = y(0).toFixed(1);
-    const pays = (W.paydays || []).filter((p) => p.day >= days[0] && p.day <= days[days.length - 1]);
-    const marks = pays.map((p) => { const i = days.indexOf(p.day); return i < 0 ? '' : '<circle cx="' + x(i).toFixed(1) + '" cy="' + y(vals[i]).toFixed(1) + '" r="5" class="fi-pay"/>'; }).join('');
+    const S = W.savingsLine || {};
+    const sav = days.map((d) => (S[d] == null ? null : S[d]));
+    const hasSav = sav.some((x) => x != null) && W.savings.total > 0;
+    const all = vals.concat(hasSav ? sav.filter((x) => x != null) : []);
+    const w = PC.matches ? 600 : 400, h = 316;
+    const top = 58, bot = 284, endIn = 14;
+    let lo = Math.min(0, ...all), hi = Math.max(1, ...all);
+    if (hi - lo < 1) hi = lo + 1;
+    const x = (i) => (days.length < 2 ? (w - endIn) / 2 : (i / (days.length - 1)) * (w - endIn));
+    const y = (v) => top + (1 - (v - lo) / (hi - lo)) * (bot - top);
+    const f = (n) => n.toFixed(1);
+    // Faint dollar lines, inside the picture.
+    const step = niceStep(hi - lo);
+    let grid = '';
+    for (let g = Math.ceil(lo / step) * step; g <= hi + 0.01; g += step) {
+      const gy = y(g);
+      if (g <= lo + 0.01 && lo === 0) continue; // the bottom edge needs no line
+      if (gy > bot - 14 || gy < top - 20) continue;
+      grid += '<line x1="0" x2="' + w + '" y1="' + f(gy) + '" y2="' + f(gy) + '" class="fi-gline"/><text x="12" y="' + f(gy - 5) + '" class="fi-glabel">' + M.money0(g) + '</text>';
+    }
+    const pts = vals.map((v, i) => f(x(i)) + ',' + f(y(v)));
+    const area = '<path d="M' + f(x(0)) + ',' + bot + ' L' + pts.join(' L') + ' L' + f(x(vals.length - 1)) + ',' + bot + ' Z" class="fi-area"/>';
+    const line = '<polyline points="' + pts.join(' ') + '" class="fi-lineg"/>';
+    // The Savings line: flat, stepping only on days money moved in or out of savings.
+    let savPath = '', savEnd = '';
+    if (hasSav) {
+      let d = '', prev = null;
+      sav.forEach((v, i) => {
+        if (v == null) return;
+        if (prev == null) d += 'M' + f(x(i)) + ',' + f(y(v));
+        else { d += ' L' + f(x(i)) + ',' + f(y(prev)); if (v !== prev) d += ' L' + f(x(i)) + ',' + f(y(v)); }
+        prev = v;
+      });
+      savPath = '<path d="' + d + '" class="fi-lines" data-savings-line/>';
+      const last = sav.length - 1;
+      if (sav[last] != null) savEnd = '<circle cx="' + f(x(last)) + '" cy="' + f(y(sav[last])) + '" r="4.5" fill="' + BLUE + '"/>';
+    }
+    // Pins: a tag with the amount only (like +$941), a short line down and a ringed dot. Pins close together sit
+    // at different heights so they never touch.
+    const pins = pinsFor(days, vals);
+    let pinSvg = '', lastRight = -1e9, lift = 0;
+    const placed = [];
+    for (const p of pins) {
+      const px = x(p.i), py = y(vals[p.i]);
+      const label = '+' + M.money0(p.amount);
+      const tw = Math.round(label.length * 7.6 + 16);
+      const left0 = Math.max(2, Math.min(w - 2 - tw, px - tw / 2));
+      lift = left0 < lastRight + 6 ? (lift ? 0 : 30) : 0;
+      let tagBottom = py - 26 - lift;
+      if (tagBottom - 22 < 2) tagBottom = 24; // never off the top
+      lastRight = left0 + tw;
+      placed.push({ day: p.day, x: px });
+      pinSvg += '<g class="fi-pin" data-pin="' + p.day + '"><line x1="' + f(px) + '" x2="' + f(px) + '" y1="' + f(tagBottom) + '" y2="' + f(py - 6) + '" class="fi-pinline"/>' +
+        '<rect x="' + f(left0) + '" y="' + f(tagBottom - 22) + '" width="' + tw + '" height="22" rx="11" fill="' + GREEN + '"/>' +
+        '<text x="' + f(left0 + tw / 2) + '" y="' + f(tagBottom - 6.5) + '" text-anchor="middle" class="fi-pintext">' + label + '</text>' +
+        '<circle cx="' + f(px) + '" cy="' + f(py) + '" r="5" class="fi-pindot"/></g>';
+    }
+    const li = vals.length - 1;
+    const endDot = '<circle cx="' + f(x(li)) + '" cy="' + f(y(vals[li])) + '" r="9" fill="' + GREEN + '" opacity="0.25"/><circle cx="' + f(x(li)) + '" cy="' + f(y(vals[li])) + '" r="4.5" fill="' + GREEN + '"/>';
+    // The date row: the first day, each pin's day, and Today. A date that would touch another is left out.
+    const dy = 308;
+    const isToday = days[li] === W.today;
+    const labels = [{ x: 12, t: M.monthDay(days[0]), a: 'start' }, { x: w - 12, t: isToday ? 'Today' : M.monthDay(days[li]), a: 'end' }];
+    const mid = [];
+    for (const p of placed) {
+      if (p.x < 70 || p.x > w - 70 || mid.some((m) => Math.abs(m - p.x) < 60)) continue;
+      mid.push(p.x);
+      labels.push({ x: p.x, t: M.monthDay(p.day), a: 'middle' });
+    }
+    const dates = labels.map((l) => '<text x="' + f(l.x) + '" y="' + dy + '" text-anchor="' + l.a + '" class="fi-glabel" data-date-label>' + l.t + '</text>').join('');
     const seg = [[30, '30 days'], [90, '90 days'], [0, 'All']].map(([n, t]) => '<button type="button" data-range="' + n + '" aria-pressed="' + (range === n) + '">' + t + '</button>').join('');
-    const svg = '<svg class="fi-graph" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" role="img" aria-label="Balance over the last ' + (range ? range + ' days' : 'year') + ', now ' + M.money(B.current) + '">' +
-      '<line x1="0" x2="' + w + '" y1="' + zero + '" y2="' + zero + '" class="fi-zero"/>' +
-      '<polygon points="' + x(0).toFixed(1) + ',' + zero + ' ' + pts.join(' ') + ' ' + x(days.length - 1).toFixed(1) + ',' + zero + '" class="fi-area"/>' +
-      '<polyline points="' + pts.join(' ') + '" class="fi-lineg"/>' + marks + '</svg>';
-    // The amounts sit under the graph, never on top of it, so nothing piles up or gets crossed by a line (Nov 24 fix).
-    const axis = '<div class="fi-axis"><span>' + M.monthDay(days[0]) + '</span><span>High ' + M.money0(hi) + ' · Low ' + M.money0(Math.min(...vals)) + '</span><span>' + M.monthDay(days[days.length - 1]) + '</span></div>';
-    const chips = pays.length ? '<div class="fi-chips">' + pays.slice(0, 6).map((p) => '<span class="fi-chip"><i class="fi-dot"></i>Paycheck ' + M.monthDay(p.day) + ' ' + M.signed(p.amount) + '</span>').join('') + '</div>' : '';
-    return '<section class="fi-card fi-chart"><div class="fi-cardhead"><h2>Balance over time</h2><div class="fi-seg" role="group" aria-label="How far back">' + seg + '</div></div>' + svg + axis + chips + '</section>';
+    const key = '<div class="fi-key"><span><i style="background:' + GREEN + '"></i>Balance ' + M.money0(B.current) + '</span>' +
+      (hasSav ? '<span><i style="background:' + BLUE + '"></i>Savings ' + M.money0(W.savings.total) + '</span>' : '') + '</div>';
+    const svg = '<svg class="fi-graph" viewBox="0 0 ' + w + ' ' + h + '" role="img" aria-label="Balance over the last ' + (range ? range + ' days' : 'year') + ', now ' + M.money(B.current) + (hasSav ? ', savings ' + M.money(W.savings.total) : '') + '">' +
+      '<defs><linearGradient id="fiArea" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="' + GREEN + '" stop-opacity="0.32"/><stop offset="1" stop-color="' + GREEN + '" stop-opacity="0.02"/></linearGradient></defs>' +
+      grid + area + line + savPath + savEnd + pinSvg + endDot + dates + '</svg>';
+    return '<section class="fi-card fi-chart"><div class="fi-cardhead"><h2>Balance over time</h2><div class="fi-seg" role="group" aria-label="How far back">' + seg + '</div></div>' + key + svg + '</section>';
   }
   function totals() {
     const B = W.bal;
@@ -125,8 +210,8 @@
       const amount = isDebt ? M.money(t.left) + ' owed' : M.money(t.left);
       const sub = isDebt ? Math.round((t.paidShare || 0) * 100) + '% paid off' : 'Left of ' + M.money(t.of);
       html += '<button type="button" class="fi-tile g-' + GROUP_OF[t.key] + '" data-tile="' + t.key + '" aria-expanded="' + (openTile === t.key) + '">' + tileIcon(t.key) +
-        '<span class="fi-tname">' + esc(t.name) + '</span><span class="fi-tamt' + (t.left < 0 ? ' neg' : '') + '">' + amount + '</span><span class="fi-tsub">' + sub + '</span>' +
-        '<span class="fi-bar"><i style="width:' + (fill * 100).toFixed(1) + '%"></i></span></button>';
+        '<span class="fi-fill" aria-hidden="true"><i style="height:' + (fill * 100).toFixed(1) + '%"></i></span>' +
+        '<span class="fi-tname">' + esc(t.name) + '</span><span class="fi-tamt' + (t.left < 0 ? ' neg' : '') + '">' + amount + '</span><span class="fi-tsub">' + sub + '</span></button>';
       // The tapped bucket opens one short line under its row, with the breakdown in a dropdown (his pick, Nov 24).
       const rowEnd = i % 2 === 1 || i === tiles.length - 1;
       const openHere = openTile && rowEnd && [tiles[i - (i % 2)], tiles[i]].some((x) => x && x.key === openTile);
@@ -170,7 +255,10 @@
         off += len;
         return '<li><i class="sq" style="background:' + col + '"></i><span>' + esc(c.name) + '</span><span>' + M.money(c.total) + '</span></li>';
       }).join('');
-      lists += '<div class="fi-group"><p class="fi-gname" style="--gc:' + GROUP_COLOR[g.group] + '">' + esc(g.name) + '</p><p class="fi-gsum">' + Math.round(g.share * 100) + '% · ' + M.money(g.total) + '</p><ul class="fi-list">' + rows + '</ul></div>';
+      const back = g.group === 'savings' && g.out > 0.005;
+      const extra = back ? '<li class="fi-out"><i class="sq" aria-hidden="true"></i><span>Taken back out</span><span>' + M.signed(-g.out) + '</span></li><li class="fi-kept"><i class="sq" aria-hidden="true" style="background:' + GROUP_COLOR.savings + '"></i><span>Kept</span><span>' + M.money(g.kept) + '</span></li>' : '';
+      const shown = back ? M.money(g.kept) + ' kept' : M.money(g.total);
+      lists += '<div class="fi-group"><p class="fi-gname" style="--gc:' + GROUP_COLOR[g.group] + '">' + esc(g.name) + '</p><p class="fi-gsum">' + Math.round(g.share * 100) + '% · ' + shown + '</p><ul class="fi-list">' + rows + extra + '</ul></div>';
     }
     // The total sits inside the ring, drawn as part of the picture so nothing can slide over it.
     const donut = '<div class="fi-donut"><svg viewBox="0 0 180 180" role="img" aria-label="Spent ' + M.money(P.total) + ' since ' + M.monthDay(p.start) + '"><g transform="rotate(-90 90 90)"><circle r="' + r + '" cx="90" cy="90" fill="none" class="fi-ring" stroke-width="30"/>' + arcs + '</g>' +

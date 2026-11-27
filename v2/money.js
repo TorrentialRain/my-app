@@ -321,7 +321,19 @@
     }
     // Money counted as held that isn't really in the accounts (so buckets + held - missing = the accounts).
     const missing = r2(notCovered.planned + notCovered.wish + notCovered.more);
-    const toInvest = balance == null ? null : r2(balance - held());
+    // To invest (his picks, Nov 26): the paycheck's 20%, minus every move into savings this paycheck, minus spending
+    // no other bucket covered (that comes out of To invest last). It can never be more than the cash left after the
+    // other buckets, not counting money taken out of savings this paycheck: borrowed money never counts as money to
+    // invest, and it stays on Debt as owed to Savings. Wishlist money moved to its own pot isn't a move into savings.
+    const isWish = wishTest(fin);
+    const savMoves = inPeriod.filter((t) => bucketOf(t, rules) === 'savings' && !isWish(t));
+    const movedIn = r2(savMoves.filter((t) => t.a < 0).reduce((n, t) => n - t.a, 0));
+    const takenOut = r2(savMoves.filter((t) => t.a > 0).reduce((n, t) => n + t.a, 0));
+    const spentPast = r2(Math.max(0, uncovered));
+    const investPlan = r2(Math.max(0, s20 - movedIn - spentPast));
+    const cashLeft = balance == null ? null : r2(balance - held() - takenOut);
+    const toInvest = balance == null ? null : r2(Math.max(0, Math.min(investPlan, cashLeft)));
+    const investCapped = balance != null && cashLeft < investPlan - 0.005;
     for (const k in hold) hold[k] = r2(hold[k]);
 
     const tile = (key, name, group, left, of, extra) => Object.assign({ key, name, group, left: r2(left), of: r2(of) }, extra || {});
@@ -342,9 +354,10 @@
       medical: { set: medOf ? [['Medical money this paycheck', medOf]] : [], spent: parts.medical, note: medLeft < 0 ? 'Past the medical money, ' + money(-medLeft) + ' came out of Needs.' : '' },
       wants: { set: [['30% of the paycheck', w30]].concat(ex30 ? [['Quick-budget', -ex30]] : []).concat([['Half goes to Future spoils', -spoilsAdd]]), spent: parts['30'], covered: cov.wants },
       spoils: { set: [['Half of Wants', spoilsAdd]], spent: parts.spoils, covered: cov.spoils },
-      invest: { set: [['20% of the paycheck', s20]], note: 'What\'s left in the bank after every bucket and everything held. Ready to move to savings.' },
+      invest: { set: [['20% of the paycheck', s20]].concat(movedIn ? [['Moved into savings', -movedIn]] : []).concat(spentPast ? [['Spending no other bucket covered', -spentPast]] : []),
+        note: investCapped ? 'Only ' + money(Math.max(0, cashLeft)) + ' is left in the bank after the other buckets' + (takenOut ? ', not counting money taken out of savings' : '') + ', so that\'s all that shows here.' : 'Ready to move to savings. Each move into savings comes off here.' },
     };
-    return { P, C, tiles, breakdown, hold, cov, subsParts, subsRes, medOf, ex: exLeft, excLeft, wishHeld, alsoHeld, balance, toInvest,
+    return { P, C, tiles, breakdown, hold, cov, subsParts, subsRes, medOf, ex: exLeft, excLeft, wishHeld, alsoHeld, balance, toInvest, movedIn, takenOut, cashLeft, investPlan,
       shortBy, notCovered, missing, uncovered: r2(Math.max(0, uncovered)) };
   }
 
@@ -352,10 +365,13 @@
   const GROUPS = { needs: 'Needs', wants: 'Wants', savings: 'Savings', debt: 'Debt payments', unsorted: 'Not sorted yet' };
   function pieFor(fin, months, from, to) {
     const rules = storeRules(fin);
+    const isWish = wishTest(fin);
     const rows = {};
-    let total = 0;
+    let total = 0, takenOut = 0;
     for (const t of allTx(months)) {
-      if (t.d < from || t.d > to || t.a >= 0) continue;
+      if (t.d < from || t.d > to) continue;
+      // Money taken back out of savings (wishlist pots aside). The Savings slice stays sized by money put in.
+      if (t.a > 0) { if (bucketOf(t, rules) === 'savings' && !isWish(t)) takenOut += t.a; continue; }
       const b = bucketOf(t, rules);
       if (b === 'transfer' || b === 'income') continue;
       let c = catOf(t, rules);
@@ -375,7 +391,9 @@
       group: g, name: rows[g].name, total: r2(rows[g].total), share: total ? rows[g].total / total : 0,
       cats: Object.entries(rows[g].cats).map(([c, v]) => ({ cat: c, name: (CATS[c] || CATS.other).name, total: r2(v) })).sort((a, b) => b.total - a.total),
     }));
-    return { total: r2(total), groups };
+    const sav = groups.find((g) => g.group === 'savings');
+    if (sav) { sav.putIn = sav.total; sav.out = r2(takenOut); sav.kept = r2(sav.total - takenOut); }
+    return { total: r2(total), groups, takenOut: r2(takenOut) };
   }
   // The pay periods to pick from in the pie: this paycheck, the one before, and so on.
   function payPeriods(fin, months, today) {
@@ -460,10 +478,13 @@
     for (const o of (Array.isArray(other) ? other : [])) if (o && o.goal && o.name) names.add(String(o.name).toLowerCase());
     return [...names];
   }
+  function wishTest(fin) {
+    const pots = wishPots(fin);
+    return (t) => !!t.wish || pots.some((p) => ((t.n || '') + ' ' + (t.s || '')).toLowerCase().includes(p));
+  }
   function owedToSavings(fin, months) {
     const rules = storeRules(fin);
-    const pots = wishPots(fin);
-    const isWish = (t) => !!t.wish || pots.some((p) => ((t.n || '') + ' ' + (t.s || '')).toLowerCase().includes(p));
+    const isWish = wishTest(fin);
     const moves = allTx(months).filter((t) => bucketOf(t, rules) === 'savings' && !isWish(t)).sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : 0));
     let owed = 0, total = 0, since = null, paidOff = null;
     for (const t of moves) {
@@ -526,17 +547,35 @@
     const D = debts(fin, today, months);
     if (B) B.tiles.push({ key: 'debt', name: 'Total debt', group: 'debt', left: D.totalOwed, of: D.totalOwed, paidShare: D.paidShare });
     const periods = payPeriods(fin, months, today);
+    const savings = savingsTotal(fin);
     return {
       today, bal, budget: B, debts: D, wish: wishlists(fin), periods,
+      savingsLine: bal ? savingsLine(fin, months, bal, savings.total) : null,
       nextPaycheck: nextPaycheck(tx, rules, today),
       paydays: paychecks(tx, rules, today).map((t) => ({ day: t.d, amount: t.a })),
       week: lastWeek(fin, months, today),
       activity: activity(fin, months, today, bal),
-      savings: savingsTotal(fin),
+      savings,
       rules: rules.filter((r) => !r.undone),
       planned: (((fin && fin.exceptions) || {}).items || []).filter((x) => !x.applied || x.applied >= addDays(today, -31)),
       notes: (((notes || {}).items) || []).filter((n) => n.page === 'finance'),
     };
+  }
+  // Savings for each day of the balance graph: today's savings, walked back through each move in or out of
+  // savings (wishlist pots aside), so it steps only on the days money moved.
+  function savingsLine(fin, months, bal, total) {
+    const rules = storeRules(fin);
+    const isWish = wishTest(fin);
+    const netIn = {};
+    for (const t of allTx(months)) if (bucketOf(t, rules) === 'savings' && !isWish(t)) netIn[t.d] = (netIn[t.d] || 0) - t.a;
+    const out = {};
+    let v = total;
+    for (let i = bal.days.length - 1; i >= 0; i--) {
+      const d = bal.days[i];
+      out[d] = r2(v);
+      v -= netIn[d] || 0;
+    }
+    return out;
   }
   function savingsTotal(fin) {
     const s = (fin && fin.savings) || {};
@@ -547,7 +586,7 @@
   }
 
   const Money = { TZ, CATS, BUCKETS, PICK_CATS, PICK_BUCKETS, GROUPS, r2, todayISO, addDays, longDay, dayName, monthDay, money, money0, signed,
-    allTx, catOf, bucketOf, bucketName, nameOf, cleanName, storeKey, balances, period, nextPayday, budget, pieFor, payPeriods, activity, lastWeek, debts, owedToSavings, wishlists, needsLabel, missed, work };
+    allTx, catOf, bucketOf, bucketName, nameOf, cleanName, storeKey, balances, period, nextPayday, budget, pieFor, payPeriods, activity, lastWeek, debts, owedToSavings, wishlists, needsLabel, missed, work, savingsLine, paychecks };
   if (typeof window !== 'undefined') window.Money = Money;
   if (typeof module !== 'undefined') module.exports = Money;
 })();
