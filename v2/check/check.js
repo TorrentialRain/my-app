@@ -1540,8 +1540,10 @@ async function fillsScreen(browser, base, at1440) {
   await settle(pg);
   await finReady(pg);
   const b = await share(pg);
-  expect(where, Math.abs(b.zoom - 1920 / 1440) < 0.01, 'a wider PC screen should grow everything to match (zoom ' + b.zoom + ')');
-  expect(where, Math.abs(b.wrap - a.wrap) < 0.03 && Math.abs(b.graphH - a.graphH) < 0.03, 'a wider PC screen should keep the same proportions (Finance fills ' + (b.wrap * 100).toFixed(0) + '% wide vs ' + (a.wrap * 100).toFixed(0) + '%, graph as tall as ' + (b.graphH * 100).toFixed(1) + '% of the width vs ' + (a.graphH * 100).toFixed(1) + '%)');
+  // Everything grows by the same amount (as far as the height allows), so the proportions can't change.
+  expect(where, Math.abs(b.zoom - Math.min(1920 / 1440, 1080 / 900)) < 0.01, 'a bigger PC screen should grow everything to match, as far as its height allows (zoom ' + b.zoom + ')');
+  expect(where, b.wrap >= 0.8 && a.wrap >= 0.9, 'the PC should fill the screen, not sit in a narrow column (Finance fills ' + (b.wrap * 100).toFixed(0) + '% of this screen and ' + (a.wrap * 100).toFixed(0) + '% at 1440)');
+  await graphParts(pg, where);
   // A common 1920 by 1080 screen is shorter for its width than 1440 by 900, and Spending still fits on it.
   expect(where, b.over <= 1, 'Spending should fit on one screen here too (it runs ' + b.over + ' pixels past the bottom)');
   await pg.screenshot({ path: path.join(OUT, 'dark-pc-1920-finance.png') });

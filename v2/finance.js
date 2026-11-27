@@ -75,7 +75,33 @@
     page.dataset.tab = tab;
     bodyEl.innerHTML = ({ spending, activity, wishlists, debt, quick })[tab]();
     showSaving();
+    fitGraph();
   }
+  // On a PC the graph takes the height that's left on the left side, so Spending always fits on one screen
+  // (Nov 15 rule) while the graph stays as tall as it can (his Nov 26 pick). The drawing is made at that shape,
+  // so it's never stretched. Found Nov 26: a fixed shape ran 199 pixels past the bottom of a 1440 by 900 screen.
+  let pcH = 236;
+  function fitGraph() {
+    if (!PC.matches || tab !== 'spending' || !W) return;
+    for (let pass = 0; pass < 3; pass++) {
+      const svg = bodyEl.querySelector('.fi-chart .fi-graph');
+      const cols = bodyEl.querySelectorAll('.fi-cols > .fi-col');
+      if (!svg || cols.length < 2) return;
+      const k = window.hubScale ? window.hubScale() : 1;
+      const left = cols[0].getBoundingClientRect().height / k, right = cols[1].getBoundingClientRect().height / k;
+      const width = svg.getBoundingClientRect().width / k;
+      if (!width) return;
+      // How far the left side alone runs past the bottom (less than 0: room to spare).
+      const over = page.scrollHeight - page.clientHeight - Math.max(0, right - left);
+      const next = Math.max(150, Math.min(300, Math.round(pcH - over * (600 / width))));
+      if (Math.abs(next - pcH) < 2) return;
+      pcH = next;
+      bodyEl.querySelector('.fi-chart').outerHTML = chart();
+    }
+  }
+  let refit = 0;
+  window.addEventListener('resize', () => { clearTimeout(refit); refit = setTimeout(fitGraph, 150); });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => fitGraph());
 
   // ----- Spending -----
   function spending() {
@@ -116,7 +142,7 @@
     const hasSav = sav.some((x) => x != null) && W.savings.total > 0;
     const all = vals.concat(hasSav ? sav.filter((x) => x != null) : []);
     // A wider drawing on a PC, so the left side keeps the graph, balances and pie on one screen; never stretched.
-    const w = PC.matches ? 600 : 400, h = PC.matches ? 236 : 316;
+    const w = PC.matches ? 600 : 400, h = PC.matches ? pcH : 316;
     const top = 58, bot = h - 32, endIn = 14;
     let lo = Math.min(0, ...all), hi = Math.max(1, ...all);
     if (hi - lo < 1) hi = lo + 1;

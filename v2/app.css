@@ -804,8 +804,15 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
   .fi-chart { padding: 16px 0 14px; gap: 8px; }
   .fi-buckets { background: none; box-shadow: none; padding: 0; }
   .fi-piebody { flex-direction: row; align-items: center; gap: 20px; }
+  /* Balances: the total takes the room its amount needs and Savings the rest, so each place's name fits on one line. */
+  .fi-two > .fi-card:first-child { flex: 0 0 auto; width: min-content; }
+  .fi-two .fi-cap { white-space: nowrap; }
+  .fi-two > .fi-card:last-child { flex: 1 1 0; }
+  .fi-two .fi-chip { white-space: nowrap; }
   .fi-donut { width: 128px; height: 128px; }
-  .fi-groups { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; align-items: start; }
+  /* The pie's groups flow in two columns like a newspaper, so a short group fills the gap under a long one. */
+  .fi-groups { flex: 1; display: block; columns: 2; column-gap: 18px; }
+  .fi-groups .fi-group { break-inside: avoid; -webkit-column-break-inside: avoid; margin-bottom: 10px; }
   .fi-groups .fi-list li { padding: 3px 0; }
   .fi-grid { gap: 36px 14px; padding-top: 22px; }
   .fi-tile { min-height: 120px; padding: 36px 14px 14px; background: #1f2622; }

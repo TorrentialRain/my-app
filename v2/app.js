@@ -75,12 +75,14 @@
   window.addEventListener('resize', place);
 
   // ---- A PC fills the screen in the phone's proportions (his pick, Nov 26) ----
-  // Every PC layout is drawn for a 1440-wide screen, and a wider screen grows all of it to match (text, cards,
-  // pictures, gaps, the graph), so it's never a narrow column in the middle. Narrower PC screens keep their sizes.
+  // Every PC layout is drawn for a 1440 by 900 screen, and a bigger screen grows all of it to match (text, cards,
+  // pictures, gaps, the graph), so it's never a narrow column in the middle. It grows only as far as the screen's
+  // height allows too (found Nov 26: on a 1920 by 1080 screen, growing with the width alone pushed Spending 280
+  // pixels off the bottom, because that screen is shorter for its width). Smaller PC screens keep their sizes.
   const pc = window.matchMedia('(min-width: 900px)');
   function fit() {
-    const w = window.innerWidth;
-    const z = pc.matches && w > 1440 ? w / 1440 : 1;
+    const w = window.innerWidth, h = window.innerHeight;
+    const z = pc.matches ? Math.max(1, Math.min(w / 1440, h / 900)) : 1;
     document.documentElement.style.zoom = z === 1 ? '' : z.toFixed(4);
     document.documentElement.dataset.zoom = z.toFixed(4);
   }
