@@ -93,7 +93,7 @@
       if (!width) return;
       // How far the left side alone runs past the bottom (less than 0: room to spare).
       const over = page.scrollHeight - page.clientHeight - Math.max(0, right - left);
-      const next = Math.max(100, Math.min(300, Math.round(pcH - over * (600 / width))));
+      const next = Math.max(120, Math.min(300, Math.round(pcH - over * (600 / width))));
       if (Math.abs(next - pcH) < 2) return;
       pcH = next;
       bodyEl.querySelector('.fi-chart').outerHTML = chart();
