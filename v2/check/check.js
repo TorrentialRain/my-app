@@ -1044,13 +1044,13 @@ async function phoneTodo(page, scheme, size) {
   expect(T + ' trash', !(await cardIds(page)).includes(gone), 'a card dropped on the trash stayed');
 
   // ?, the menu, the Archive, Settings, the waiting list.
-  await page.tap('.td-fabs [data-open="sheet-questions"]');
+  await page.tap('.td-tools [data-open="sheet-questions"]');
   await settle(page, 250);
   expect(T + ' ?', (await page.locator('#q-list').textContent()).includes('Is the sample still on?'), 'the question list is missing a question');
   await look(page, T + ' questions', size);
   await page.screenshot({ path: path.join(OUT, scheme + '-todo-questions.png') });
   await page.tap('#sheet-questions [data-close]');
-  await page.tap('.td-fabs [data-open="sheet-menu"]');
+  await page.tap('.td-tools [data-open="sheet-menu"]');
   await settle(page, 250);
   await look(page, T + ' menu', size);
   await page.screenshot({ path: path.join(OUT, scheme + '-todo-menu.png') });
@@ -1062,7 +1062,7 @@ async function phoneTodo(page, scheme, size) {
   await look(page, T + ' Archive', size);
   await page.screenshot({ path: path.join(OUT, scheme + '-todo-archive.png') });
   await page.tap('#sheet-archive [data-close]');
-  await page.tap('.td-fabs [data-open="sheet-menu"]');
+  await page.tap('.td-tools [data-open="sheet-menu"]');
   await page.tap('#sheet-menu [data-open="sheet-settings"]');
   await settle(page, 250);
   await look(page, T + ' Settings', size);
@@ -1586,13 +1586,13 @@ async function run() {
       await settle(page, 250);
     }
     // The Questions inbox: the badge counts what's waiting, and the charge sits there to label any time.
-    const qb = await page.locator('.td-fabs [data-open="sheet-questions"] .qbadge').textContent().catch(() => '');
+    const qb = await page.locator('.td-tools [data-open="sheet-questions"] .qbadge').textContent().catch(() => '');
     expect(scheme + ' questions inbox', qb === '2', 'the Questions badge should count 1 question and 1 charge (got "' + qb + '")');
     const dot = await page.locator('.bar .tab[data-tab="todo"] .qdot').isVisible().catch(() => false);
     expect(scheme + ' questions inbox', dot, 'the TO-DO tab should show a dot while questions wait');
     const dotsElsewhere = await page.locator('.bar .tab:not([data-tab="todo"]) .qdot').count();
     expect(scheme + ' questions inbox', dotsElsewhere === 0, 'only the TO-DO tab should get a dot');
-    await page.tap('.td-fabs [data-open="sheet-questions"]');
+    await page.tap('.td-tools [data-open="sheet-questions"]');
     await settle(page, 300);
     const inbox = await page.locator('#q-list').textContent();
     expect(scheme + ' questions inbox', /Charges to label/.test(inbox) && /Label now/.test(inbox) && /Is the sample still on\?/.test(inbox), 'the Questions inbox should list the charge to label and the question (got "' + inbox + '")');
