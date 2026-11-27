@@ -212,17 +212,32 @@
   const lockGo = document.getElementById('lock-go');
   const lockOther = document.getElementById('lock-other');
   const lockErr = document.getElementById('lock-error');
-  const FACE = /iPhone|iPad/.test(navigator.userAgent) ? 'Face ID' : 'this device\'s sign-in';
+  // What this device calls its sign-in (found Nov 26: his PC was told to "look at your phone").
+  const UA = navigator.userAgent;
+  const IOS = /iPhone|iPad/.test(UA) || (/Macintosh/.test(UA) && navigator.maxTouchPoints > 1);
+  const FACE = IOS ? 'Face ID' : /Windows/.test(UA) ? 'Windows Hello' : /Macintosh/.test(UA) ? 'Touch ID' : /Android/.test(UA) ? 'your fingerprint' : 'this device\'s sign-in';
+  const FACE_WHY = IOS ? 'Look at your phone to open your data.' : /Windows/.test(UA) ? 'Use Windows Hello (your PC PIN or face) to open your data.' : 'Use ' + FACE + ' to open your data.';
+  // A phone asks straight away; a computer waits for a click (a browser can refuse an ask nobody clicked for).
+  const ASK_AT_ONCE = IOS || /Android/.test(UA) || matchMedia('(pointer: coarse)').matches;
+  const TAP = ASK_AT_ONCE ? 'Tap' : 'Click';
+  const HERE = IOS || /Android/.test(UA) ? 'phone' : 'device';
   let lockJob = 'unlock';
   function showLock(job, err) {
     lockJob = job;
     if (job === 'unlock') {
       lockTitle.textContent = 'Unlock your Hub';
-      lockWhy.textContent = 'Look at your phone to open your data.';
+      lockWhy.textContent = FACE_WHY;
       lockGo.textContent = 'Unlock with ' + FACE;
+      // After two tries that didn't work, the way out comes first, so the Hub is never stuck behind the lock.
+      const stuck = window.KeyLock && KeyLock.fails() >= 2;
+      lockOther.textContent = stuck ? 'Use my key instead' : 'Use a different key';
+      lockOther.classList.toggle('quiet', !stuck);
+      lockGo.classList.toggle('quiet', stuck);
+      if (stuck) lockGo.textContent = 'Try ' + FACE + ' again';
     } else {
       lockTitle.textContent = 'Lock your data key';
-      lockWhy.textContent = 'Lock the key with ' + FACE + ', so it\'s never kept on this phone as plain text. After this, the Hub opens with a look.';
+      lockWhy.textContent = 'Lock the key with ' + FACE + ', so it\'s never kept on this ' + HERE + ' as plain text. After this, the Hub opens with ' + (IOS ? 'a look.' : FACE + '.');
+      lockOther.classList.add('quiet'); lockGo.classList.remove('quiet');
       lockGo.textContent = 'Lock with ' + FACE;
     }
     lockOther.hidden = job !== 'unlock';
@@ -238,17 +253,22 @@
       hideLock();
       await load();
     } catch (e) {
-      if (e.code === 'needtap' || e.code === 'noface') { showLock('unlock', lockCard.hidden ? '' : 'That didn\'t work. Tap to try again.'); return; }
+      if (e.code === 'needtap' || e.code === 'noface') {
+        // Say what really went wrong, in the browser's own words (found Nov 26: every failure looked the same).
+        const why = e.reason ? ' ' + FACE + ' said: "' + String(e.reason).slice(0, 160) + '"' : '';
+        showLock('unlock', lockCard.hidden ? '' : 'That didn\'t work.' + why + (KeyLock.fails() >= 2 ? ' You can use your key instead.' : ' ' + TAP + ' to try again.'));
+        return;
+      }
       // The locked key can't be opened here any more (like the passkey was deleted): ask for the key again.
       Data.forgetOwnKey();
       hideLock();
-      askForKey('The locked key on this phone couldn\'t be opened. Paste your key once more and it gets locked again.');
+      askForKey('The locked key on this ' + HERE + ' couldn\'t be opened. Paste your key once more and it gets locked again.');
       document.documentElement.dataset.loaded = 'nokey';
     }
   }
   async function lockIfNeeded() {
     if (!Data.needsLock()) return;
-    try { await Data.lockNow(); hideLock(); } catch (e) { showLock('lock', lockCard.hidden ? '' : 'That didn\'t lock it. Tap to try again.'); }
+    try { await Data.lockNow(); hideLock(); } catch (e) { showLock('lock', lockCard.hidden ? '' : 'That didn\'t lock it. ' + TAP + ' to try again.'); }
   }
   document.getElementById('lock-form').addEventListener('submit', async (ev) => {
     ev.preventDefault();
@@ -256,11 +276,11 @@
     if (lockJob === 'unlock') await unlockAndLoad();
     else await lockIfNeeded();
   });
-  lockOther.addEventListener('click', () => { hideLock(); askForKey('Paste your key. It replaces the locked one on this phone and gets locked with ' + FACE + '.'); });
+  lockOther.addEventListener('click', () => { hideLock(); askForKey('Paste your key. It replaces the locked one on this ' + HERE + ' and gets locked with ' + FACE + '.'); });
 
   (async () => {
     const found = await Data.start();
-    if (found === 'locked') await unlockAndLoad();
+    if (found === 'locked') { if (ASK_AT_ONCE) await unlockAndLoad(); else showLock('unlock', ''); }
     else if (found) { await load(); await lockIfNeeded(); }
     else { askForKey(); document.documentElement.dataset.loaded = 'nokey'; }
   })();

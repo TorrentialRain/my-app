@@ -8,9 +8,21 @@
 //              The next unlock that gets the secret moves it up to 'faceid' by itself.
 //   'device' - no Face ID or fingerprint here (like the phone check, or a computer without one): sealed the
 //              same way as 'gate', opened with no question. Still never plain text.
-// Passkeys are how a home-screen web app uses Face ID; the passkey stays in his iPhone's keychain.
+// Passkeys are how a home-screen web app uses Face ID; the passkey stays in his iPhone's keychain. On a PC the
+// same passkey is made with Windows Hello (his PC PIN or face).
+//
+// Found Nov 26 (his PC, the right PIN still failed): Windows Hello can't give back the secret, so the PC was locked
+// the 'gate' way, but every unlock still asked for the secret, hoping to move up to 'faceid'. Windows fails the whole
+// sign-in when asked for something it can't do, so even the right PIN failed, every time. Fixes built in:
+//   - the secret is only asked for where the passkey said it can give one; 'gate' never asks for it;
+//   - each device keeps one Hub passkey and uses it again when a key is locked again, so passkeys never pile up;
+//   - a failed unlock keeps the browser's own reason, so the lock screen can say what really went wrong;
+//   - two failed unlocks in a row mark this device's passkey as one that can't give the secret, so the next lock
+//     here uses the 'gate' way, which needs no secret.
 (function () {
   const BOX = 'hub2.lock.v1';
+  const CRED = 'hub2.lock.cred'; // this device's own Hub passkey; kept when a key is replaced, so it's used again
+  const FAILS = 'hub2.lock.fails';
   const DB = 'hub2-lock';
   const INFO = 'Josh\'s Hub data key';
 
@@ -21,6 +33,10 @@
 
   function readBox() { try { return JSON.parse(localStorage.getItem(BOX)) || null; } catch (e) { return null; } }
   function writeBox(box) { localStorage.setItem(BOX, JSON.stringify(box)); }
+  function readCred() { try { return JSON.parse(localStorage.getItem(CRED)) || null; } catch (e) { return null; } }
+  function writeCred(c) { try { localStorage.setItem(CRED, JSON.stringify(c)); } catch (e) { /* only a convenience */ } }
+  function fails() { try { return +localStorage.getItem(FAILS) || 0; } catch (e) { return 0; } }
+  function setFails(n) { try { if (n) localStorage.setItem(FAILS, String(n)); else localStorage.removeItem(FAILS); } catch (e) { /* only a convenience */ } }
 
   // A lock kept in this phone's storage that can't be copied out (the old app's way, kept for 'gate' and 'device').
   function idb(mode, fn) {
@@ -77,25 +93,44 @@
         await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable());
     } catch (e) { return false; }
   }
+  // Did the passkey say it can give the secret at all? (Windows Hello says no; an iPhone says yes.)
+  const prfOf = (cred) => {
+    const r = cred && cred.getClientExtensionResults ? cred.getClientExtensionResults() : {};
+    return !!(r && r.prf && r.prf.enabled);
+  };
   const secretOf = (cred) => {
     const r = cred && cred.getClientExtensionResults ? cred.getClientExtensionResults() : {};
     return r && r.prf && r.prf.results && r.prf.results.first ? new Uint8Array(r.prf.results.first) : null;
   };
-  // Face ID. A "no" (he looked away, tapped Cancel, or the phone wants a tap first) comes back as 'needtap'.
-  async function askFace(box) {
+  // Face ID (or Windows Hello). A "no" (he looked away, tapped Cancel, or the phone wants a tap first) comes back as
+  // 'needtap'. The browser's own words are kept on the error as .reason, so the lock screen can show them.
+  // withSecret asks for the secret too; only ask where the passkey can give it.
+  async function askFace(box, withSecret) {
+    const publicKey = {
+      challenge: rand(32), rpId: location.hostname, userVerification: 'required', timeout: 60000,
+      allowCredentials: [{ type: 'public-key', id: unb64(box.cred) }] };
+    if (withSecret) publicKey.extensions = { prf: { eval: { first: unb64(box.salt) } } };
     try {
-      return await navigator.credentials.get({ publicKey: {
-        challenge: rand(32), rpId: location.hostname, userVerification: 'required', timeout: 60000,
-        allowCredentials: [{ type: 'public-key', id: unb64(box.cred) }],
-        extensions: { prf: { eval: { first: unb64(box.salt) } } } } });
+      return await navigator.credentials.get({ publicKey });
     } catch (e) {
-      throw fail(e && e.name === 'NotAllowedError' ? 'needtap' : 'noface', 'Face ID didn\'t open the Hub.');
+      const err = fail(e && e.name === 'NotAllowedError' ? 'needtap' : 'noface', 'Face ID didn\'t open the Hub.');
+      err.reason = ((e && e.name) || 'Error') + (e && e.message ? ': ' + e.message : '');
+      throw err;
     }
+  }
+  async function makePasskey(salt) {
+    return navigator.credentials.create({ publicKey: {
+      challenge: rand(32), rp: { name: 'Josh\'s Hub', id: location.hostname },
+      user: { id: rand(16), name: 'Josh\'s Hub', displayName: 'Josh\'s Hub' },
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+      authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' },
+      timeout: 60000, extensions: { prf: { eval: { first: salt } } } } });
   }
 
   const KeyLock = {
     has() { const b = readBox(); return !!(b && b.box && b.iv); },
     mode() { const b = readBox(); return (b && b.mode) || null; },
+    fails,
 
     // Lock a key. Needs a tap on the phone (making a passkey asks for Face ID).
     async lock(key) {
@@ -105,27 +140,52 @@
         return 'device';
       }
       const salt = rand(32);
-      let cred;
-      try {
-        cred = await navigator.credentials.create({ publicKey: {
-          challenge: rand(32), rp: { name: 'Josh\'s Hub', id: location.hostname },
-          user: { id: rand(16), name: 'Josh\'s Hub', displayName: 'Josh\'s Hub' },
-          pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
-          authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' },
-          timeout: 60000, extensions: { prf: { eval: { first: salt } } } } });
-      } catch (e) {
-        if (e && e.name === 'NotAllowedError') throw fail('needtap', 'Face ID wasn\'t set up for the Hub.');
-        // Face ID can't make a passkey here at all: lock it inside the phone instead, so it's still never plain text.
-        const sealed = await seal(await newPhoneLock(), key);
-        writeBox(Object.assign({ mode: 'device', at: new Date().toISOString() }, sealed));
-        return 'device';
+      const base = { salt: b64(salt), at: new Date().toISOString() };
+      let secret = null, canSecret = false;
+      // This device already has a Hub passkey: use it again, so passkeys never pile up.
+      const known = readCred();
+      if (known && known.cred) {
+        const reuse = async (withSecret) => {
+          const c = await askFace({ cred: known.cred, salt: base.salt }, withSecret);
+          base.cred = known.cred; canSecret = withSecret; secret = withSecret ? secretOf(c) : null;
+        };
+        try {
+          await reuse(known.prf !== 'no');
+        } catch (e) {
+          let err = e;
+          if (known.prf !== 'no') {
+            // It may not be able to give the secret after all: try it the 'gate' way, which needs none.
+            try { await reuse(false); writeCred({ cred: known.cred, prf: 'no' }); err = null; } catch (e2) { err = e2; }
+          }
+          if (err) {
+            // Cancelled, or the passkey was deleted from this device: forget it, so the next try makes a new one.
+            try { localStorage.removeItem(CRED); } catch (e3) { /* nothing kept */ }
+            if (err.code === 'needtap') throw err;
+          }
+        }
       }
-      const base = { cred: b64(cred.rawId), salt: b64(salt), at: new Date().toISOString() };
-      let secret = secretOf(cred);
-      if (!secret) {
-        // Some phones only give the secret on the first Face ID after the passkey is made.
-        try { secret = secretOf(await askFace(base)); } catch (e) { secret = null; }
+      if (!base.cred) {
+        let cred;
+        try {
+          cred = await makePasskey(salt);
+        } catch (e) {
+          if (e && e.name === 'NotAllowedError') throw fail('needtap', 'Face ID wasn\'t set up for the Hub.');
+          // Face ID can't make a passkey here at all: lock it inside the phone instead, so it's still never plain text.
+          const sealed = await seal(await newPhoneLock(), key);
+          writeBox(Object.assign({ mode: 'device', at: new Date().toISOString() }, sealed));
+          return 'device';
+        }
+        base.cred = b64(cred.rawId);
+        secret = secretOf(cred);
+        canSecret = !!secret || prfOf(cred);
+        // Some phones only give the secret on the first Face ID after the passkey is made. Only ask where the
+        // passkey said it can give one (Windows Hello says it can't, and asking makes it fail).
+        if (!secret && canSecret) {
+          try { secret = secretOf(await askFace(base, true)); } catch (e) { secret = null; }
+        }
+        writeCred({ cred: base.cred, prf: canSecret ? 'yes' : 'no' });
       }
+      setFails(0);
       if (secret) {
         writeBox(Object.assign({ mode: 'faceid' }, base, await seal(await faceLock(secret), key)));
         await dropPhoneLock();
@@ -144,23 +204,29 @@
         if (!lock) throw fail('broken', 'The locked key couldn\'t be opened on this phone.');
         return open(lock, box);
       }
-      const cred = await askFace(box);
-      const secret = secretOf(cred);
+      let cred;
+      try {
+        cred = await askFace(box, box.mode === 'faceid');
+      } catch (e) {
+        const n = fails() + 1;
+        setFails(n);
+        // Two in a row: this device's passkey likely can't give the secret, so the next lock here goes the 'gate' way.
+        if (n >= 2 && box.mode === 'faceid') writeCred({ cred: box.cred, prf: 'no' });
+        e.fails = n;
+        throw e;
+      }
+      setFails(0);
       if (box.mode === 'faceid') {
+        const secret = secretOf(cred);
         if (!secret) throw fail('broken', 'Face ID worked, but the passkey didn\'t give back what opens the key.');
+        writeCred({ cred: box.cred, prf: 'yes' });
         return open(await faceLock(secret), box);
       }
-      // 'gate': Face ID said yes. If the secret came back this time, move up to 'faceid'.
+      // 'gate': Face ID (or Windows Hello) said yes, so open the key with the lock kept on this device.
       const lock = await phoneLock();
-      if (!lock) throw fail('broken', 'The locked key couldn\'t be opened on this phone.');
-      const key = await open(lock, box);
-      if (secret) {
-        try {
-          writeBox(Object.assign({}, box, { mode: 'faceid' }, await seal(await faceLock(secret), key)));
-          await dropPhoneLock();
-        } catch (e) { /* stays as it was; works either way */ }
-      }
-      return key;
+      if (!lock) throw fail('broken', 'The locked key couldn\'t be opened on this device.');
+      writeCred({ cred: box.cred, prf: 'no' });
+      return open(lock, box);
     },
 
     // A new key replaces the old one, or the lock is broken: throw the locked copy away.

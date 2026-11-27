@@ -415,7 +415,7 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
 #page-plan .title { color: var(--deep); margin: 0; line-height: 41px; }
 .pl-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
 .pl-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.pl-titles { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pl-titles { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .pl-dline { display: flex; align-items: center; flex-wrap: wrap; gap: 0 6px; min-height: 20px; }
 .pl-seg { display: flex; flex: none; background: var(--card); box-shadow: var(--shadow); border-radius: 24px; padding: 2px; }
 .pl-seg button { min-height: 44px; min-width: 56px; padding: 0 12px; border: 0; border-radius: 22px; background: transparent; color: var(--ink); font: inherit; font-size: 15px; font-weight: 500; cursor: pointer; }
@@ -425,7 +425,7 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
 .pl-nav .round, .pl-tools .round { width: 44px; height: 44px; border-radius: 22px; box-shadow: none; background: var(--chip); color: var(--ink); }
 /* Today: a 44-tall tap area around a small pill, so it fits on the date's line. */
 .pl-today { min-height: 44px; margin: -12px 0; padding: 0; border: 0; background: transparent; font: inherit; cursor: pointer; display: flex; align-items: center; }
-.pl-today span { display: flex; align-items: center; height: 28px; padding: 0 12px; border-radius: 14px; background: var(--on); color: var(--on-ink); font-size: 13px; font-weight: 600; }
+.pl-today span { display: flex; align-items: center; height: 24px; padding: 0 12px; border-radius: 12px; background: var(--on); color: var(--on-ink); font-size: 13px; font-weight: 600; }
 .pl-nav .pl-today { margin: 0; }
 .pl-nav .pl-today span { height: 44px; padding: 0 14px; border-radius: 22px; font-size: 15px; }
 .pl-tools { grid-area: tools; gap: 10px; }

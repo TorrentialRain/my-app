@@ -115,8 +115,9 @@
     const sav = days.map((d) => (S[d] == null ? null : S[d]));
     const hasSav = sav.some((x) => x != null) && W.savings.total > 0;
     const all = vals.concat(hasSav ? sav.filter((x) => x != null) : []);
-    const w = PC.matches ? 600 : 400, h = 316;
-    const top = 58, bot = 284, endIn = 14;
+    // A wider drawing on a PC, so the left side keeps the graph, balances and pie on one screen; never stretched.
+    const w = PC.matches ? 600 : 400, h = PC.matches ? 236 : 316;
+    const top = 58, bot = h - 32, endIn = 14;
     let lo = Math.min(0, ...all), hi = Math.max(1, ...all);
     if (hi - lo < 1) hi = lo + 1;
     const x = (i) => (days.length < 2 ? (w - endIn) / 2 : (i / (days.length - 1)) * (w - endIn));
@@ -171,7 +172,7 @@
     const li = vals.length - 1;
     const endDot = '<circle cx="' + f(x(li)) + '" cy="' + f(y(vals[li])) + '" r="9" fill="' + GREEN + '" opacity="0.25"/><circle cx="' + f(x(li)) + '" cy="' + f(y(vals[li])) + '" r="4.5" fill="' + GREEN + '"/>';
     // The date row: the first day, each pin's day, and Today. A date that would touch another is left out.
-    const dy = 308;
+    const dy = h - 8;
     const isToday = days[li] === W.today;
     const labels = [{ x: 12, t: M.monthDay(days[0]), a: 'start' }, { x: w - 12, t: isToday ? 'Today' : M.monthDay(days[li]), a: 'end' }];
     const mid = [];

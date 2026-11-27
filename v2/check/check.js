@@ -692,10 +692,13 @@ async function lookBothEnds(page, where, size, shot) {
 // It checks versions like GitHub does, so a save on top of an old copy is refused.
 // ctx.box: the files; ctx.wrote: saves it took; ctx.refused: saves refused; ctx.badPaths: writes to other files.
 // ctx.box.trap: a hook a test can set to act just before the next save.
+const IPHONE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1';
+const WINDOWS_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0';
 async function newContext(browser, scheme, size, extra) {
   extra = Object.assign({}, extra);
   const startAt = extra.at || NOW;
   delete extra.at;
+  if (extra.isMobile && !extra.userAgent) extra.userAgent = IPHONE_UA;
   const ctx = await browser.newContext(Object.assign({ viewport: { width: size.W, height: size.H }, deviceScaleFactor: size.W > 1000 ? 1 : 3, colorScheme: scheme }, extra));
   // The page's clock starts at the check's own time and runs on normally from there.
   await ctx.addInitScript((startAt) => {
@@ -714,7 +717,11 @@ async function newContext(browser, scheme, size, extra) {
     const cred = (secret) => ({ rawId: new Uint8Array([9, 8, 7, 6]).buffer, getClientExtensionResults: () => ({ prf: secret ? { enabled: true, results: { first: secret } } : { enabled: true } }) });
     Object.defineProperty(navigator, 'credentials', { configurable: true, value: {
       async create() { if (no()) throw refuse(); return cred(null); },
-      async get(o) { if (no()) throw refuse(); const salt = new Uint8Array(o.publicKey.extensions.prf.eval.first); return cred(salt.map((b) => b ^ 0x5a).buffer); },
+      async get(o) {
+        if (no()) throw refuse();
+        const p = o.publicKey.extensions && o.publicKey.extensions.prf;
+        return p ? cred(new Uint8Array(p.eval.first).map((b) => b ^ 0x5a).buffer) : { rawId: new Uint8Array([9, 8, 7, 6]).buffer, getClientExtensionResults: () => ({}) };
+      },
     } });
     window.PublicKeyCredential = window.PublicKeyCredential || function () {};
     window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable = async () => true;
@@ -834,6 +841,43 @@ async function faceLock(browser, base, edges, phone) {
   expect(F, await pg.locator('#lockcard').isHidden(), 'with no way to lock, the lock screen should not show');
   await pg.close();
   await c3.close();
+
+  // 6. A Windows PC (found Nov 26): it says Windows Hello, never "look at your phone", waits for a click, says what
+  // really went wrong, and after two tries puts "Use my key instead" first.
+  const W2 = 'PC unlock (Windows)';
+  const c4 = await newContext(browser, 'dark', { W: 1440, H: 900 }, { userAgent: WINDOWS_UA });
+  await c4.addInitScript(() => {
+    localStorage.setItem('hub2.lock.v1', JSON.stringify({ mode: 'gate', cred: 'AQc=', salt: 'AAAA', iv: 'AAAA', box: 'AAAA' }));
+    localStorage.setItem('hub2.lock.cred', JSON.stringify({ cred: 'AQc=', prf: 'no' }));
+    window.__asks = 0; window.__secretAsks = 0;
+    const refuse = () => { const e = new Error('The operation either timed out or was not allowed.'); e.name = 'NotAllowedError'; return e; };
+    Object.defineProperty(navigator, 'credentials', { configurable: true, value: {
+      async create() { throw refuse(); },
+      async get(o) { window.__asks++; if (o.publicKey.extensions && o.publicKey.extensions.prf) window.__secretAsks++; throw refuse(); } } });
+  });
+  pg = await c4.newPage();
+  await pg.goto(base);
+  await pg.waitForFunction(() => document.documentElement.dataset.lock === 'unlock', null, { timeout: 8000 }).catch(() => problem(W2, 'the unlock screen did not show on a locked PC'));
+  await pg.waitForTimeout(400);
+  const w1 = await pg.evaluate(() => ({ why: document.getElementById('lock-why').textContent, go: document.getElementById('lock-go').textContent, asks: window.__asks }));
+  expect(W2, /Windows Hello/.test(w1.why) && !/phone/i.test(w1.why) && w1.go === 'Unlock with Windows Hello', 'a Windows PC should say Windows Hello, not "look at your phone" (got ' + JSON.stringify(w1) + ')');
+  expect(W2, w1.asks === 0, 'a PC should wait for a click before asking Windows Hello (it asked ' + w1.asks + ' times on its own)');
+  await look(pg, W2 + ' unlock screen', { W: 1440, H: 900, TOP: 0, BOTTOM: 0 });
+  await pg.screenshot({ path: path.join(OUT, 'dark-pc-unlock.png') });
+  await pg.click('#lock-go');
+  await pg.waitForFunction(() => /didn/.test(document.getElementById('lock-error').textContent), null, { timeout: 5000 }).catch(() => {});
+  const w2 = await pg.evaluate(() => ({ err: document.getElementById('lock-error').textContent, other: document.getElementById('lock-other').textContent }));
+  expect(W2, /NotAllowedError/.test(w2.err) && /Click to try again/.test(w2.err), 'a failed try should say what really went wrong (got "' + w2.err + '")');
+  await pg.click('#lock-go');
+  await pg.waitForFunction(() => /key instead/.test(document.getElementById('lock-other').textContent), null, { timeout: 5000 }).catch(() => {});
+  const w3 = await pg.evaluate(() => { const o = document.getElementById('lock-other'), g = document.getElementById('lock-go'); return { other: o.textContent, otherQuiet: o.classList.contains('quiet'), goQuiet: g.classList.contains('quiet'), go: g.textContent, secretAsks: window.__secretAsks, top: o.getBoundingClientRect().top < g.getBoundingClientRect().top || !o.classList.contains('quiet') }; });
+  expect(W2, w3.other === 'Use my key instead' && !w3.otherQuiet && w3.goQuiet && /Try Windows Hello again/.test(w3.go), 'after two tries, "Use my key instead" should come first (got ' + JSON.stringify(w3) + ')');
+  expect(W2, w3.secretAsks === 0, 'a PC locked the gate way must never be asked for the secret (asked ' + w3.secretAsks + ' times)');
+  await pg.screenshot({ path: path.join(OUT, 'dark-pc-unlock-stuck.png') });
+  await pg.click('#lock-other');
+  expect(W2, await pg.locator('#connect').isVisible(), '"Use my key instead" should open the key screen');
+  await pg.close();
+  await c4.close();
 }
 
 // The missed-charge pop-up opens by itself over whatever page he's on. Flows that aren't testing it close it.
@@ -1450,7 +1494,7 @@ async function pcFinance(pp, scheme, size) {
     const r = (s) => document.querySelector(s).getBoundingClientRect();
     const p = document.getElementById('page-finance');
     const side = r('.fi-side'), main = r('.fi-main'), chart = r('.fi-chart'), bk = r('.fi-buckets');
-    const cols = [...document.querySelectorAll('.fi-cols > .fi-col')].map((c) => Math.round(c.getBoundingClientRect().height));
+    const cols = [...document.querySelectorAll('.fi-cols > .fi-col')].map((c) => Math.round(c.getBoundingClientRect().height) + ' (' + [...c.children].map((k) => (k.className.split(' ').pop()) + ' ' + Math.round(k.getBoundingClientRect().height)).join(', ') + ')');
     const m = getComputedStyle(p).backgroundColor.match(/[\d.]+/g).map(Number);
     return { left: side.width > 0 && side.right <= main.left, sideBySide: chart.right <= bk.left && Math.abs(chart.top - bk.top) < 4,
       fits: p.scrollHeight <= p.clientHeight + 1, over: p.scrollHeight - p.clientHeight, cols: cols.join(' and '), phoneTabs: getComputedStyle(document.querySelector('.fi-tabs')).display,
@@ -1484,7 +1528,8 @@ async function fillsScreen(browser, base, at1440) {
     const wrap = document.querySelector('#page-finance .fi-wrap').getBoundingClientRect(), svg = document.querySelector('.fi-graph').getBoundingClientRect();
     // On-screen size, whichever way this browser reports a zoomed page.
     const px = (v) => v * z / k;
-    return { wrap: px(wrap.width) / innerWidth, graphH: px(svg.height) / innerHeight, zoom: z };
+    const p = document.getElementById('page-finance');
+    return { wrap: px(wrap.width) / innerWidth, graphH: px(svg.height) / innerWidth, zoom: z, over: p.scrollHeight - p.clientHeight };
   });
   await at1440.click('.tab[data-tab="finance"]');
   await settle(at1440);
@@ -1496,7 +1541,9 @@ async function fillsScreen(browser, base, at1440) {
   await finReady(pg);
   const b = await share(pg);
   expect(where, Math.abs(b.zoom - 1920 / 1440) < 0.01, 'a wider PC screen should grow everything to match (zoom ' + b.zoom + ')');
-  expect(where, Math.abs(b.wrap - a.wrap) < 0.03 && Math.abs(b.graphH - a.graphH) < 0.03, 'a wider PC screen should keep the same proportions (Finance fills ' + (b.wrap * 100).toFixed(0) + '% wide vs ' + (a.wrap * 100).toFixed(0) + '%, graph ' + (b.graphH * 100).toFixed(0) + '% tall vs ' + (a.graphH * 100).toFixed(0) + '%)');
+  expect(where, Math.abs(b.wrap - a.wrap) < 0.03 && Math.abs(b.graphH - a.graphH) < 0.03, 'a wider PC screen should keep the same proportions (Finance fills ' + (b.wrap * 100).toFixed(0) + '% wide vs ' + (a.wrap * 100).toFixed(0) + '%, graph as tall as ' + (b.graphH * 100).toFixed(1) + '% of the width vs ' + (a.graphH * 100).toFixed(1) + '%)');
+  // A common 1920 by 1080 screen is shorter for its width than 1440 by 900, and Spending still fits on it.
+  expect(where, b.over <= 1, 'Spending should fit on one screen here too (it runs ' + b.over + ' pixels past the bottom)');
   await pg.screenshot({ path: path.join(OUT, 'dark-pc-1920-finance.png') });
   await ctx.close();
 }
@@ -1530,8 +1577,121 @@ function robotRules() {
   expect(R, r.data && !Money.allTx(r.data).some((t) => t.id === 't12') && Robot.size(r.data) > Robot.size(MONTHS), 'undoing a charge the robot added should leave it out of the pages without deleting it');
 }
 
+function fakeIDB() {
+  const store = new Map();
+  return { open() {
+    const req = {};
+    setTimeout(() => {
+      req.result = { createObjectStore() {}, close() {}, transaction() {
+        const tx = {}, os = { get: (k) => ({ result: store.get(k) }), put: (v, k) => { store.set(k, v); return {}; }, delete: (k) => { store.delete(k); return {}; } };
+        tx.objectStore = () => os;
+        setTimeout(() => tx.oncomplete && tx.oncomplete(), 0);
+        return tx;
+      } };
+      if (req.onupgradeneeded) req.onupgradeneeded();
+      if (req.onsuccess) req.onsuccess();
+    }, 0);
+    return req;
+  } };
+}
+// A device for the lock to run on. kind 'iphone': the passkey gives its secret. kind 'windows': like Windows Hello,
+// it can't give the secret, and asking for it fails the whole sign-in even after the right PIN.
+function lockDevice(kind) {
+  const vm = require('vm');
+  const mem = new Map();
+  const dev = { kind, creates: 0, gets: 0, secretAsks: 0, refuse: false, gone: new Set(), ids: 0 };
+  const refuse = (msg) => { const e = new Error(msg || 'The operation either timed out or was not allowed.'); e.name = 'NotAllowedError'; return e; };
+  const sandbox = {
+    console, setTimeout, btoa: (s) => Buffer.from(s, 'binary').toString('base64'), atob: (s) => Buffer.from(s, 'base64').toString('binary'),
+    TextEncoder, TextDecoder, crypto: require('crypto').webcrypto, location: { hostname: 'torrentialrain.github.io' },
+    localStorage: { getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, String(v)), removeItem: (k) => mem.delete(k) },
+    indexedDB: fakeIDB(),
+    PublicKeyCredential: { isUserVerifyingPlatformAuthenticatorAvailable: async () => true },
+    navigator: { credentials: {
+      async create() {
+        if (dev.refuse) throw refuse();
+        dev.creates++;
+        const id = new Uint8Array([++dev.ids, 7]);
+        return { rawId: id.buffer, getClientExtensionResults: () => (kind === 'iphone' ? { prf: { enabled: true } } : { prf: { enabled: false } }) };
+      },
+      async get(o) {
+        dev.gets++;
+        if (dev.refuse) throw refuse();
+        const id = Buffer.from(o.publicKey.allowCredentials[0].id).toString('hex');
+        if (dev.gone.has(id)) throw refuse();
+        const p = o.publicKey.extensions && o.publicKey.extensions.prf;
+        if (p) dev.secretAsks++;
+        if (p && kind === 'windows') throw refuse();
+        const out = p ? { prf: { results: { first: new Uint8Array(p.eval.first).map((b) => b ^ 0x5a).buffer } } } : {};
+        return { rawId: o.publicKey.allowCredentials[0].id, getClientExtensionResults: () => out };
+      } } },
+  };
+  sandbox.window = sandbox;
+  vm.createContext(sandbox);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'lock.js'), 'utf8'), sandbox);
+  dev.lock = sandbox.KeyLock; dev.mem = mem;
+  dev.cred = () => JSON.parse(mem.get('hub2.lock.cred') || 'null');
+  return dev;
+}
+async function lockRules() {
+  const L = 'Lock rules';
+  const tryIt = async (fn) => { try { return { v: await fn() }; } catch (e) { return { e }; } };
+  // 1. A Windows PC: locked the way that needs no secret, and the right PIN opens it with no ask for the secret.
+  const pc = lockDevice('windows');
+  let r = await tryIt(() => pc.lock.lock('saving-key'));
+  expect(L, r.v === 'gate', 'a Windows PC should lock the key the way that needs no secret (got ' + (r.v || r.e) + ')');
+  pc.secretAsks = 0;
+  r = await tryIt(() => pc.lock.unlock());
+  expect(L, r.v === 'saving-key', 'on a Windows PC the right PIN should open the Hub (got ' + (r.v || (r.e && r.e.reason) || r.e) + ')');
+  expect(L, pc.secretAsks === 0, 'a PC unlock must never ask Windows Hello for the secret (it asked ' + pc.secretAsks + ' times)');
+  // 2. Locking again (a new key) uses the same passkey, so passkeys never pile up.
+  await pc.lock.clear();
+  r = await tryIt(() => pc.lock.lock('saving-key-2'));
+  expect(L, r.v === 'gate' && pc.creates === 1, 'locking a new key should use this device\'s passkey again (passkeys made: ' + pc.creates + ')');
+  // 3. A PC locked by the older version (no record of its passkey) still opens with the right PIN.
+  pc.mem.delete('hub2.lock.cred');
+  r = await tryIt(() => pc.lock.unlock());
+  expect(L, r.v === 'saving-key-2', 'a PC locked by the older version should open with the right PIN (got ' + (r.v || (r.e && r.e.reason) || r.e) + ')');
+  // 4. A failed try says why, in the browser's words, and counts; two in a row are what bring up "Use my key instead".
+  pc.refuse = true;
+  r = await tryIt(() => pc.lock.unlock());
+  expect(L, r.e && r.e.code === 'needtap' && /NotAllowedError/.test(r.e.reason || '') && pc.lock.fails() === 1, 'a failed unlock should keep the real reason and count it (got ' + JSON.stringify(r.e && { code: r.e.code, reason: r.e.reason }) + ', ' + pc.lock.fails() + ')');
+  await tryIt(() => pc.lock.unlock());
+  expect(L, pc.lock.fails() === 2, 'two failed unlocks should count as two');
+  pc.refuse = false;
+  await pc.lock.unlock();
+  expect(L, pc.lock.fails() === 0, 'an unlock that works should reset the count');
+  // 5. An iPhone still gets the full Face ID lock, and opens with it.
+  const ph = lockDevice('iphone');
+  r = await tryIt(() => ph.lock.lock('saving-key'));
+  expect(L, r.v === 'faceid', 'an iPhone should lock the key with Face ID\'s secret (got ' + (r.v || r.e) + ')');
+  r = await tryIt(() => ph.lock.unlock());
+  expect(L, r.v === 'saving-key', 'an iPhone should open with Face ID (got ' + (r.v || r.e) + ')');
+  // 6. A device whose passkey turns out not to give the secret: two fails mark it, and locking again goes the way
+  // that needs no secret, with the same passkey.
+  const odd = lockDevice('iphone');
+  await odd.lock.lock('saving-key');
+  odd.refuse = true;
+  await tryIt(() => odd.lock.unlock()); await tryIt(() => odd.lock.unlock());
+  expect(L, (odd.cred() || {}).prf === 'no', 'two failed Face ID unlocks should mark this device\'s passkey as one that can\'t give the secret');
+  odd.refuse = false;
+  await odd.lock.clear();
+  r = await tryIt(() => odd.lock.lock('saving-key'));
+  expect(L, r.v === 'gate' && odd.creates === 1, 'after two fails, locking again should use the same passkey the way that needs no secret (got ' + (r.v || r.e) + ', passkeys made: ' + odd.creates + ')');
+  // 7. This device's passkey was deleted: locking again makes a new one instead of getting stuck.
+  const del = lockDevice('windows');
+  await del.lock.lock('saving-key');
+  del.gone.add('0107');
+  await del.lock.clear();
+  // Windows can't tell a deleted passkey from Cancel: the first try says so and forgets it, the next try makes a new one.
+  r = await tryIt(() => del.lock.lock('saving-key'));
+  if (r.e && r.e.code === 'needtap') r = await tryIt(() => del.lock.lock('saving-key'));
+  expect(L, r.v === 'gate' && del.creates === 2, 'if this device\'s passkey was deleted, locking again should make a new one (got ' + (r.v || r.e) + ', passkeys made: ' + del.creates + ')');
+}
+
 async function run() {
   rules();
+  await lockRules();
   robotRules();
   planRules();
   finRules();
