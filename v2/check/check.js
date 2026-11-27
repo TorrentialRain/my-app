@@ -363,6 +363,16 @@ function finRules() {
   const rvM = JSON.parse(JSON.stringify(MONTHS)); for (const k of Object.keys(rvM)) for (const t of rvM[k].txns) if (t.id === 't02' || t.id === 't11') { t.rv = 1; if (t.id === 't11') t.cat = t.c = 'other'; }
   const rvIds = Money.missed(FIN, rvM, TODAY).all.map((m) => m.id);
   expect(F, rvIds.includes('t11') && !rvIds.includes('t02'), 'a flagged charge should be missed unless something already sorts it (a store rule, a store word or his answer)');
+  // Money he adds to his Cash App shows at the bank as CASH APP*JOSHUA (found Nov 27: a $44 top-up was called a
+  // missed charge and counted in Wants). It's always a move between his own accounts, whatever the robot labelled it.
+  const topM = { [TODAY.slice(0, 7)]: { txns: [{ id: 'tj1', d: TODAY, a: -44, k: 'First National Bank Alaska', s: 'POS PURCHASE CASH APP*JOSHUA Oakland CA', cat: 'other', c: 'other', rv: 1 }] } };
+  const tj = topM[TODAY.slice(0, 7)].txns[0];
+  expect(F, Money.missed(FIN, topM, TODAY).all.length === 0, 'money added to his own Cash App (CASH APP*JOSHUA) should never be a missed charge');
+  expect(F, Money.catOf(tj, []) === 'transfer' && Money.bucketOf(tj, []) === 'transfer', 'money added to his own Cash App should count as a transfer, not as Wants');
+  // A bank alert that names no store waits 2 days for its name before it's asked about (found Nov 27).
+  const unM = { [TODAY.slice(0, 7)]: { txns: [{ id: 'tu1', d: TODAY, a: -12, k: 'First National Bank Alaska', s: 'Bank debit (the alert named no store)', cat: 'other', c: 'other', rv: 1, unnamed: true }] } };
+  expect(F, Money.missed(FIN, unM, TODAY).all.length === 0, 'a charge the bank alert did not name should wait for its name before it is a missed charge');
+  expect(F, Money.missed(FIN, unM, Money.addDays(TODAY, 2)).all.length === 1, 'a charge still unnamed after 2 days should be asked about');
   expect(F, Money.cleanName('Check #3206') === 'Check #3206' && Money.cleanName('VENMO NONE 8558124430 NY') === 'Venmo payment', 'a check lost its number, or a nameless Venmo payment kept a junk name');
   const rows = w.activity.flatMap((d) => d.rows);
   expect(F, rows.filter((r) => r.double).length === 2, 'the same charge twice on one day should be flagged');

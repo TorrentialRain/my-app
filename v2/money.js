@@ -81,9 +81,22 @@
     if (t.cat === 'other') return 'other';
     return t.a > 0 ? 'income' : 'other';
   }
+  // Money he adds to his own Cash App from the bank card shows at the bank as "CASH APP*JOSHUA". It's always a move
+  // between his own accounts, whatever label a robot gave it (found Nov 27: a $44 top-up counted in Wants as a
+  // missed charge, and an older one from Nov 7 had no label at all). Only his own fix or store rule changes that.
+  const OWN_MOVE = /cash ?app\s*\*\s*joshua/i;
+  const ownMove = (t) => !!t && t.lb !== 'josh' && OWN_MOVE.test(t.s || '');
+  // A bank alert that names no store (First National's alerts never do). Found Nov 27: the robot called one a
+  // missed charge the moment it came in, before the bank or a receipt could name it. It now waits 2 days to be
+  // matched to its name (his screenshots, a receipt, a Cash App "added" email) before it's ever asked about.
+  const unnamed = (t) => !!t && !t.name && (t.unnamed === true || /named no store/i.test(t.s || ''));
+  const NAME_WAIT = 2;
+  const daysApart = (a, b) => Math.round((Date.UTC(+b.slice(0, 4), +b.slice(5, 7) - 1, +b.slice(8, 10)) - Date.UTC(+a.slice(0, 4), +a.slice(5, 7) - 1, +a.slice(8, 10))) / 864e5);
+  const waitingForName = (t, today) => !!today && unnamed(t) && daysApart(t.d, today) < NAME_WAIT;
   function catOf(t, rules) {
     const r = myRule(t, rules);
     if (r && r.cat) return r.cat;
+    if (ownMove(t)) return 'transfer';
     const c = rawCat(t);
     // Money moved between his own accounts, or into savings, isn't spending whatever the category says.
     const u = t.u;
@@ -96,6 +109,7 @@
   function bucketOf(t, rules) {
     const r = myRule(t, rules);
     if (r && r.u) return r.u;
+    if (ownMove(t)) return 'transfer';
     const c = rawCat(t);
     // Medical bills draw from the Medical money first (his pick), even when an older label said Needs.
     if (c === 'medical' && (!t.u || t.u === '50')) return 'medical';
@@ -409,8 +423,8 @@
   // Wants until he labels it. When he opens the Hub, a pop-up lists the new ones: Label now, or Label later.
   // Every one not labelled yet also sits in the Questions inbox, answerable any time, until it's labelled.
   // One rule feeds the pop-up, the inbox and Activity's "What was it for?" tag, so they can never disagree.
-  function needsLabel(t, rules) {
-    if (!t || t.lb === 'josh' || t.a >= 0 || myRule(t, rules)) return false;
+  function needsLabel(t, rules, today) {
+    if (!t || t.lb === 'josh' || t.a >= 0 || myRule(t, rules) || ownMove(t) || waitingForName(t, today)) return false;
     const c = rawCat(t);
     // A review flag only counts while nothing sorts the charge: once a store word or his answer gives it a
     // real category (PayRange is laundry), the flag is stale and the charge isn't asked about again.
@@ -419,7 +433,7 @@
   }
   function missed(fin, months, today) {
     const rules = storeRules(fin);
-    const list = allTx(months).filter((t) => t.d <= today && needsLabel(t, rules))
+    const list = allTx(months).filter((t) => t.d <= today && needsLabel(t, rules, today))
       .map((t) => ({ id: t.id, name: nameOf(t), d: t.d, a: t.a, account: SHORT[t.k] || t.k || '', later: !!t.later }));
     list.sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : 0));
     return { all: list, now: list.filter((m) => !m.later) };
@@ -439,7 +453,7 @@
       const rows = list.map((t) => {
         const c = catOf(t, rules), b = bucketOf(t, rules);
         const row = { id: t.id, name: nameOf(t), cat: c, catName: (CATS[c] || CATS.other).name, bucket: b, bucketName: bucketName(b, fin), amount: t.a, balance: after,
-          pending: !!t.p, account: SHORT[t.k] || t.k || '', ask: needsLabel(t, rules), mine: t.lb === 'josh', ruled: !!myRule(t, rules) };
+          pending: !!t.p, account: SHORT[t.k] || t.k || '', ask: needsLabel(t, rules, today), naming: waitingForName(t, today), mine: t.lb === 'josh', ruled: !!myRule(t, rules) };
         if (after != null) after = r2(after - t.a);
         return row;
       });

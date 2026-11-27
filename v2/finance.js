@@ -305,7 +305,7 @@
     const days = W.activity.slice(0, actDays).map((d) => {
       const label = d.day === W.today ? 'Today · ' + M.longDay(d.day) : d.day === M.addDays(W.today, -1) ? 'Yesterday · ' + M.longDay(d.day) : M.longDay(d.day);
       const rows = d.rows.map((r) => {
-        const chips = (r.pending ? '<span class="fi-tag">Pending</span>' : '') + (r.ask ? '<span class="fi-tag on">What was it for?</span>' : '') + (r.double ? '<span class="fi-tag warn">Maybe counted twice</span>' : '') + (r.ruled ? '<span class="fi-tag">Store rule</span>' : '');
+        const chips = (r.pending ? '<span class="fi-tag">Pending</span>' : '') + (r.ask ? '<span class="fi-tag on">What was it for?</span>' : '') + (r.naming ? '<span class="fi-tag">Name coming</span>' : '') + (r.double ? '<span class="fi-tag warn">Maybe counted twice</span>' : '') + (r.ruled ? '<span class="fi-tag">Store rule</span>' : '');
         return '<button type="button" class="fi-row" data-tx="' + esc(r.id) + '"><span class="fi-rname"><b>' + esc(r.name) + '</b><span>' + esc(r.catName) + ' · ' + esc(r.bucketName) + ' · ' + esc(r.account) + '</span>' + (chips ? '<span class="fi-tags">' + chips + '</span>' : '') + '</span>' +
           '<span class="num ' + (r.amount < 0 ? 'out' : 'in') + '">' + M.signed(r.amount) + '</span><span class="num"><span class="fi-bal' + (r.balance < 0 ? ' neg' : '') + '">' + (r.balance == null ? '' : M.money(r.balance)) + '</span></span></button>';
       }).join('');
