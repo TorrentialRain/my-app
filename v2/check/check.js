@@ -1261,9 +1261,9 @@ async function phonePlan(page, scheme, size) {
   const d0 = await page.locator('.pl-date').textContent();
   await page.tap('.pl-next');
   await settle(page, 200);
-  expect(P, (await page.locator('.pl-date').textContent()) !== d0 && await page.locator('.pl-today').isVisible(), 'the › arrow did not move to the next day, or Today did not show');
+  expect(P, (await page.locator('.pl-date').textContent()) !== d0 && await page.locator('.pl-today.phone-only').isVisible(), 'the › arrow did not move to the next day, or Today did not show');
   expect(P, (await planText(page)).includes('Introduction to College Writing'), "tomorrow's class does not show on tomorrow");
-  await page.tap('.pl-today');
+  await page.tap('.pl-today.phone-only');
   await settle(page, 200);
   expect(P, (await page.locator('.pl-date').textContent()) === d0, 'Today did not go back to today');
   // Week view.
@@ -1275,13 +1275,13 @@ async function phonePlan(page, scheme, size) {
   for (let i = 0; i < 4; i++) { await page.tap('.pl-next'); await settle(page, 120); }
   expect(P, await page.locator('.pl-wnote').isVisible(), 'a week past the calendar copy should say it isn\'t copied yet');
   await look(page, P + ' week not copied yet', size);
-  await page.tap('.pl-today');
+  await page.tap('.pl-today.phone-only');
   await settle(page, 200);
   // Tapping a day in the week opens that day.
   await page.locator('.pl-wday').nth(0).tap();
   await settle(page, 250);
   expect(P, (await page.locator('.pl-wrap').getAttribute('data-view')) === 'day', 'tapping a day in the week should open that day');
-  await page.tap('.pl-today');
+  if (await page.locator('.pl-today.phone-only').isVisible()) await page.tap('.pl-today.phone-only'); // hidden when that day is today
   await settle(page, 200);
   const dk = await page.evaluate(() => { const m = getComputedStyle(document.getElementById('page-plan')).backgroundColor.match(/[\d.]+/g).map(Number); return Math.round(0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]); });
   expect(P, dk < 50, 'Plan should be dark, even on a phone set to ' + scheme + ' (got ' + dk + ')');
