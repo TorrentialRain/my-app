@@ -528,10 +528,32 @@
     for (const l of lists) for (const i of (l.items || [])) if (!i.undone) out.push(Object.assign({ list: l.id, listName: l.name }, i));
     return out;
   }
+  // The day a wishlist move happened, for its "where it came from" line (his pick C, Nov 26). Saves from the app keep
+  // the day (on). Found Nov 26: the GPU move was written down on Nov 25 for money moved on Nov 19, and only the day it was
+  // written down was kept, so an older move without that day uses the day named in its own note, then the day it was
+  // written down, then its paycheck.
+  const MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+  function moveDay(s) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s.on || '')) return s.on;
+    const wrote = s.at ? localDay(s.at) : null;
+    const m = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.? (\d{1,2})\b/i.exec(s.note || '');
+    if (m && wrote) {
+      let y = +wrote.slice(0, 4);
+      const day = y + '-' + String(MON[m[1].toLowerCase()]).padStart(2, '0') + '-' + String(+m[2]).padStart(2, '0');
+      if (day > wrote) y -= 1; // a note never names a day after it was written
+      return y + day.slice(4);
+    }
+    return wrote || s.paycheck || null;
+  }
+  function localDay(at) {
+    const d = new Date(at);
+    if (isNaN(d)) return null;
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
   function wishlists(fin) {
     const items = wishItems(fin);
     const open = items.filter((i) => !i.bought).map((i) => ({ id: i.id, list: i.list, listName: i.listName, name: i.name, amount: +i.amount || 0, saved: +i.saved || 0,
-      share: +i.amount > 0 ? Math.min(1, (+i.saved || 0) / +i.amount) : 0, from: (i.setAside || []).map((s) => ({ paycheck: s.paycheck, amount: +s.amount, label: s.label || '' })) }));
+      share: +i.amount > 0 ? Math.min(1, (+i.saved || 0) / +i.amount) : 0, from: (i.setAside || []).map((s) => ({ paycheck: s.paycheck, amount: +s.amount, label: s.label || '', inPot: s.in || '', day: moveDay(s) })) }));
     return { open, bought: items.filter((i) => i.bought), setAside: r2(open.reduce((s, i) => s + i.saved, 0)), lists: (((fin && fin.wishlists) || {}).lists || []).map((l) => ({ id: l.id, name: l.name })) };
   }
 

@@ -674,7 +674,7 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
 .fi-lineg { fill: none; stroke: #30d158; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
 .fi-lines { fill: none; stroke: #64a0ff; stroke-width: 2.5; stroke-linejoin: round; }
 .fi-pinline { stroke: #30d158; stroke-width: 1.5; }
-.fi-pintext { fill: #000000; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.fi-pintext { fill: #ffffff; stroke: none; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .fi-pindot { fill: var(--card); stroke: #30d158; stroke-width: 2.5; }
 .fi-two { display: flex; flex-direction: column; gap: 14px; }
 /* The savings amount is the same blue as the graph's savings line, as in the approved PC mockup (Nov 26). */
@@ -760,6 +760,26 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
 .fi-btns .wide { flex: 1; }
 
 /* Wishlists and Debt */
+.fi-bar { display: block; height: 8px; border-radius: 4px; background: var(--chip); overflow: hidden; }
+.fi-bar i { display: block; height: 100%; border-radius: 4px; background: var(--gc, var(--on)); }
+/* Wishlists, his pick C (Nov 26; canvas board WishC2). */
+.fi-wrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.fi-addw { display: inline-flex; align-items: center; gap: 6px; }
+.fi-wgrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 34px 12px; padding-top: 22px; }
+.fi-wish { position: relative; isolation: isolate; padding: 14px 76px 16px 16px; gap: 8px; }
+.fi-wish h2 { margin: 0; font-size: 17px; line-height: 22px; font-weight: 600; }
+.fi-wish .fi-fill i { background: rgba(48, 209, 88, 0.16); }
+.fi-wishbar i { background: #30d158; }
+.fi-wicon { position: absolute; top: -22px; right: 14px; width: 52px; height: 52px; border-radius: 14px; background: var(--wants); color: #ffffff; display: flex; align-items: center; justify-content: center; transform: rotate(-4deg) translate3d(calc(var(--tx, 0) * 3px), calc(var(--ty, 0) * 3px), 0); box-shadow: 0 12px 20px -6px color-mix(in srgb, var(--wants) 35%, transparent), 0 4px 8px rgba(0, 0, 0, 0.45); }
+.fi-moves { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.fi-move { font-size: 13px; line-height: 18px; color: var(--ink2); font-variant-numeric: tabular-nums; }
+.fi-move b { color: var(--ink); font-weight: 600; }
+.fi-wish .fi-btns { margin-top: 4px; }
+.fi-wgrid + .fi-last { margin-top: 14px; }
+/* The round + floats bottom right like TO-DO's, held at the bottom of the screen while the page scrolls. It keeps its
+   own room under the last card, so at the end of the page it sits below everything. */
+.fi-fabs { position: sticky; bottom: calc(var(--safe-bottom) + var(--bar-h) + 16px); display: flex; justify-content: flex-end; padding-top: 16px; pointer-events: none; z-index: 3; }
+.fi-fabs .plus { pointer-events: auto; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5); }
 .fi-wamt { margin: 0; font-size: 15px; line-height: 20px; color: var(--ink2); font-variant-numeric: tabular-nums; }
 .fi-wamt b { color: var(--ink); font-size: 20px; }
 .fi-right { display: flex; flex-direction: column; align-items: flex-end; text-align: right; font-variant-numeric: tabular-nums; }
@@ -798,6 +818,8 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
   .fi-side { flex-direction: column; flex: 0 0 220px; gap: 4px; padding: 14px 10px; background: var(--card); border-radius: 24px; box-shadow: var(--shadow); position: sticky; top: 88px; }
   .fi-side .fi-tab { width: 100%; min-height: 48px; justify-content: flex-start; padding: 0 14px; }
   .fi-main { flex: 1; gap: 12px; }
+  .fi-wgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fi-fabs { bottom: 24px; }
   .fi-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 540px); gap: 24px; align-items: start; }
   .fi-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
   .fi-card { padding: 12px 16px; gap: 6px; }

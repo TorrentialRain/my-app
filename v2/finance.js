@@ -324,20 +324,33 @@
   }
 
   // ----- Wishlists -----
+  // Wishlists, his pick C (Nov 26; canvas board WishC2): a slim "Your wishlist" row with Add, then each item filling up
+  // like a bucket. Its amount shows once, with a plain line for each move saying where it came from and when; a move's
+  // own amount shows only when the item has 2 or more moves. Each item keeps Bought it. Set money aside is the one round
+  // + floating bottom right. Bought items fold into an archive at the bottom.
+  function moveLine(f, many) {
+    const when = f.day ? M.monthDay(f.day) : '';
+    const where = f.paycheck ? 'From the paycheck of ' + M.monthDay(f.paycheck) : f.label ? f.label + (when ? ', ' + when : '') : f.inPot ? 'Moved to savings' + (when ? ', ' + when : '') : 'Set aside by hand' + (when ? ', ' + when : '');
+    return '<li class="fi-move">' + (many ? '<b>' + M.money(f.amount) + '</b> · ' : '') + esc(where) + '</li>';
+  }
   function wishlists() {
     const Wl = W.wish;
     const items = Wl.open.map((i) => {
-      const chips = i.from.map((f) => '<span class="fi-chip">' + M.money(f.amount) + (f.paycheck ? ' · Paycheck of ' + M.monthDay(f.paycheck) : f.label ? ' · ' + esc(f.label) : '') + '</span>').join('');
-      return '<section class="fi-card fi-wish"><div class="fi-cardhead"><h2>' + esc(i.name) + '</h2><span class="fi-note">' + esc(i.listName) + '</span></div>' +
-        '<p class="fi-wamt"><b>' + M.money(i.saved) + '</b> of ' + M.money(i.amount) + ' set aside</p><span class="fi-bar g-wants"><i style="width:' + (i.share * 100).toFixed(1) + '%"></i></span>' +
-        (chips ? '<div class="fi-chips">' + chips + '</div>' : '') +
-        '<div class="fi-btns"><button type="button" class="fi-small on" data-aside="' + esc(i.id) + '">Set money aside</button><button type="button" class="fi-small" data-bought="' + esc(i.id) + '">Bought it</button></div></section>';
+      const many = i.from.length > 1;
+      const moves = i.from.length ? '<ul class="fi-moves">' + i.from.map((f) => moveLine(f, many)).join('') + '</ul>' : '';
+      return '<section class="fi-card fi-wish" data-wish="' + esc(i.id) + '"><span class="fi-fill" aria-hidden="true"><i style="height:' + (i.share * 100).toFixed(1) + '%"></i></span>' +
+        '<span class="fi-wicon" aria-hidden="true">' + ic(ICON.wishlists, 24) + '</span>' +
+        '<h2>' + esc(i.name) + '</h2><p class="fi-wamt"><b>' + M.money(i.saved) + '</b> of ' + M.money(i.amount) + ' set aside</p>' +
+        '<span class="fi-bar fi-wishbar"><i style="width:' + (i.share * 100).toFixed(1) + '%"></i></span>' + moves +
+        '<div class="fi-btns"><button type="button" class="fi-small" data-bought="' + esc(i.id) + '">Bought it</button></div></section>';
     }).join('');
     const bought = Wl.bought.length ? '<section class="fi-card fi-last"><button type="button" class="fi-fold" data-show-bought aria-expanded="' + showBought + '">Bought and archived · ' + Wl.bought.length + ic(ICON.chev, 18) + '</button>' +
       (showBought ? '<ul class="fi-list">' + Wl.bought.map((i) => '<li><span>' + esc(i.name) + '</span><span>' + (i.bought ? M.monthDay(i.bought) : '') + '</span></li>').join('') + '</ul>' : '') + '</section>' : '';
-    return '<div class="fi-cols"><div class="fi-col"><section class="fi-card"><div class="fi-cardhead"><div><p class="fi-cap">Set aside</p><p class="fi-big">' + M.money(Wl.setAside) + '</p></div><button type="button" class="addbtn" data-add-wish>' + ic(ICON.plus, 18) + 'Add</button></div>' +
-      '<p class="fi-note">Held, so it can\'t be spent by accident.</p></section>' + bought + '</div><div class="fi-col">' + (items || '<p class="fi-note">Nothing on your wishlists yet.</p>') + '</div></div>';
+    const fab = Wl.open.length && W.budget ? '<div class="fi-fabs" data-floats><button type="button" class="plus" data-aside-pick aria-label="Set money aside">' + ic(ICON.plus, 28) + '</button></div>' : '';
+    return '<div class="fi-wrow"><span class="fi-cap">Your wishlist</span><button type="button" class="fi-small fi-addw" data-add-wish>' + ic(ICON.plus, 18) + 'Add</button></div>' +
+      '<div class="fi-wgrid">' + (items || '<p class="fi-note">Nothing on your wishlists yet.</p>') + '</div>' + bought + fab;
   }
+
 
   // ----- Debt -----
   function debt() {
@@ -450,12 +463,18 @@
       (lists.length ? '<label class="fld"><span>Wishlist</span><select name="list">' + lists.map((l) => '<option value="' + esc(l.id) + '">' + esc(l.name) + '</option>').join('') + '</select></label>' : '') +
       '<button type="submit" class="wide">Save</button></form>');
   }
+  // The round + opens this: pick the item, then the amount (his pick C, Nov 26).
   function asideSheet(id) {
-    const i = W.wish.open.find((x) => x.id === id);
-    if (!i || !W.budget) return;
-    openSheet('Set money aside', '<form class="fi-form" data-aside-form="' + esc(id) + '" autocomplete="off"><p class="hint">For ' + esc(i.name) + ', from the paycheck of ' + M.monthDay(W.budget.P.start) + '. It\'s held from then on, so it can\'t be spent by accident.</p>' +
-      '<label class="fld"><span>Amount</span><input name="amount" required inputmode="decimal" placeholder="$0.00"></label><button type="submit" class="wide">Set aside</button></form>');
+    const open = W.wish.open;
+    if (!open.length || !W.budget) return;
+    const pick = open.find((x) => x.id === id) || open[0];
+    openSheet('Set money aside', '<form class="fi-form" data-aside-form autocomplete="off">' +
+      '<label class="fld"><span>For</span><select name="item">' + open.map((i) => '<option value="' + esc(i.id) + '"' + (i.id === pick.id ? ' selected' : '') + '>' + esc(i.name) + ' · ' + M.money(i.saved) + ' of ' + M.money(i.amount) + '</option>').join('') + '</select></label>' +
+      '<label class="fld"><span>Amount</span><input name="amount" required inputmode="decimal" placeholder="$0.00"></label>' +
+      '<p class="hint">From the paycheck of ' + M.monthDay(W.budget.P.start) + '. It\'s held from then on, so it can\'t be spent by accident.</p>' +
+      '<button type="submit" class="wide">Set aside</button></form>');
   }
+
   function boughtSheet(id) {
     const i = W.wish.open.find((x) => x.id === id);
     if (!i) return;
@@ -476,7 +495,7 @@
     if (b.dataset.undoRule) { add({ type: 'undoRule', ruleId: b.dataset.undoRule }); return; }
     if (b.hasAttribute('data-add-debt')) { addDebtSheet(); return; }
     if (b.hasAttribute('data-add-wish')) { addWishSheet(); return; }
-    if (b.dataset.aside) { asideSheet(b.dataset.aside); return; }
+    if (b.hasAttribute('data-aside-pick')) { asideSheet(); return; }
     if (b.dataset.bought) { boughtSheet(b.dataset.bought); return; }
     if (b.hasAttribute('data-show-bought')) { showBought = !showBought; render(); return; }
     if (b.hasAttribute('data-show-paid')) { showPaid = !showPaid; render(); return; }
@@ -517,10 +536,11 @@
       const price = amt(v('amount'));
       if (!v('name') || !price) { f.reportValidity(); return; }
       add({ type: 'addWish', listId: v('list'), item: { id: S.newId('w'), name: v('name'), amount: price, saved: 0, added: at } });
-    } else if (f.dataset.asideForm) {
+    } else if (f.hasAttribute('data-aside-form')) {
       const a = amt(v('amount'));
-      if (!a) { f.reportValidity(); return; }
-      add({ type: 'setAside', itemId: f.dataset.asideForm, amount: a, paycheck: W.budget.P.start });
+      if (!a || !v('item')) { f.reportValidity(); return; }
+      const d = new Date(), on = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      add({ type: 'setAside', itemId: v('item'), amount: a, paycheck: W.budget.P.start, on });
     } else return;
     if (fromMissed && f.dataset.fix) { missedSheet(); return; }
     closeSheet();

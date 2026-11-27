@@ -61,7 +61,7 @@
       for (const l of ((f.wishlists || {}).lists || [])) for (const i of (l.items || [])) {
         if (i.id !== c.itemId || has(i, c.id)) continue;
         i.saved = Math.round(((+i.saved || 0) + c.amount) * 100) / 100;
-        i.setAside = (i.setAside || []).concat({ paycheck: c.paycheck, amount: c.amount, at: c.at });
+        i.setAside = (i.setAside || []).concat({ paycheck: c.paycheck, amount: c.amount, at: c.at, on: c.on || c.at.slice(0, 10) });
         stamp(i, c.id);
         f.wishlists.updatedAt = c.at;
       }

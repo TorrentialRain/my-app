@@ -1418,6 +1418,9 @@ async function phoneFinance(page, scheme, size) {
   await page.tap('[data-go-debt]');
   await settle(page, 250);
   expect(F, (await page.getAttribute('.fi-tabs [data-fi-tab="debt"]', 'aria-pressed')) === 'true', 'the Debt page button did not open Debt');
+  // Found Nov 26: the polish pass dropped the bar's look, so Debt's paid-off bar and each wishlist bar showed nothing.
+  const flatBars = await page.evaluate(() => Array.from(document.querySelectorAll('#page-finance .fi-bar')).filter((b) => { const r = b.getBoundingClientRect(); return r.height < 4 || r.width < 20; }).length);
+  expect(F + ' Debt', flatBars === 0, flatBars + ' progress bar(s) on Debt are not showing');
   // Add a debt: the form looks right (closed without saving).
   await page.tap('[data-add-debt]');
   await settle(page, 250);
@@ -1440,7 +1443,9 @@ async function phoneFinance(page, scheme, size) {
   await settle(page, 200);
   await page.tap('.fi-tabs [data-fi-tab="wishlists"]');
   await settle(page, 200);
-  await page.locator('[data-aside]').first().tap();
+  await wishParts(page, F + ' Wishlists');
+  await floatsClear(page, F + ' Wishlists', '#page-finance');
+  await page.locator('[data-aside-pick]').first().tap();
   await settle(page, 250);
   await lookSheet(page, F + ' set money aside', size, '#sheet-fin');
   await page.tap('#sheet-fin .sheet-top [data-close]');
@@ -1458,6 +1463,41 @@ async function phoneFinance(page, scheme, size) {
   await page.tap('#sheet-planmsg [data-close]');
   await settle(page, 200);
 }
+// Wishlists, his pick C (canvas WishC2): a slim "Your wishlist" row with Add, no total card, each item filling up, its
+// amount once, a plain line for each move saying where it came from (with its date), only Bought it on each item, and
+// one round + for Set money aside. Fails if one move's amount shows twice, or a move has no where-from line.
+async function wishParts(page, where) {
+  const items = FIN.wishlists.lists.flatMap((l) => l.items).filter((i) => !i.bought);
+  const got = await page.evaluate((items) => {
+    const out = [];
+    const money = (n) => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const count = (t, x) => t.split(x).length - 1;
+    const row = document.querySelector('#page-finance .fi-wrow');
+    if (!row || !/Your wishlist/.test(row.textContent) || !row.querySelector('[data-add-wish]')) out.push('the slim "Your wishlist" row with Add is missing');
+    if (document.querySelector('#page-finance .fi-big')) out.push('the old Set aside total card is still there');
+    if (document.querySelectorAll('#page-finance [data-floats] [data-aside-pick]').length !== 1) out.push('there should be one round + for Set money aside');
+    if (document.querySelector('#page-finance [data-aside]')) out.push('an item still has its own Set money aside button');
+    for (const it of items) {
+      const c = document.querySelector('#page-finance .fi-wish[data-wish="' + it.id + '"]');
+      if (!c) { out.push(it.name + ' is missing'); continue; }
+      const t = c.textContent, moves = it.setAside || [];
+      for (const m of moves) {
+        const shown = count(t, money(m.amount)), allowed = (moves.length > 1 ? moves.filter((x) => x.amount === m.amount).length : 0) + (Math.abs((it.saved || 0) - m.amount) < 0.005 ? 1 : 0);
+        if (shown > allowed) out.push(it.name + ': the move of ' + money(m.amount) + ' shows ' + shown + ' times');
+      }
+      const lines = Array.from(c.querySelectorAll('.fi-move')).map((l) => l.textContent.trim());
+      if (lines.length !== moves.length || lines.some((l) => !/(paycheck|savings|by hand|[A-Za-z]+, )/.test(l) || !/(January|February|March|April|May|June|July|August|September|October|November|December) \d/.test(l))) out.push(it.name + ': each move needs a line saying where it came from, with its date (got ' + JSON.stringify(lines) + ')');
+      const btns = Array.from(c.querySelectorAll('button')).map((b) => b.textContent.trim());
+      if (btns.join('|') !== 'Bought it') out.push(it.name + ': should keep only Bought it (got ' + btns.join(', ') + ')');
+      const fill = c.querySelector('.fi-fill i');
+      if (!fill || !fill.style.height) out.push(it.name + ' should fill up like a bucket');
+      const bar = c.querySelector('.fi-bar'), br = bar && bar.getBoundingClientRect();
+      if (!bar || br.height < 4 || br.width < 20) out.push(it.name + ': its progress bar is not showing');
+    }
+    return out;
+  }, items);
+  for (const g of got) problem(where, g);
+}
 // Every part of the approved graph (canvas: graph C with B's pins) and bucket cards is there, and the graph keeps
 // its shape: never stretched, so it grows taller as it gets wider and its dots stay round.
 async function graphParts(page, where) {
@@ -1470,6 +1510,7 @@ async function graphParts(page, where) {
     const fills = Array.from(document.querySelectorAll('.fi-buckets .fi-tile .fi-fill i')).filter((i) => i.style.height !== '').length;
     return { ratio: (r.width / r.height) / (vb.width / vb.height), h: r.height, w: r.width,
       pins: svg.querySelectorAll('.fi-pin rect').length, pinText: Array.from(svg.querySelectorAll('.fi-pintext')).map((t) => t.textContent),
+      pinColor: Array.from(svg.querySelectorAll('.fi-pintext')).map((t) => { const c = getComputedStyle(t); return c.fill + '|' + c.stroke; }),
       ring: svg.querySelectorAll('.fi-pin .fi-pindot').length, stem: svg.querySelectorAll('.fi-pin .fi-pinline').length,
       dollars: svg.querySelectorAll('.fi-glabel:not([data-date-label])').length, grid: svg.querySelectorAll('.fi-gline').length,
       savings: !!svg.querySelector('[data-savings-line]'), key: (document.querySelector('.fi-chart .fi-key') || {}).textContent || '',
@@ -1480,6 +1521,7 @@ async function graphParts(page, where) {
   expect(where, Math.abs(g.ratio - 1) < 0.02, 'the graph is stretched (its shape is ' + g.ratio.toFixed(2) + ' times its drawing\'s, ' + Math.round(g.w) + ' by ' + Math.round(g.h) + ')');
   expect(where, g.edge, 'the graph should run edge to edge across its card');
   expect(where, g.pins >= 1 && g.ring === g.pins && g.stem === g.pins && g.pinText.every((t) => /^\+\$[\d,]+$/.test(t)), 'each paycheck should get a pin with just the amount, a short line and a ringed dot (pins: ' + JSON.stringify(g.pinText) + ')');
+  expect(where, g.pinColor.every((c) => /^rgb\(255, 255, 255\)\|none$/.test(c)), 'each pin\'s amount should be white with no outline, his pick Nov 26 (got ' + JSON.stringify(g.pinColor) + ')');
   expect(where, g.dollars >= 1 && g.grid >= 1, 'the graph should have faint dollar labels inside it');
   expect(where, g.savings && /Balance \$/.test(g.key) && /Savings \$/.test(g.key), 'the graph should have the blue Savings line and a key with both amounts (key: "' + g.key + '")');
   expect(where, g.dates.length >= 2 && g.dates[1] === 'Today', 'the date row should show the first day, the paycheck dates and "Today" (got ' + JSON.stringify(g.dates) + ')');
