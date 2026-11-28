@@ -1687,6 +1687,49 @@ function graphMovesMatch(fin, months, now, where) {
     if (Math.abs(got - want) > 0.01) problem(where, 'on ' + d + ' the blue Savings line stepped by a different amount than the money moved in or out of savings, so the two lines do not match');
   }
 }
+// Savings tags (his pick, Nov 28): each savings move on the graph gets a blue tag at its step that says which way
+// the money went, and no tag covers a pin, another tag or the dates, on the phone and a PC, at every range.
+async function savingsTags(browser, base, scheme, size, extra, edges) {
+  const where = scheme + (size.W > 1000 ? ' PC' : '') + ' savings tags';
+  const ctx = await newContext(browser, scheme, size, extra);
+  const m = ctx.box.files['data/fin.config.months.json'];
+  const add = (t) => (m[t.d.slice(0, 7)] = m[t.d.slice(0, 7)] || { txns: [] }).txns.push(Object.assign({ m: 0, p: 0, c: 'savings', cat: 'savings', u: 'savings' }, t));
+  add({ id: 'st1', d: dayN(-5), a: -93, k: 'First National Bank Alaska', s: 'To savings x0000' });
+  add({ id: 'st2', d: dayN(-4), a: -25, k: 'Cash App', s: 'Moved to Cash App Savings' });
+  add({ id: 'st3', d: dayN(-1), a: 50, k: 'First National Bank Alaska', s: 'From savings x0000' });
+  const pg = await openConnected(ctx, base, edges);
+  await closeMissed(pg);
+  await (extra.hasTouch ? pg.tap('.tab[data-tab="finance"]') : pg.click('.tab[data-tab="finance"]'));
+  await settle(pg);
+  await finReady(pg);
+  for (const n of ['30', '90', '0']) {
+    const btn = '.fi-seg [data-range="' + n + '"]';
+    if (await pg.locator(btn).count()) { await (extra.hasTouch ? pg.tap(btn) : pg.click(btn)); await settle(pg, 250); }
+    const r = await pg.evaluate(() => {
+      const svg = document.querySelector('.fi-chart .fi-graph'), g = svg.getBoundingClientRect();
+      const box = (el) => el.getBoundingClientRect();
+      const tags = Array.from(svg.querySelectorAll('[data-savings-tag]')).map((t) => ({ day: t.dataset.savingsTag, amount: +t.dataset.amount, text: t.querySelector('text').textContent, b: box(t.querySelector('rect')) }));
+      const others = Array.from(svg.querySelectorAll('.fi-pin rect, [data-date-label]')).map(box);
+      const out = [];
+      tags.forEach((t, i) => {
+        if (t.b.left < g.left - 0.5 || t.b.right > g.right + 0.5 || t.b.top < g.top - 0.5) out.push('the tag on ' + t.day + ' runs off the graph');
+        if (others.some((o) => t.b.left < o.right && o.left < t.b.right && t.b.top < o.bottom && o.top < t.b.bottom)) out.push('the tag on ' + t.day + ' covers a pin or a date');
+        tags.slice(0, i).forEach((u) => { if (t.b.left < u.b.right && u.b.left < t.b.right && t.b.top < u.b.bottom && u.b.top < t.b.bottom) out.push('the tags on ' + u.day + ' and ' + t.day + ' overlap'); });
+      });
+      return { tags: tags.map((t) => [t.day, t.amount, t.text]), out };
+    });
+    const R = (n === '0' ? 'All' : n + ' days');
+    for (const o of r.out) problem(where + ' ' + R, o);
+    const want = { [dayN(-5)]: [93, '\u2212$93'], [dayN(-4)]: [25, '\u2212$25'], [dayN(-1)]: [-50, '+$50'] };
+    for (const [d, [a, t]] of Object.entries(want)) {
+      const got = r.tags.find((x) => x[0] === d);
+      expect(where + ' ' + R, got && Math.abs(got[1] - a) < 0.01 && got[2].startsWith(t) && (a > 0 ? /( to savings)?$/ : /( from savings)?$/).test(got[2]), 'the move on ' + d + ' should have a tag starting "' + t + '" (got ' + JSON.stringify(got || null) + ')');
+    }
+    expect(where + ' ' + R, r.tags.length === 3, 'only days with a savings move should get a tag (got ' + JSON.stringify(r.tags) + ')');
+    if (n === '30') { await look(pg, where, size); await pg.screenshot({ path: path.join(OUT, scheme + (size.W > 1000 ? '-pc' : '') + '-finance-savings-tags.png') }); }
+  }
+  await ctx.close();
+}
 async function graphParts(page, where) {
   const g = await page.evaluate(() => {
     const svg = document.querySelector('.fi-chart .fi-graph');
@@ -2099,6 +2142,8 @@ async function run() {
     if (pctx.badPaths.length) problem(scheme + ' PC', 'the app tried to write somewhere it never should: ' + pctx.badPaths.join(', '));
     if (scheme === 'dark') await fillsScreen(browser, base, pp);
     await pctx.close();
+    await savingsTags(browser, base, scheme, phone, { hasTouch: true, isMobile: true }, edges);
+    await savingsTags(browser, base, scheme, pc, {}, '');
   }
 
   // 8. Saving, the way Josh will do it: a key that can only read first, then Settings > Change key.

@@ -117,6 +117,7 @@
   // round), so it grows taller as the screen gets wider.
   const PC = window.matchMedia('(min-width: 900px)');
   const GREEN = '#30D158', BLUE = '#64A0FF';
+  const r2 = (n) => Math.round(n * 100) / 100;
   PC.addEventListener('change', () => { if (W) render(); }); // the picture's shape differs on the PC
   function niceStep(span) {
     const raw = span / 3, mag = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1))));
@@ -192,11 +193,45 @@
       let tagBottom = py - 26 - lift;
       if (tagBottom - 22 < 2) tagBottom = 24; // never off the top
       lastRight = left0 + tw;
-      placed.push({ day: p.day, x: px });
+      placed.push({ day: p.day, x: px, box: [left0, tagBottom - 22, left0 + tw, py + 6] });
       pinSvg += '<g class="fi-pin" data-pin="' + p.day + '"><line x1="' + f(px) + '" x2="' + f(px) + '" y1="' + f(tagBottom) + '" y2="' + f(py - 6) + '" class="fi-pinline"/>' +
         '<rect x="' + f(left0) + '" y="' + f(tagBottom - 22) + '" width="' + tw + '" height="22" rx="11" fill="' + GREEN + '"/>' +
         '<text x="' + f(left0 + tw / 2) + '" y="' + f(tagBottom - 6.5) + '" text-anchor="middle" class="fi-pintext">' + label + '</text>' +
         '<circle cx="' + f(px) + '" cy="' + f(py) + '" r="5" class="fi-pindot"/></g>';
+    }
+    // Savings tags (his pick, Nov 28: "Yes, add tags"): each day money moved in or out of savings gets a small blue
+    // tag at its step, like "−$93 to savings", so a move hidden in a busy day still shows. A tag never covers a pin,
+    // another tag or the dates: it climbs a row at a time, then shortens to just the amount, before it's left out.
+    let tagSvg = '';
+    if (hasSav) {
+      const taken = placed.map((p) => p.box);
+      const hits = (b) => taken.some((o) => b[0] < o[2] + 4 && o[0] < b[2] + 4 && b[1] < o[3] + 3 && o[1] < b[3] + 3);
+      for (let i = 1; i < sav.length; i++) {
+        if (sav[i] == null || sav[i - 1] == null) continue;
+        const d = r2(sav[i] - sav[i - 1]);
+        if (Math.abs(d) < 0.5) continue;
+        const amt = (d > 0 ? '\u2212' : '+') + M.money0(Math.abs(d));
+        const px = x(i), base = Math.min(y(sav[i]), y(sav[i - 1])) - 6;
+        let put = null;
+        for (const t of [amt + (d > 0 ? ' to savings' : ' from savings'), amt]) {
+          const tw = Math.round(t.length * 6.4 + 14);
+          const left = Math.max(2, Math.min(w - 2 - tw, px - tw / 2));
+          for (let k = 0; k < 5 && !put; k++) {
+            const b = base - k * 24;
+            if (b - 20 < 4) break;
+            const box = [left, b - 20, left + tw, b];
+            if (!hits(box)) put = { t, box };
+          }
+          if (put) break;
+        }
+        if (!put) continue;
+        taken.push(put.box);
+        const [l, t0, r, b] = put.box;
+        tagSvg += '<g class="fi-stag" data-savings-tag="' + days[i] + '" data-amount="' + d + '">' +
+          (b < base - 1 ? '<line x1="' + f(px) + '" x2="' + f(px) + '" y1="' + f(b) + '" y2="' + f(base + 6) + '" class="fi-stagline"/>' : '') +
+          '<rect x="' + f(l) + '" y="' + f(t0) + '" width="' + f(r - l) + '" height="20" rx="10" class="fi-stagbox"/>' +
+          '<text x="' + f((l + r) / 2) + '" y="' + f(b - 6) + '" text-anchor="middle" class="fi-stagtext">' + put.t + '</text></g>';
+      }
     }
     const li = vals.length - 1;
     const endDot = '<circle cx="' + f(x(li)) + '" cy="' + f(y(vals[li])) + '" r="9" fill="' + GREEN + '" opacity="0.25"/><circle cx="' + f(x(li)) + '" cy="' + f(y(vals[li])) + '" r="4.5" fill="' + GREEN + '"/>';
@@ -221,7 +256,7 @@
       (hasSav ? '<span><i style="background:' + BLUE + '"></i>Savings ' + M.money0(W.savings.total) + '</span>' : '') + '</div>';
     const svg = '<svg class="fi-graph" viewBox="0 0 ' + w + ' ' + h + '" role="img" aria-label="Balance over the last ' + (range ? range + ' days' : 'year') + ', now ' + M.money(B.current) + (hasSav ? ', savings ' + M.money(W.savings.total) : '') + '">' +
       '<defs><linearGradient id="fiArea" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="' + GREEN + '" stop-opacity="0.32"/><stop offset="1" stop-color="' + GREEN + '" stop-opacity="0.02"/></linearGradient></defs>' +
-      grid + area + line + savPath + savEnd + pinSvg + endDot + dates + '</svg>';
+      grid + area + line + savPath + savEnd + pinSvg + tagSvg + endDot + dates + '</svg>';
     return '<section class="fi-card fi-chart"><div class="fi-cardhead"><h2>Balance over time</h2><div class="fi-seg" role="group" aria-label="How far back">' + seg + '</div></div>' + key + svg + '</section>';
   }
   function totals() {

@@ -701,6 +701,10 @@ body.dragging .td-fabs { visibility: hidden; }
 .fi-pinline { stroke: #30d158; stroke-width: 1.5; }
 .fi-pintext { fill: #ffffff; stroke: none; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .fi-pindot { fill: var(--card); stroke: #30d158; stroke-width: 2.5; }
+/* Savings tags: the blue line's own color, quiet next to the green paycheck pins (his pick, Nov 28). */
+.fi-stagbox { fill: #12213a; stroke: #64a0ff; stroke-width: 1; }
+.fi-stagtext { fill: #a9c8ff; stroke: none; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.fi-stagline { stroke: #64a0ff; stroke-width: 1; stroke-dasharray: 2 2; }
 .fi-two { display: flex; flex-direction: column; gap: 14px; }
 /* The savings amount is the same blue as the graph's savings line, as in the approved PC mockup (Nov 26). */
 .fi-two > .fi-card:last-child .fi-big { color: #64a0ff; }
