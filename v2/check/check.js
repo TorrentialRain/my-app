@@ -2004,13 +2004,13 @@ async function savingsTags(browser, base, scheme, size, extra, edges) {
   const ctx = await newContext(browser, scheme, size, extra);
   const m = ctx.box.files['data/fin.config.months.json'];
   const add = (t) => (m[t.d.slice(0, 7)] = m[t.d.slice(0, 7)] || { txns: [] }).txns.push(Object.assign({ m: 0, p: 0, c: 'savings', cat: 'savings', u: 'savings' }, t));
-  add({ id: 'st1', d: dayN(-5), a: -93, k: 'First National Bank Alaska', s: 'To savings x0000' });
-  add({ id: 'st2', d: dayN(-4), a: -25, k: 'Cash App', s: 'Moved to Cash App Savings' });
+  // Moves on six days in a row: like Nov 17, 18 and 19 on his own graph, where the middle one ($221) got no amount (found Nov 28).
+  add({ id: 'st1', d: dayN(-6), a: -93, k: 'First National Bank Alaska', s: 'To savings x0000' });
+  add({ id: 'st2', d: dayN(-5), a: -25, k: 'Cash App', s: 'Moved to Cash App Savings' });
+  add({ id: 'st4', d: dayN(-4), a: -65, k: 'First National Bank Alaska', s: 'To savings x0000' });
+  add({ id: 'st5', d: dayN(-3), a: -221, k: 'First National Bank Alaska', s: 'To savings x0000' });
+  add({ id: 'st6', d: dayN(-2), a: -26.31, k: 'Cash App', s: 'Moved to Cash App Savings' });
   add({ id: 'st3', d: dayN(-1), a: 50, k: 'First National Bank Alaska', s: 'From savings x0000' });
-  // Three more moves a day apart, like Nov 17, 18 and 19 on his own graph, where the middle one ($221) got no amount (found Nov 28).
-  add({ id: 'st4', d: dayN(-8), a: -65, k: 'First National Bank Alaska', s: 'To savings x0000' });
-  add({ id: 'st5', d: dayN(-7), a: -221, k: 'First National Bank Alaska', s: 'To savings x0000' });
-  add({ id: 'st6', d: dayN(-6), a: -26.31, k: 'Cash App', s: 'Moved to Cash App Savings' });
   const pg = await openConnected(ctx, base, edges);
   await closeMissed(pg);
   await (extra.hasTouch ? pg.tap('.tab[data-tab="finance"]') : pg.click('.tab[data-tab="finance"]'));
@@ -2050,7 +2050,7 @@ async function savingsTags(browser, base, scheme, size, extra, edges) {
     const R = (n === '0' ? 'All' : n + ' days');
     for (const o of r.out) problem(where + ' ' + R, o);
     // Read from savings' side: into savings is +, out of savings is − (his pick, Nov 28: "Swap the + and - for savings my brain has it backwards").
-    const want = { [dayN(-8)]: [65, '+$65'], [dayN(-7)]: [221, '+$221'], [dayN(-6)]: [26.31, '+$26'], [dayN(-5)]: [93, '+$93'], [dayN(-4)]: [25, '+$25'], [dayN(-1)]: [-50, '\u2212$50'] };
+    const want = { [dayN(-6)]: [93, '+$93'], [dayN(-5)]: [25, '+$25'], [dayN(-4)]: [65, '+$65'], [dayN(-3)]: [221, '+$221'], [dayN(-2)]: [26.31, '+$26'], [dayN(-1)]: [-50, '\u2212$50'] };
     for (const [d, [a, t]] of Object.entries(want)) {
       const got = r.tags.find((x) => x[0] === d);
       expect(where + ' ' + R, got && Math.abs(got[1] - a) < 0.01 && got[2] === t, 'the move on ' + d + ' should show just "' + t + '" in blue (got ' + JSON.stringify(got || null) + ')');

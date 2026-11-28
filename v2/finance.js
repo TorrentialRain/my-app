@@ -191,24 +191,36 @@
     // Faint dollar lines, inside the picture. Found Nov 28: on a PC's short graph "$500" and "$250" printed on top of
     // each other, and on the phone the blue line ran through "$250". Now the lines are spaced at least 24 apart, and each
     // label sits on the left, or on the right if a line runs through the left, or is left out if both are crossed.
-    let step = niceStep(hi - lo);
-    while (step / (hi - lo) * (bot - top) < 24) step = niceStep(step * 3.01);
+    // The graph always keeps at least one labeled dollar line (found Nov 28: on a PC's short graph, spacing the lines out
+    // left none at all): it takes the widest spacing up to 24 that still leaves a labeled line.
     const onLine = (b) => dots.some(([px, py]) => px > b[0] - 3 && px < b[2] + 3 && py > b[1] - 3 && py < b[3] + 3);
-    const gridBoxes = [];
-    let grid = '';
-    for (let g = Math.ceil(lo / step) * step; g <= hi + 0.01; g += step) {
-      const gy = y(g);
-      if (g <= lo + 0.01 && lo === 0) continue; // the bottom edge needs no line
-      if (gy > bot - 14 || gy < top - 20) continue;
-      const t = M.money0(g), tw = t.length * 7.8 + 2;
-      const left = [10, gy - 18, 12 + tw, gy - 1], right = [w - 12 - tw, gy - 18, w - 10, gy - 1];
-      const box = !onLine(left) ? left : !onLine(right) ? right : null;
-      grid += '<line x1="0" x2="' + w + '" y1="' + f(gy) + '" y2="' + f(gy) + '" class="fi-gline"/>';
-      if (!box) continue;
-      gridBoxes.push(box);
-      grid += box === left ? '<text x="12" y="' + f(gy - 5) + '" class="fi-glabel" data-grid-label>' + t + '</text>'
-        : '<text x="' + f(w - 12) + '" y="' + f(gy - 5) + '" text-anchor="end" class="fi-glabel" data-grid-label>' + t + '</text>';
+    const gridFor = (step) => {
+      const boxes = [];
+      let svg = '';
+      for (let g = Math.ceil(lo / step) * step; g <= hi + 0.01; g += step) {
+        const gy = y(g);
+        if (g <= lo + 0.01 && lo === 0) continue; // the bottom edge needs no line
+        if (gy > bot - 14 || gy < top - 20) continue;
+        const t = M.money0(g), tw = t.length * 7.8 + 2;
+        const left = [10, gy - 18, 12 + tw, gy - 1], right = [w - 12 - tw, gy - 18, w - 10, gy - 1];
+        const free = (b) => !onLine(b) && !boxes.some((o) => b[0] < o[2] + 4 && o[0] < b[2] + 4 && b[1] < o[3] + 2 && o[1] < b[3] + 2);
+        const box = free(left) ? left : free(right) ? right : null;
+        svg += '<line x1="0" x2="' + w + '" y1="' + f(gy) + '" y2="' + f(gy) + '" class="fi-gline"/>';
+        if (!box) continue;
+        boxes.push(box);
+        svg += box === left ? '<text x="12" y="' + f(gy - 5) + '" class="fi-glabel" data-grid-label>' + t + '</text>'
+          : '<text x="' + f(w - 12) + '" y="' + f(gy - 5) + '" text-anchor="end" class="fi-glabel" data-grid-label>' + t + '</text>';
+      }
+      return { svg, boxes };
+    };
+    let step = niceStep(hi - lo), G = gridFor(step);
+    while (step / (hi - lo) * (bot - top) < 24) {
+      const next = niceStep(step * 3.01), N = gridFor(next);
+      if (!N.boxes.length && G.boxes.length) break;
+      step = next; G = N;
     }
+    if (!G.boxes.length) for (let k = 1; k < 4 && !G.boxes.length; k++) G = gridFor(niceStep(hi - lo) / (k * 2));
+    const grid = G.svg, gridBoxes = G.boxes;
     const pts = vals.map((v, i) => f(x(i)) + ',' + f(y(v)));
     const area = '<path d="M' + f(x(0)) + ',' + bot + ' L' + pts.join(' L') + ' L' + f(x(vals.length - 1)) + ',' + bot + ' Z" class="fi-area"/>';
     const line = '<polyline points="' + pts.join(' ') + '" class="fi-lineg"/>';
@@ -271,7 +283,7 @@
         // spots in widening rings around its own step, nearest first, so a label also stays by its step, and if none is
         // clear of the lines it still goes in the nearest spot that covers no other text.
         const spots = [];
-        const cxs = [px, px + tw / 2 + 4, px - tw / 2 - 4, px + tw + 8, px - tw - 8];
+        const cxs = [0, 1, -1, 2, -2, 3, -3, 4, -4].map((k) => px + k * (tw / 2 + 4));
         for (let up = 0; up < 9; up++) for (const cx of cxs) spots.push(textAt(amt, cx, hiY - 6 - up * 16, 13, 7.9));
         for (let dn = 0; dn < 6; dn++) for (const cx of cxs) spots.push(textAt(amt, cx, loY + 15 + dn * 16, 13, 7.9));
         spots.push(textAt(amt, px + tw / 2 + 5, mid, 13, 7.9), textAt(amt, px - tw / 2 - 5, mid, 13, 7.9));
