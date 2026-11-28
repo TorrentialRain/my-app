@@ -377,6 +377,16 @@ function finRules() {
   const rows = w.activity.flatMap((d) => d.rows);
   expect(F, rows.filter((r) => r.double).length === 2, 'the same charge twice on one day should be flagged');
   expect(F, rows.some((r) => r.ask), 'money sent to a person should ask what it was for');
+  // One charge counted twice under two names, a day apart (found Nov 27: a $20 Venmo payment went in pending as
+  // "Pizza" and again from the emails). Same account and amount within a day is flagged unless checked as two real ones.
+  const vA = { id: 'tv1', d: dayN(-2), a: -20, k: 'First National Bank Alaska', s: 'VENMO *NONE 8558124430 NY', p: 1 };
+  const vB = { id: 'tv2', d: dayN(-1), a: -20, k: 'First National Bank Alaska', s: 'VENMO *None NEW YORK NY' };
+  const vM = JSON.parse(JSON.stringify(MONTHS)); for (const t of [vA, vB]) (vM[t.d.slice(0, 7)] = vM[t.d.slice(0, 7)] || { txns: [] }).txns.push(t);
+  const vRows = Money.work(FIN, vM, null, new Date(NOW)).activity.flatMap((d) => d.rows);
+  expect(F, vRows.filter((r) => r.double && (r.id === 'tv1' || r.id === 'tv2')).length === 2, 'the same charge under two names a day apart should be flagged as maybe counted twice');
+  expect(F, Money.doublePairs([vA, Object.assign({}, vB, { both: true })]).length === 0, 'two charges checked as both real should not be flagged');
+  expect(F, Money.doublePairs([vA, Object.assign({}, vB, { k: 'Cash App' })]).length === 0, 'the same amount on two different accounts should not be flagged');
+
   expect(F, rows.some((r) => r.pending), 'a pending charge should show as pending');
   expect(F, rows.some((r) => r.ruled), 'a store rule should show on its charges');
   expect(F, !rows.some((r) => /^Cash App to (to|from)\b/i.test(r.name)), 'a Cash App name came out as "Cash App to to"');

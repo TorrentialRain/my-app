@@ -423,6 +423,20 @@
   // Wants until he labels it. When he opens the Hub, a pop-up lists the new ones: Label now, or Label later.
   // Every one not labelled yet also sits in the Questions inbox, answerable any time, until it's labelled.
   // One rule feeds the pop-up, the inbox and Activity's "What was it for?" tag, so they can never disagree.
+  // Charges that look like one charge counted twice: same account, same amount, at most a day apart, and not
+  // checked as two real charges (both: true on either). Used by Activity's tag; check.py has the same rule.
+  // It covers charges from Nov 26 on: everything before was matched against his Nov 25 screenshots, and the
+  // older same-place, same-day tag still covers those days.
+  const DOUBLE_FROM = '2026-11-26';
+  function doublePairs(list, from = DOUBLE_FROM) {
+    const out = [], by = {};
+    for (const t of list) { if (!t || t.both || !t.id || typeof t.a !== 'number' || !t.k || !(t.d >= addDays(from, -1))) continue; (by[t.k + '|' + t.a] = by[t.k + '|' + t.a] || []).push(t); }
+    for (const k in by) {
+      const g = by[k];
+      for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) if (Math.abs(daysApart(g[i].d, g[j].d)) <= 1 && (g[i].d >= from || g[j].d >= from)) out.push([g[i], g[j]]);
+    }
+    return out;
+  }
   function needsLabel(t, rules, today) {
     if (!t || t.lb === 'josh' || t.a >= 0 || myRule(t, rules) || ownMove(t) || waitingForName(t, today)) return false;
     const c = rawCat(t);
@@ -453,7 +467,7 @@
       const rows = list.map((t) => {
         const c = catOf(t, rules), b = bucketOf(t, rules);
         const row = { id: t.id, name: nameOf(t), cat: c, catName: (CATS[c] || CATS.other).name, bucket: b, bucketName: bucketName(b, fin), amount: t.a, balance: after,
-          pending: !!t.p, account: SHORT[t.k] || t.k || '', ask: needsLabel(t, rules, today), naming: waitingForName(t, today), mine: t.lb === 'josh', ruled: !!myRule(t, rules) };
+          pending: !!t.p, both: !!t.both, account: SHORT[t.k] || t.k || '', ask: needsLabel(t, rules, today), naming: waitingForName(t, today), mine: t.lb === 'josh', ruled: !!myRule(t, rules) };
         if (after != null) after = r2(after - t.a);
         return row;
       });
@@ -462,9 +476,14 @@
     // Same amount, same place, same day: "double?" (fix 16).
     for (const g of days) {
       const seen = {};
-      for (const r of g.rows) { const k = r.amount + '|' + r.name.toLowerCase(); (seen[k] = seen[k] || []).push(r); }
+      for (const r of g.rows) { if (r.both) continue; const k = r.amount + '|' + r.name.toLowerCase(); (seen[k] = seen[k] || []).push(r); }
       for (const k in seen) if (seen[k].length > 1) seen[k].forEach((r) => { r.double = true; });
     }
+    // Same account and amount within a day, even under another name (found Nov 27: a $20 Venmo payment went in
+    // twice, once pending as "Pizza" and once from the emails, a day apart). A pair checked as two real charges
+    // carries both: true and isn't flagged. The save check flags the same pairs before anything is saved.
+    const flat = days.flatMap((g) => g.rows);
+    for (const [a, b] of doublePairs(tx)) for (const id of [a.id, b.id]) { const r = flat.find((x) => x.id === id); if (r) r.double = true; }
     return days;
   }
   // The last 7 days of spending, one bar per day. Transfers, savings moves and debt payoffs are left out.
@@ -622,7 +641,7 @@
   }
 
   const Money = { TZ, CATS, BUCKETS, PICK_CATS, PICK_BUCKETS, GROUPS, r2, todayISO, addDays, longDay, dayName, monthDay, money, money0, signed,
-    allTx, catOf, bucketOf, bucketName, nameOf, cleanName, storeKey, balances, period, nextPayday, budget, pieFor, payPeriods, activity, lastWeek, debts, owedToSavings, wishlists, needsLabel, missed, work, savingsLine, paychecks };
+    allTx, catOf, bucketOf, bucketName, nameOf, cleanName, storeKey, balances, period, nextPayday, budget, pieFor, payPeriods, activity, doublePairs, lastWeek, debts, owedToSavings, wishlists, needsLabel, missed, work, savingsLine, paychecks };
   if (typeof window !== 'undefined') window.Money = Money;
   if (typeof module !== 'undefined') module.exports = Money;
 })();
