@@ -869,10 +869,10 @@ async function faceLock(browser, base, edges, phone) {
   await c4.addInitScript(() => {
     localStorage.setItem('hub2.lock.v1', JSON.stringify({ mode: 'gate', cred: 'AQc=', salt: 'AAAA', iv: 'AAAA', box: 'AAAA' }));
     localStorage.setItem('hub2.lock.cred', JSON.stringify({ cred: 'AQc=', prf: 'no' }));
-    window.__asks = 0; window.__secretAsks = 0;
+    window.__asks = 0; window.__secretAsks = 0; window.__creates = 0; window.__createSecret = 0;
     const refuse = () => { const e = new Error('The operation either timed out or was not allowed.'); e.name = 'NotAllowedError'; return e; };
     Object.defineProperty(navigator, 'credentials', { configurable: true, value: {
-      async create() { throw refuse(); },
+      async create(o) { window.__creates++; if (o.publicKey.extensions && o.publicKey.extensions.prf) window.__createSecret++; throw refuse(); },
       async get(o) { window.__asks++; if (o.publicKey.extensions && o.publicKey.extensions.prf) window.__secretAsks++; throw refuse(); } } });
   });
   pg = await c4.newPage();
@@ -887,17 +887,43 @@ async function faceLock(browser, base, edges, phone) {
   await pg.click('#lock-go');
   await pg.waitForFunction(() => /didn/.test(document.getElementById('lock-error').textContent), null, { timeout: 5000 }).catch(() => {});
   const w2 = await pg.evaluate(() => ({ err: document.getElementById('lock-error').textContent, other: document.getElementById('lock-other').textContent }));
-  expect(W2, /NotAllowedError/.test(w2.err) && /Click to try again/.test(w2.err), 'a failed try should say what really went wrong (got "' + w2.err + '")');
-  await pg.click('#lock-go');
-  await pg.waitForFunction(() => /key instead/.test(document.getElementById('lock-other').textContent), null, { timeout: 5000 }).catch(() => {});
-  const w3 = await pg.evaluate(() => { const o = document.getElementById('lock-other'), g = document.getElementById('lock-go'); return { other: o.textContent, otherQuiet: o.classList.contains('quiet'), goQuiet: g.classList.contains('quiet'), go: g.textContent, secretAsks: window.__secretAsks, top: o.getBoundingClientRect().top < g.getBoundingClientRect().top || !o.classList.contains('quiet') }; });
-  expect(W2, w3.other === 'Use my key instead' && !w3.otherQuiet && w3.goQuiet && /Try Windows Hello again/.test(w3.go), 'after two tries, "Use my key instead" should come first (got ' + JSON.stringify(w3) + ')');
+  expect(W2, /NotAllowedError/.test(w2.err) && /Set up Windows Hello again/.test(w2.err), 'a failed try should say what really went wrong and how to fix it (got "' + w2.err + '")');
+  // Found Nov 27: when Windows Hello refuses this PC's passkey, the first way out makes a new one, with no key to paste.
+  const w3 = await pg.evaluate(() => { const r = document.getElementById('lock-redo'), o = document.getElementById('lock-other'), g = document.getElementById('lock-go'); return { redo: !r.hidden && r.textContent, redoQuiet: r.classList.contains('quiet'), other: o.textContent, otherQuiet: o.classList.contains('quiet'), goQuiet: g.classList.contains('quiet'), secretAsks: window.__secretAsks }; });
+  expect(W2, w3.redo === 'Set up Windows Hello again' && !w3.redoQuiet && w3.goQuiet && w3.otherQuiet && w3.other === 'Use my key instead', 'after Windows Hello refuses, "Set up Windows Hello again" should come first, with "Use my key instead" under it (got ' + JSON.stringify(w3) + ')');
   expect(W2, w3.secretAsks === 0, 'a PC locked the gate way must never be asked for the secret (asked ' + w3.secretAsks + ' times)');
+  await look(pg, W2 + ' unlock screen after a refusal', { W: 1440, H: 900, TOP: 0, BOTTOM: 0 });
   await pg.screenshot({ path: path.join(OUT, 'dark-pc-unlock-stuck.png') });
+  await pg.click('#lock-redo');
+  await pg.waitForFunction(() => window.__creates > 0, null, { timeout: 5000 }).catch(() => {});
+  const w4 = await pg.evaluate(() => ({ creates: window.__creates, createSecret: window.__createSecret, err: document.getElementById('lock-error').textContent }));
+  expect(W2, w4.creates === 1 && w4.createSecret === 0, '"Set up Windows Hello again" should make one new passkey without asking for the secret (got ' + JSON.stringify(w4) + ')');
+  expect(W2, /didn't set it up/.test(w4.err) && /key instead/.test(w4.err), 'a cancelled set-up should say so and offer the key (got "' + w4.err + '")');
   await pg.click('#lock-other');
   expect(W2, await pg.locator('#connect').isVisible(), '"Use my key instead" should open the key screen');
   await pg.close();
   await c4.close();
+
+  // 7. A PC locked the older 'faceid' way (found Nov 27): Windows Hello is never asked for the secret; the Hub says
+  // the lock is an older kind and asks for the key once.
+  const c5 = await newContext(browser, 'dark', { W: 1440, H: 900 }, { userAgent: WINDOWS_UA });
+  await c5.addInitScript(() => {
+    localStorage.setItem('hub2.lock.v1', JSON.stringify({ mode: 'faceid', cred: 'AQc=', salt: 'AAAA', iv: 'AAAA', box: 'AAAA' }));
+    window.__asks = 0; window.__secretAsks = 0;
+    Object.defineProperty(navigator, 'credentials', { configurable: true, value: {
+      async create() { throw new Error('not expected'); },
+      async get(o) { window.__asks++; if (o.publicKey.extensions && o.publicKey.extensions.prf) window.__secretAsks++; const e = new Error('x'); e.name = 'NotAllowedError'; throw e; } } });
+  });
+  pg = await c5.newPage();
+  await pg.goto(base);
+  await pg.waitForFunction(() => document.documentElement.dataset.lock === 'unlock', null, { timeout: 8000 }).catch(() => problem(W2, 'the unlock screen did not show on a PC with an older lock'));
+  await pg.click('#lock-go');
+  await pg.waitForTimeout(600);
+  const w5 = await pg.evaluate(() => ({ secretAsks: window.__secretAsks, connect: !document.getElementById('connect').hidden, text: document.getElementById('connect').textContent }));
+  expect(W2, w5.secretAsks === 0, 'a PC with an older lock must never be asked for the secret (asked ' + w5.secretAsks + ' times)');
+  expect(W2, w5.connect && /older way/.test(w5.text), 'a PC with an older lock should ask for the key once and say why (got ' + JSON.stringify(w5) + ')');
+  await pg.close();
+  await c5.close();
 }
 
 // The missed-charge pop-up opens by itself over whatever page he's on. Flows that aren't testing it close it.

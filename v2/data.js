@@ -137,6 +137,12 @@
       keySource = 'own';
       return true;
     },
+    // Windows Hello refused this PC's passkey: set Windows Hello up again (PIN or face) and open the Hub.
+    async redoLock() {
+      key = await KeyLock.redo();
+      keySource = 'own';
+      return true;
+    },
     // Is the key in use here not locked yet?
     needsLock() { return !!key && !!window.KeyLock && !KeyLock.has() && !cantLock; },
     // This browser can't keep a locked key at all: the key is used for this visit only and never saved.

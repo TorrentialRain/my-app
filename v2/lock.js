@@ -19,12 +19,25 @@
 //   - a failed unlock keeps the browser's own reason, so the lock screen can say what really went wrong;
 //   - two failed unlocks in a row mark this device's passkey as one that can't give the secret, so the next lock
 //     here uses the 'gate' way, which needs no secret.
+//
+// Found Nov 27 (his PC still failed after the right PIN): that fix only stopped asking for the secret in the 'gate'
+// way. A PC could still be set up the 'faceid' way, because Windows says "yes, I can give the secret" when the passkey
+// is made, and then every unlock asked Windows for it and Windows failed the whole sign-in. And when Windows refused
+// a passkey, the only way out was pasting the key. Fixes built in:
+//   - on a Windows PC the secret is never asked for at all (not when the passkey is made, not on unlock): a PC is
+//     always locked the 'gate' way, whatever Windows says it can do. The iPhone is unchanged.
+//   - a PC with an older 'faceid' lock isn't asked something Windows can't do: it says so and asks for the key once,
+//     and the new lock is the 'gate' way;
+//   - when Windows Hello refuses this PC's passkey, "Set up Windows Hello again" makes a new one (that needs his PIN
+//     or face too, so it's just as safe) and opens the Hub, with no key to paste.
 (function () {
   const BOX = 'hub2.lock.v1';
   const CRED = 'hub2.lock.cred'; // this device's own Hub passkey; kept when a key is replaced, so it's used again
   const FAILS = 'hub2.lock.fails';
   const DB = 'hub2-lock';
   const INFO = 'Josh\'s Hub data key';
+  // A Windows PC: Windows Hello is only ever used as a yes/no, never asked for the secret.
+  const WIN = typeof navigator !== 'undefined' && /Windows/.test(navigator.userAgent || '');
 
   const b64 = (buf) => { const a = new Uint8Array(buf); let s = ''; for (let i = 0; i < a.length; i++) s += String.fromCharCode(a[i]); return btoa(s); };
   const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
@@ -119,12 +132,13 @@
     }
   }
   async function makePasskey(salt) {
-    return navigator.credentials.create({ publicKey: {
+    const ext = WIN ? {} : { extensions: { prf: { eval: { first: salt } } } };
+    return navigator.credentials.create({ publicKey: Object.assign({
       challenge: rand(32), rp: { name: 'Josh\'s Hub', id: location.hostname },
       user: { id: rand(16), name: 'Josh\'s Hub', displayName: 'Josh\'s Hub' },
       pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
       authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' },
-      timeout: 60000, extensions: { prf: { eval: { first: salt } } } } });
+      timeout: 60000 }, ext) });
   }
 
   const KeyLock = {
@@ -150,10 +164,10 @@
           base.cred = known.cred; canSecret = withSecret; secret = withSecret ? secretOf(c) : null;
         };
         try {
-          await reuse(known.prf !== 'no');
+          await reuse(!WIN && known.prf !== 'no');
         } catch (e) {
           let err = e;
-          if (known.prf !== 'no') {
+          if (!WIN && known.prf !== 'no') {
             // It may not be able to give the secret after all: try it the 'gate' way, which needs none.
             try { await reuse(false); writeCred({ cred: known.cred, prf: 'no' }); err = null; } catch (e2) { err = e2; }
           }
@@ -177,7 +191,8 @@
         }
         base.cred = b64(cred.rawId);
         secret = secretOf(cred);
-        canSecret = !!secret || prfOf(cred);
+        canSecret = !WIN && (!!secret || prfOf(cred));
+        if (WIN) secret = null;
         // Some phones only give the secret on the first Face ID after the passkey is made. Only ask where the
         // passkey said it can give one (Windows Hello says it can't, and asking makes it fail).
         if (!secret && canSecret) {
@@ -204,6 +219,9 @@
         if (!lock) throw fail('broken', 'The locked key couldn\'t be opened on this phone.');
         return open(lock, box);
       }
+      // An older PC lock made the 'faceid' way: Windows can't be asked for the secret, so don't ask something that
+      // can only fail. The key is asked for once, and the new lock is the 'gate' way.
+      if (WIN && box.mode === 'faceid') throw fail('rekey', 'This PC\'s lock is an older kind Windows Hello can\'t open.');
       let cred;
       try {
         cred = await askFace(box, box.mode === 'faceid');
@@ -227,6 +245,28 @@
       if (!lock) throw fail('broken', 'The locked key couldn\'t be opened on this device.');
       writeCred({ cred: box.cred, prf: 'no' });
       return open(lock, box);
+    },
+
+    // Windows Hello refused this device's passkey: make a new one (it needs the PIN or face too, so it's just as safe),
+    // then open the key with the lock kept on this device. Only for the 'gate' way, where the passkey is just a yes/no.
+    canRedo() { const b = readBox(); return WIN && !!(b && b.mode === 'gate'); },
+    async redo() {
+      const box = readBox();
+      if (!box || box.mode !== 'gate') throw fail('rekey', 'This lock can\'t be set up again without the key.');
+      let cred;
+      try { cred = await makePasskey(unb64(box.salt)); } catch (e) {
+        const err = fail('needtap', 'Windows Hello wasn\'t set up again.');
+        err.reason = ((e && e.name) || 'Error') + (e && e.message ? ': ' + e.message : '');
+        throw err;
+      }
+      const lock = await phoneLock();
+      if (!lock) throw fail('broken', 'The locked key couldn\'t be opened on this device.');
+      const key = await open(lock, box);
+      const id = b64(cred.rawId);
+      writeBox(Object.assign({}, box, { cred: id }));
+      writeCred({ cred: id, prf: 'no' });
+      setFails(0);
+      return key;
     },
 
     // A new key replaces the old one, or the lock is broken: throw the locked copy away.

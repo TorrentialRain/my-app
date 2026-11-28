@@ -214,6 +214,7 @@
   const lockGo = document.getElementById('lock-go');
   const lockOther = document.getElementById('lock-other');
   const lockErr = document.getElementById('lock-error');
+  const lockRedo = document.getElementById('lock-redo');
   // What this device calls its sign-in (found Nov 26: his PC was told to "look at your phone").
   const UA = navigator.userAgent;
   const IOS = /iPhone|iPad/.test(UA) || (/Macintosh/.test(UA) && navigator.maxTouchPoints > 1);
@@ -236,6 +237,10 @@
       lockOther.classList.toggle('quiet', !stuck);
       lockGo.classList.toggle('quiet', stuck);
       if (stuck) lockGo.textContent = 'Try ' + FACE + ' again';
+      // A PC whose passkey Windows Hello refused (found Nov 27): the first way out makes a new one, no key needed.
+      const redo = !!(window.KeyLock && KeyLock.canRedo && KeyLock.canRedo() && KeyLock.fails() >= 1);
+      lockRedo.hidden = !redo;
+      if (redo) { lockGo.classList.add('quiet'); lockOther.classList.add('quiet'); lockOther.textContent = 'Use my key instead'; }
     } else {
       lockTitle.textContent = 'Lock your data key';
       lockWhy.textContent = 'Lock the key with ' + FACE + ', so it\'s never kept on this ' + HERE + ' as plain text. After this, the Hub opens with ' + (IOS ? 'a look.' : FACE + '.');
@@ -243,6 +248,7 @@
       lockGo.textContent = 'Lock with ' + FACE;
     }
     lockOther.hidden = job !== 'unlock';
+    if (job !== 'unlock') lockRedo.hidden = true;
     lockErr.textContent = err || '';
     lockCard.hidden = false;
     document.documentElement.dataset.lock = job;
@@ -258,7 +264,16 @@
       if (e.code === 'needtap' || e.code === 'noface') {
         // Say what really went wrong, in the browser's own words (found Nov 26: every failure looked the same).
         const why = e.reason ? ' ' + FACE + ' said: "' + String(e.reason).slice(0, 160) + '"' : '';
-        showLock('unlock', lockCard.hidden ? '' : 'That didn\'t work.' + why + (KeyLock.fails() >= 2 ? ' You can use your key instead.' : ' ' + TAP + ' to try again.'));
+        const next = KeyLock.canRedo && KeyLock.canRedo() ? ' ' + TAP + ' "Set up ' + FACE + ' again" to fix it.' : KeyLock.fails() >= 2 ? ' You can use your key instead.' : ' ' + TAP + ' to try again.';
+        showLock('unlock', lockCard.hidden ? '' : 'That didn\'t work.' + why + next);
+        return;
+      }
+      if (e.code === 'rekey') {
+        // An older PC lock Windows Hello can't open: ask for the key once; the new lock is the PC way.
+        Data.forgetOwnKey();
+        hideLock();
+        askForKey('This PC\'s lock was set up an older way that ' + FACE + ' can\'t open. Paste your key once more and it gets locked the PC way, with ' + FACE + '.');
+        document.documentElement.dataset.loaded = 'nokey';
         return;
       }
       // The locked key can't be opened here any more (like the passkey was deleted): ask for the key again.
@@ -277,6 +292,17 @@
     lockErr.textContent = '';
     if (lockJob === 'unlock') await unlockAndLoad();
     else await lockIfNeeded();
+  });
+  lockRedo.addEventListener('click', async () => {
+    lockErr.textContent = '';
+    try {
+      await Data.redoLock();
+      hideLock();
+      await load();
+    } catch (e) {
+      const why = e.reason ? ' ' + FACE + ' said: "' + String(e.reason).slice(0, 160) + '"' : '';
+      showLock('unlock', 'That didn\'t set it up.' + why + ' You can use your key instead.');
+    }
   });
   lockOther.addEventListener('click', () => { hideLock(); askForKey('Paste your key. It replaces the locked one on this ' + HERE + ' and gets locked with ' + FACE + '.'); });
 
