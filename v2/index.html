@@ -14,7 +14,7 @@
   <link rel="apple-touch-icon" href="../icons/icon-180.png">
   <link rel="icon" type="image/png" href="../icons/icon-192.png">
   <link rel="preload" href="fonts/inter-400.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="app.css?v=30">
+  <link rel="stylesheet" href="app.css?v=31">
 </head>
 <body>
   <!-- The new Hub (rebuild). Lives beside the old app and reads the same data box.
@@ -157,27 +157,40 @@
       <div class="sheet-top"><h2 id="add-title">New task</h2><button type="button" class="round" data-close aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
       <label class="fld"><span>Name</span><input id="add-name" type="text" autocapitalize="sentences" required></label>
       <div class="fld-row">
-        <label class="fld"><span>Due date</span><input id="add-date" type="date"></label>
-        <label class="fld"><span>Time</span><input id="add-time" type="time"></label>
+        <label class="fld"><span>Due date (optional)</span><input id="add-date" type="date"></label>
+        <label class="fld"><span>Time (optional)</span><input id="add-time" type="time"></label>
       </div>
-      <label class="fld"><span>Note</span><textarea id="add-note" rows="2"></textarea></label>
-      <p class="hint" id="add-where"></p>
+      <label class="fld"><span>Note (optional)</span><textarea id="add-note" rows="2"></textarea></label>
+      <p class="where" id="add-where"></p>
       <button type="submit" class="wide">Add</button>
+    </form>
+  </div>
+  <!-- Tap a task: the same three boxes as the + form, filled in, and Save (his picks, Nov 27). Moving and deleting stay drag only. -->
+  <div class="sheet" id="sheet-edit" hidden role="dialog" aria-modal="true" aria-labelledby="edit-title">
+    <form class="sheet-card" id="edit-form" autocomplete="off" data-scrolls>
+      <div class="sheet-top"><h2 id="edit-title">Edit task</h2><button type="button" class="round" data-close aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      <label class="fld"><span>Name</span><input id="edit-name" type="text" autocapitalize="sentences" required></label>
+      <div class="fld-row">
+        <label class="fld"><span>Due date (optional)</span><input id="edit-date" type="date"></label>
+        <label class="fld"><span>Time (optional)</span><input id="edit-time" type="time"></label>
+      </div>
+      <label class="fld"><span>Note (optional)</span><textarea id="edit-note" rows="2"></textarea></label>
+      <button type="submit" class="wide">Save</button>
     </form>
   </div>
   <div class="sheet" id="sheet-questions" hidden role="dialog" aria-modal="true" aria-labelledby="q-title">
     <div class="sheet-card">
       <div class="sheet-top"><h2 id="q-title">Questions</h2><button type="button" class="round" data-close aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
-      <p class="hint">Everything waiting on you, to answer any time. Each one stays here until it's answered. For a written question, answer Claude in chat for now.</p>
+      <p class="hint">Everything waiting on you, to answer any time. Each one stays here until it's answered. Type an answer and Claude acts on it at the next check.</p>
       <ul class="rows" id="q-list"></ul>
     </div>
   </div>
   <div class="sheet" id="sheet-menu" hidden role="dialog" aria-modal="true" aria-labelledby="m-title">
     <div class="sheet-card">
       <div class="sheet-top"><h2 id="m-title">Menu</h2><button type="button" class="round" data-close aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
-      <button type="button" class="menu-item" id="menu-print">Print to PDF</button>
-      <button type="button" class="menu-item" data-open="sheet-archive">Archive</button>
-      <button type="button" class="menu-item" data-open="sheet-settings">Settings</button>
+      <button type="button" class="menu-item" id="menu-print"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 9V3h10v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v7H7z"/></svg>Print to PDF</button>
+      <button type="button" class="menu-item" data-open="sheet-archive"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9"/><path d="M10 13h4"/></svg>Archive</button>
+      <button type="button" class="menu-item" data-open="sheet-settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</button>
     </div>
   </div>
   <div class="sheet" id="sheet-archive" hidden role="dialog" aria-modal="true" aria-labelledby="a-title">
@@ -190,8 +203,8 @@
   <div class="sheet" id="sheet-settings" hidden role="dialog" aria-modal="true" aria-labelledby="s-title">
     <div class="sheet-card">
       <div class="sheet-top"><h2 id="s-title">Settings</h2><button type="button" class="round" data-close aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
-      <button type="button" class="menu-item" data-open="sheet-archive">Archive</button>
-      <button type="button" class="menu-item" id="settings-change-key" data-change-key>Change key</button>
+      <button type="button" class="menu-item" data-open="sheet-archive"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9"/><path d="M10 13h4"/></svg>Archive</button>
+      <button type="button" class="menu-item" id="settings-change-key" data-change-key><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3"/></svg>Change key</button>
       <p class="hint" id="settings-key"></p>
       <p class="hint">Changes save by themselves a moment after you make them. Backups happen by themselves. Each phone or computer keeps its own key.</p>
     </div>
@@ -251,10 +264,10 @@
 
   <script src="lock.js?v=4"></script>
   <script src="data.js?v=9"></script>
-  <script src="changes.js?v=5"></script>
+  <script src="changes.js?v=6"></script>
   <script src="money.js?v=11"></script>
   <script src="finsave.js?v=3"></script>
-  <script src="todo.js?v=12"></script>
+  <script src="todo.js?v=13"></script>
   <script src="plan.js?v=9"></script>
   <script src="finance.js?v=15"></script>
   <script src="robot.js?v=1"></script>

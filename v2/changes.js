@@ -66,6 +66,15 @@
         t.droppedAt = c.at; t.droppedBy = 'josh';
       } else if (c.type === 'subtask') {
         if (t.subtasks && t.subtasks[c.index]) t.subtasks[c.index].done = !!c.done;
+      } else if (c.type === 'edit') {
+        // The edit sheet: name, note, and the due date only when he changed it.
+        if (typeof c.title === 'string' && c.title.trim()) t.title = c.title.trim();
+        if (typeof c.myNote === 'string') { if (c.myNote) t.myNote = c.myNote; else delete t.myNote; }
+        if ('due' in c) { if (c.due) { t.due = c.due; t.dueNoTime = !!c.dueNoTime; } else { delete t.due; delete t.dueNoTime; } }
+        t.editedAt = c.at;
+      } else if (c.type === 'answer') {
+        // His written answer to a question. The robot acts on it and clears the question and the answer.
+        t.answer = String(c.answer || '').slice(0, 600); t.answeredAt = c.at;
       }
       t.changeIds.push(c.id);
       if (t.changeIds.length > KEEP_IDS) t.changeIds = t.changeIds.slice(-KEEP_IDS);
@@ -98,6 +107,8 @@
       order: 'Put "' + title + '" in a new spot',
       trash: 'Delete "' + title + '"',
       subtask: (c.done ? 'Tick' : 'Untick') + ' a step on "' + title + '"',
+      edit: 'Change "' + title + '"',
+      answer: 'Answer the question on "' + title + '"',
     })[c.type] || 'Change "' + title + '"';
   }
 

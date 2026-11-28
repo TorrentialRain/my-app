@@ -248,6 +248,7 @@ body { position: fixed; inset: 0; overflow: hidden; background: var(--bg); }
 .only .sw span { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 9px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.25); transition: transform .2s; }
 .only[aria-pressed="true"] .sw { background: var(--on); }
 .only[aria-pressed="true"] .sw span { transform: translateX(14px); }
+.only.locked { opacity: 0.5; cursor: default; }
 
 /* Tabs: pills that wrap, so none is cut off. Never called "lanes". */
 .td-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -310,11 +311,17 @@ body { position: fixed; inset: 0; overflow: hidden; background: var(--bg); }
 .due.late { background: var(--od); color: #1c1c1e; font-weight: 600; }
 .lbl { font-size: 13px; line-height: 18px; color: var(--ink2); }
 .subs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-.sub { min-height: 44px; width: 100%; padding: 0; border: 0; background: transparent; display: flex; align-items: center; gap: 10px; text-align: left; font: inherit; cursor: pointer; color: var(--on-ink); }
+.sub { position: relative; min-height: 34px; width: 100%; padding: 0; border: 0; background: transparent; display: flex; align-items: center; gap: 10px; text-align: left; font: inherit; cursor: pointer; color: var(--on-ink); }
+/* Rows are 34 high so a card with steps stays compact (found Nov 27); the tap area still reaches 44. */
+.sub::after { content: ""; position: absolute; left: 0; right: 0; top: -5px; bottom: -5px; }
 .sub .dot { flex: none; width: 18px; height: 18px; border-radius: 9px; border: 1.5px solid #8e8e93; display: flex; align-items: center; justify-content: center; }
 .sub.did .dot { background: var(--on); border-color: var(--on); }
 .sub.did .n { text-decoration: line-through; }
 .card.is-done .t { text-decoration: line-through; color: var(--ink2); }
+/* A finished card is quiet: flat, no page color, picture faded, so Done never looks like more to do (found Nov 27). */
+.card.is-done { background: var(--card); box-shadow: none; outline: 0.5px solid rgba(255,255,255,0.08); outline-offset: -0.5px; }
+.card.is-done .pic { filter: grayscale(1); opacity: 0.45; box-shadow: none; }
+.card.is-done .n, .card.is-done .meta, .card.is-done .subs { opacity: 0.6; }
 /* Overdue: a still, full-width yellow underline along the card's bottom edge (same yellow as Plan). */
 .card.is-late { box-shadow: inset 0 -5px 0 var(--od), var(--shadow); }
 .empty { margin: 8px 4px; font-size: 15px; color: var(--ink2); }
@@ -343,6 +350,7 @@ body { position: fixed; inset: 0; overflow: hidden; background: var(--bg); }
 .card.ghost { position: fixed; top: 0; left: 0; z-index: 50; pointer-events: none; margin: 0; scale: 1.03; box-shadow: 0 18px 40px rgba(0,0,0,0.25); }
 .card.lifted { opacity: 0.3; }
 body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
+body.dragging .td-fabs { visibility: hidden; }
 .pages.held { overflow-x: hidden; }
 
 /* Sheets: add form, questions, menu, archive, settings, waiting list */
@@ -367,13 +375,19 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
 }
 .fld-row { display: flex; gap: 10px; }
 .hint { margin: 0; font-size: 13px; line-height: 19px; color: var(--ink2); }
+.where { margin: 0; font-size: 15px; line-height: 20px; color: var(--ink); }
 .wide { min-height: 50px; border: 0; border-radius: 14px; background: var(--on); color: var(--on-ink); font: inherit; font-size: 17px; font-weight: 600; cursor: pointer; }
-.menu-item { min-height: 52px; border: 0; border-bottom: 0.5px solid var(--hairline); background: transparent; color: var(--ink); font: inherit; font-size: 17px; text-align: left; padding: 0 4px; cursor: pointer; }
+.menu-item { min-height: 52px; border: 0; border-bottom: 0.5px solid var(--hairline); background: transparent; color: var(--ink); font: inherit; font-size: 17px; text-align: left; padding: 0 4px; cursor: pointer; display: flex; align-items: center; gap: 14px; }
+.menu-item svg { flex: none; color: var(--on); }
+.menu-item:last-of-type { border-bottom: 0; }
 .rows { list-style: none; margin: 0; padding: 0; }
 .rows li { padding: 11px 2px; border-bottom: 0.5px solid var(--hairline); display: flex; flex-direction: column; gap: 3px; font-size: 15px; line-height: 21px; }
 .rows .t { font-size: 15px; }
 .rows .n { font-size: 13px; }
 .rows .q-head { padding: 14px 2px 4px; border: 0; font-size: 13px; line-height: 18px; font-weight: 700; letter-spacing: 0.02em; color: var(--ink2); }
+.q-answer { display: flex; gap: 8px; margin-top: 8px; }
+.q-answer input { flex: 1; min-width: 0; font: inherit; font-size: 16px; min-height: 44px; padding: 0 12px; border: 0; border-radius: 12px; background: var(--field); color: var(--ink); -webkit-appearance: none; appearance: none; }
+.q-answer button { flex: none; min-height: 44px; padding: 0 16px; border: 0; border-radius: 12px; background: var(--on); color: var(--on-ink); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
 .rows .q-label { align-self: flex-start; margin-top: 6px; min-height: 44px; padding: 0 16px; border: 0; border-radius: 12px; background: var(--on); color: var(--on-ink); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
 /* Questions inbox count: a small badge on every Questions button (his pick, Nov 25). */
 [data-open="sheet-questions"] { position: relative; }
@@ -389,7 +403,8 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
   z-index: 30; padding: 12px 16px; border-radius: 14px; background: #1c1c1e; color: #ffffff; font-size: 15px; line-height: 20px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.25);
 }
-@media all { .toast { background: #f2f2f7; color: #000000; } }
+/* Dark like every other pop-up (found Nov 27: a leftover line from before dark only made this one white). */
+.toast { background: #2c2a28; color: #ffffff; border: 0.5px solid rgba(255,255,255,0.14); }
 #print { display: none; }
 
 /* ================= Plan page =================
@@ -566,7 +581,10 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
   .page { padding: 104px 32px 48px; }
   .phone-only { display: none !important; }
   .pc-only { display: flex !important; }
-  .td-scroll { padding: 104px 32px 48px; }
+  /* The space under the page pill is a margin, not the scroller's padding, so the sticky tab list and Done panel
+     start level with the title in every browser (found Nov 27: they sat 104 lower). */
+  .td-scroll { padding: 0 32px 48px; }
+  .td-wrap { margin-top: 104px; }
   /* A solid band behind the page pill, so cards scrolling up never show around it. */
   #page-todo::before { height: 92px; }
   .td-wrap {
@@ -579,6 +597,12 @@ body.dragging, body.dragging * { -webkit-user-select: none; user-select: none; }
   .td-pending { grid-area: pending; }
   .td-suggest { grid-area: suggest; }
   .td-list { grid-area: list; padding-top: 18px; }
+  /* PC cards like the PC board (his pick, Nov 26): the due tag at the right end, steps side by side. */
+  .td-list .card .body { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 14px; row-gap: 6px; align-items: start; }
+  .td-list .card .body > * { grid-column: 1; }
+  .td-list .card .body > .meta { grid-column: 2; grid-row: 1; justify-content: flex-end; flex-wrap: nowrap; }
+  .td-list .subs { flex-direction: row; flex-wrap: wrap; column-gap: 24px; }
+  .td-list .sub { width: auto; }
   .td-tabs { grid-area: tabs; flex-direction: column; flex-wrap: nowrap; gap: 4px; padding: 14px 10px; background: var(--card); box-shadow: var(--shadow); border-radius: 24px; position: sticky; top: 104px; }
   .tdtab { justify-content: space-between; background: transparent; box-shadow: none; border-radius: 14px; padding: 0 12px 0 14px; width: 100%; }
   .tdtab .cnt { display: inline; }

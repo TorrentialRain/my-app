@@ -974,6 +974,42 @@ async function dragCard(page, id, toSel, where, toTopEdge) {
   await settle(page, 250);
 }
 
+// Dark only (his pick, Nov 26) covers every pop-up too. Found Nov 27: the small note at the bottom was white
+// because of a leftover line from before dark only. Hidden ones count as well, since they show later.
+async function popupsDark(page, where) {
+  const bad = await page.evaluate(() => {
+    const lum = (c) => { const m = (c.match(/[\d.]+/g) || []).map(Number); if (m.length < 3 || (m.length > 3 && m[3] < 0.3)) return null; return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]; };
+    const out = [];
+    for (const el of document.querySelectorAll('#toast, .toast, .sheet-card, .pl-bubble, .menu, [role="dialog"], [role="alertdialog"], .card.ghost')) {
+      const s = getComputedStyle(el), l = lum(s.backgroundColor);
+      if (l !== null && l > 90) out.push((el.id ? '#' + el.id : el.className) + ' is light (' + s.backgroundColor + '); everything is dark only');
+      const ink = lum(s.color);
+      if (l !== null && ink !== null && ink < 120) out.push((el.id ? '#' + el.id : el.className) + ' has dark writing (' + s.color + ')');
+    }
+    return out;
+  });
+  for (const b of bad) problem(where, b);
+}
+
+// The key's name stays on one line, so it never reads as two names (found Nov 27: it broke at its hyphen).
+async function keyOnOneLine(page, where, sel) {
+  const r = await page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    if (!el) return { ok: false, why: 'missing' };
+    const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let n; (n = w.nextNode());) {
+      const m = n.textContent.match(/ends in (\S+?)\)/);
+      if (!m) continue;
+      const i = n.textContent.indexOf(m[1]);
+      const rg = document.createRange(); rg.setStart(n, i); rg.setEnd(n, i + m[1].length);
+      const tops = new Set(Array.from(rg.getClientRects()).filter((x) => x.width > 0).map((x) => Math.round(x.top)));
+      return { ok: tops.size <= 1 && !/-/.test(m[1]), why: m[1] + ' on ' + tops.size + ' lines' };
+    }
+    return { ok: false, why: 'no key name in "' + el.textContent.trim() + '"' };
+  }, sel);
+  expect(where, r.ok, "the key's name should stay on one line and use a hyphen that can't break (" + r.why + ')');
+}
+
 // Every tab opens and shows its list, and the "Only overdue" switch works on each: nothing is left looking like it's still loading.
 async function everyTab(page, T) {
   for (const t of Todo.TABS) {
@@ -992,6 +1028,9 @@ async function everyTab(page, T) {
     if (t.id === 'overdue') {
       expect(T + ' Overdue tab', st.cards > 0 && st.late === st.cards, 'every card on the Overdue tab should have its date in yellow (' + st.late + ' of ' + st.cards + ')');
       await underlines(page, T + ' Overdue tab', 'cards');
+      // The switch stays in place, on and greyed, so the row doesn't jump (found Nov 27: it vanished and left a gap).
+      const ov = await page.evaluate(() => { const s = document.querySelector('.only'); return s ? { shown: s.offsetParent !== null && getComputedStyle(s).visibility !== 'hidden', on: s.getAttribute('aria-pressed') === 'true', locked: s.disabled } : null; });
+      expect(T + ' Overdue tab', !!ov && ov.shown && ov.on && ov.locked, 'the Only overdue switch should stay in place on the Overdue tab, on and greyed (' + JSON.stringify(ov) + ')');
       continue;
     }
     const sw = page.locator('.only');
@@ -1023,6 +1062,7 @@ async function phoneTodo(page, scheme, size) {
   expect(T, await page.locator('.td-suggest').isVisible(), 'the possible task does not show');
   await lookBothEnds(page, T, size, scheme + '-todo');
   await floatsClear(page, T + ' All', '.td-scroll');
+  await popupsDark(page, T);
   // The approved header (canvas TodoAB): ? and gear in a row under the title, next to Only overdue; only the + floats.
   const hd = await page.evaluate(() => {
     const mid = (el) => { const r = el.getBoundingClientRect(); return r.top + r.height / 2; };
@@ -1057,9 +1097,15 @@ async function phoneTodo(page, scheme, size) {
   // The key in this part can only read: the change waits on the phone and the page says why.
   await page.waitForSelector('.td-pending[data-state="readonly"]', { timeout: 4000 }).catch(() => {});
   expect(T + ' tick', await page.locator('#toast').isVisible(), 'the "this key can only read" note did not show');
-  expect(T + ' tick', /1 change waiting to save: the key here \(ends in -key\) can only read/.test(await page.locator('.td-pending').textContent()), 'the waiting line should count the change and say which key can only read (got "' + (await page.locator('.td-pending').textContent()) + '")');
+  expect(T + ' tick', /1 change waiting to save: the key here \(ends in [-\u2011]key\) can only read/.test(await page.locator('.td-pending').textContent()), 'the waiting line should count the change and say which key can only read (got "' + (await page.locator('.td-pending').textContent()) + '")');
+  await keyOnOneLine(page, T + ' tick', '.td-pending');
+  await keyOnOneLine(page, T + ' tick note', '#toast');
+  await popupsDark(page, T + ' tick note');
   await page.tap('.done-toggle');
   await settle(page, 200);
+  // A finished card is flat and quiet, so Done never looks like more to do (found Nov 27).
+  const dn = await page.evaluate(() => { const c = document.querySelector('.done-list .card'); if (!c) return null; const s = getComputedStyle(c), p = c.querySelector('.pic'); return { img: s.backgroundImage, shadow: s.boxShadow, pic: p ? getComputedStyle(p).filter : 'none' }; });
+  expect(T + ' Done', !!dn && dn.img === 'none' && dn.shadow === 'none' && (!dn.pic || dn.pic === 'none' || /grayscale/.test(dn.pic)), 'a finished card should be flat with its picture faded (' + JSON.stringify(dn) + ')');
   expect(T + ' Done', (await cardIds(page, '.done-list .card')).join() === 'a,i', 'the Done folder shows the wrong tasks: ' + await cardIds(page, '.done-list .card'));
   await settle(page, 3500); // let the note fade so the pictures show the page itself
   await lookBothEnds(page, T + ' Done open', size, scheme + '-todo-done');
@@ -1071,6 +1117,33 @@ async function phoneTodo(page, scheme, size) {
   await page.tap('.card[data-id="c"] .sub[data-sub="1"]');
   await settle(page, 150);
   expect(T + ' step', (await page.locator('.card[data-id="c"] .sub[data-sub="1"]').getAttribute('aria-pressed')) === 'true', 'ticking a step did not stick');
+  expect(T + ' step', await page.locator('#sheet-edit').isHidden(), 'ticking a step should not open the edit sheet');
+  // Steps sit close together so a card with steps stays small (found Nov 27: each step was 44 high).
+  const stepH = (await page.locator('.card[data-id="c"] .sub[data-sub="1"]').boundingBox() || { height: 99 }).height;
+  expect(T + ' step', stepH <= 36, 'each step should be at most 36 high (got ' + Math.round(stepH) + ')');
+
+  // Tapping a task opens its edit sheet, filled in (his pick, Nov 28; found Nov 27: a tap on a card did nothing).
+  const dTitle = TASKS.d.title, dDue = await page.locator('.card[data-id="d"] .due').textContent().catch(() => '');
+  await page.tap('.card[data-id="d"] .t');
+  await settle(page, 300);
+  const ed = await page.evaluate(() => ({ open: !document.getElementById('sheet-edit').hidden, name: document.getElementById('edit-name').value }));
+  expect(T + ' edit', ed.open && ed.name === dTitle, 'tapping a task should open "Edit task" with its name filled in (' + JSON.stringify(ed) + ')');
+  if (ed.open) {
+    await look(page, T + ' edit sheet', size);
+    await popupsDark(page, T + ' edit sheet');
+    await page.screenshot({ path: path.join(OUT, scheme + '-todo-edit.png') });
+    await page.fill('#edit-name', 'Sample renamed');
+    await page.tap('#edit-form .wide');
+    await settle(page, 250);
+    expect(T + ' edit', await page.locator('#sheet-edit').isHidden(), 'Save should close the edit sheet');
+    expect(T + ' edit', (await page.locator('.card[data-id="d"] .t').textContent()).trim() === 'Sample renamed', 'Save did not change the name');
+    expect(T + ' edit', (await page.locator('.card[data-id="d"] .due').textContent().catch(() => '')) === dDue, 'changing only the name moved the due date');
+    await page.tap('.card[data-id="d"] .t');
+    await settle(page, 300);
+    await page.fill('#edit-name', dTitle);
+    await page.tap('#edit-form .wide');
+    await settle(page, 250);
+  }
 
   // Only overdue.
   await page.tap('.td-head .only');
@@ -1093,6 +1166,12 @@ async function phoneTodo(page, scheme, size) {
   await page.tap('.td-fabs .plus');
   await settle(page, 300);
   await look(page, T + ' add form', size);
+  await popupsDark(page, T + ' add form');
+  // The + form says which boxes can stay empty, and where the task goes reads at full size (found Nov 27).
+  const af = await page.evaluate(() => ({ labels: Array.from(document.querySelectorAll('#add-form .fld > span')).map((s) => s.textContent),
+    where: (() => { const w = document.getElementById('add-where'); return w ? parseFloat(getComputedStyle(w).fontSize) : 0; })() }));
+  expect(T + ' add form', af.labels.filter((l) => /optional/i.test(l)).length === 3 && !/optional/i.test(af.labels[0] || ''), 'Due date, Time and Note should say (optional), and Name should not (' + af.labels.join(', ') + ')');
+  expect(T + ' add form', af.where >= 15, 'the line saying where the task goes should be at least 15 (got ' + af.where + ')');
   await page.screenshot({ path: path.join(OUT, scheme + '-todo-add.png') });
   await page.fill('#add-name', 'Sample added from the form');
   await page.fill('#add-note', 'My own note');
@@ -1109,6 +1188,7 @@ async function phoneTodo(page, scheme, size) {
   await dragCard(page, 'm', '.td-list .card[data-id="b"]', T + ' reorder', true);
   expect(T + ' reorder', (await waitCount()) === beforeDrag + 1, 'one drag should add one line to the waiting-to-save list');
   expect(T + ' reorder', await page.evaluate(() => !document.querySelector('.card.ghost')), 'the dragged copy of the card was left on screen');
+  expect(T + ' reorder', await page.locator('#sheet-edit').isHidden(), 'letting go of a dragged card should not open the edit sheet');
   expect(T + ' reorder', (await cardIds(page))[0] === 'm', 'dragging a card to the top did not keep it there: ' + await cardIds(page));
   await page.evaluate(() => { document.querySelector('.td-scroll').scrollTop = 0; });
   await settle(page, 150);
@@ -1125,6 +1205,7 @@ async function phoneTodo(page, scheme, size) {
   await page.mouse.move(m.x + 30, m.y + 40, { steps: 4 });
   await page.waitForTimeout(100);
   expect(T + ' trash', await page.locator('.td-trash').isVisible(), 'the trash did not show while dragging');
+  expect(T + ' drag', !(await page.locator('.td-fabs .plus').isVisible()), 'the + should step aside while a card is dragged, so it never sits over the card');
   const ghostBg = await page.evaluate(() => { const g = document.querySelector('.card.ghost'); return g ? getComputedStyle(g).backgroundColor : 'none'; });
   expect(T + ' drag', /^rgb\(/.test(ghostBg), 'the card being dragged has no solid background (got ' + ghostBg + ')');
   await page.screenshot({ path: path.join(OUT, scheme + '-todo-dragging.png') });
@@ -1139,10 +1220,24 @@ async function phoneTodo(page, scheme, size) {
   expect(T + ' ?', (await page.locator('#q-list').textContent()).includes('Is the sample still on?'), 'the question list is missing a question');
   await look(page, T + ' questions', size);
   await page.screenshot({ path: path.join(OUT, scheme + '-todo-questions.png') });
+  // A written question is answered right here (found Nov 27: it said "answer in chat").
+  const qf = page.locator('#q-list form.q-answer');
+  expect(T + ' ?', (await qf.count()) === 1 && !/answer in chat/i.test(await page.locator('#sheet-questions').textContent()), 'a written question should have a box to type the answer in');
+  if (await qf.count()) {
+    await qf.locator('input').fill('Yes, still on');
+    await qf.locator('button').tap();
+    await settle(page, 300);
+    expect(T + ' answer', !(await page.locator('#q-list').textContent()).includes('Is the sample still on?'), 'an answered question should leave the list');
+    expect(T + ' answer', /next check/.test(await page.locator('#toast').textContent()), 'sending an answer should say when Claude reads it');
+  }
   await page.tap('#sheet-questions [data-close]');
   await page.tap('.td-tools [data-open="sheet-menu"]');
   await settle(page, 250);
   await look(page, T + ' menu', size);
+  // Each menu row has its icon and the last one has no line under it (found Nov 27: it looked bare).
+  const mn = await page.evaluate(() => { const items = Array.from(document.querySelectorAll('#sheet-menu .menu-item')).filter((b) => b.offsetParent);
+    return { n: items.length, icons: items.filter((b) => b.querySelector('svg')).length, last: items.length ? parseFloat(getComputedStyle(items[items.length - 1]).borderBottomWidth) : -1 }; });
+  expect(T + ' menu', mn.n > 0 && mn.icons === mn.n && mn.last === 0, 'every menu row should have an icon and the last should have no line under it (' + JSON.stringify(mn) + ')');
   await page.screenshot({ path: path.join(OUT, scheme + '-todo-menu.png') });
   await page.tap('#sheet-menu [data-open="sheet-archive"]');
   await settle(page, 250);
@@ -1917,6 +2012,20 @@ async function run() {
     expect(scheme + ' PC', layout.tabsLeft, 'the tabs should run down the left of the list');
     expect(scheme + ' PC', layout.addTop, 'the buttons should sit along the top');
     expect(scheme + ' PC', layout.fabs === 'none', 'the floating phone buttons should not show on a PC');
+    // PC cards match the PC board (his pick, Nov 26): the due tag at the card's right end and steps side by side,
+    // and the tab list starts level with the title (found Nov 27: the tag sat under the name and the tabs sat low).
+    const pcl = await pp.evaluate(() => {
+      const card = document.querySelector('.td-list .card[data-id="d"]'), due = card && card.querySelector('.due'), t = card && card.querySelector('.t');
+      const c = card.getBoundingClientRect(), d = due ? due.getBoundingClientRect() : null, tt = t.getBoundingClientRect();
+      const subs = Array.from(document.querySelectorAll('.td-list .card[data-id="c"] .sub')).map((s) => Math.round(s.getBoundingClientRect().top));
+      const tabs = document.querySelector('.td-tabs .tdtab').getBoundingClientRect(), h1 = document.querySelector('#page-todo h1').getBoundingClientRect();
+      return { dueRight: !!d && d.left > tt.right && c.right - d.right < 140 && Math.abs((d.top + d.bottom) / 2 - (tt.top + tt.bottom) / 2) < 14,
+        stepsRow: subs.length > 1 && new Set(subs).size < subs.length, tabsGap: Math.round(tabs.top - h1.top) };
+    });
+    expect(scheme + ' PC', pcl.dueRight, 'on a PC the due tag should sit at the right end of the card, level with the name (' + JSON.stringify(pcl) + ')');
+    expect(scheme + ' PC', pcl.stepsRow, 'on a PC a card\'s steps should sit side by side');
+    expect(scheme + ' PC', pcl.tabsGap < 90, 'on a PC the tab list should start near the title, not far below it (' + pcl.tabsGap + ' lower)');
+    await popupsDark(pp, scheme + ' PC');
     const pcd = await darkness(pp);
     expect(scheme + ' PC colors', pcd.body < 50 && pcd.todo < 50, 'a PC should always be dark, even when set to light (got ' + JSON.stringify(pcd) + ')');
     await lookBothEnds(pp, scheme + ' PC TO-DO', pc, scheme + '-pc-todo');

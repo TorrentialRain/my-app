@@ -79,7 +79,8 @@
       .sort((a, b) => Date.parse(b[1].doneAt || b[1].droppedAt || 0) - Date.parse(a[1].doneAt || a[1].droppedAt || 0));
   }
   function questions(tasks) {
-    return Object.entries(tasks || {}).filter(([, t]) => t && t.status === 'open' && (t.kind === 'question' || typeof t.question === 'string'))
+    // A question he already answered here waits for the robot, which acts on the answer and clears both.
+    return Object.entries(tasks || {}).filter(([, t]) => t && t.status === 'open' && (t.kind === 'question' || typeof t.question === 'string') && !t.answer)
       .map(([id, t]) => ({ id, title: t.title, text: t.kind === 'question' ? (t.question || t.title) : t.question, about: t.kind === 'question' ? '' : t.title }));
   }
   function possible(sugs, now) {
@@ -115,6 +116,16 @@
       if (m) off = m[1] + m[2].padStart(2, '0') + ':' + (m[3] || '00');
     } catch (e) { /* older phone: Alaska standard time */ }
     return { due: date + 'T' + hm + ':00' + off, dueNoTime: !time };
+  }
+
+  // The other way: a task's due date and time as the + form's boxes show them (Anchorage time). Used by the edit sheet.
+  function dueParts(t) {
+    const ms = dueMs(t);
+    if (ms === null) return { date: '', time: '' };
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+      .formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
+    const time = p.hour + ':' + p.minute;
+    return { date: p.year + '-' + p.month + '-' + p.day, time: t.dueNoTime || time === '23:59' ? '' : time };
   }
 
   // ---------- Card pictures ----------
@@ -173,7 +184,7 @@
     const all = Object.values(tasks || {});
     return { open: all.filter(isOpen).length, overdue: listFor(tasks, 'overdue', now).reduce((n, g) => n + g.length, 0) };
   }
-  const Pure = { TABS, inTab, listFor, doneFor, archive, questions, possible, dueText, dueFrom, pictureFor, isOverdue, lineCounts };
+  const Pure = { TABS, inTab, listFor, doneFor, archive, questions, possible, dueText, dueFrom, dueParts, pictureFor, isOverdue, lineCounts };
   if (typeof module !== 'undefined') module.exports = Pure;
   if (typeof window === 'undefined') return;
 
@@ -262,7 +273,15 @@
     const shown = groups.map((g) => (only ? g.filter(([, t]) => isOverdue(t, now)) : g));
     const C = lineCounts(tasks, now);
     subEl.textContent = C.open + ' open · ' + C.overdue + ' overdue';
-    onlyBtns.forEach((b) => { b.hidden = tab === 'overdue'; b.setAttribute('aria-pressed', String(only)); });
+    // On the Overdue tab the switch stays in its place, on and greyed out (everything there is overdue), so the
+    // row of buttons never has a gap (found Nov 27: hiding it left ? and the gear alone on the right).
+    onlyBtns.forEach((b) => {
+      const od = tab === 'overdue';
+      b.hidden = false;
+      b.disabled = od;
+      b.classList.toggle('locked', od);
+      b.setAttribute('aria-pressed', String(od || only));
+    });
 
     const html = shown.map((g, gi) => g.map(([id, t]) => card(id, t, now, { group: gi })).join('')).join('');
     listEl.innerHTML = html || '<p class="empty">' + (only ? 'Nothing overdue here.' : 'Nothing here.') + '</p>';
@@ -319,13 +338,15 @@
   let justSaved = 0;
   let again = false;    // a change came in while a save was running: save once more right after
   let lastRead = 0;
+  // The key's last letters, kept on one line (found Nov 27: "(ends in -key)" broke after the hyphen).
+  const keyName = () => String((dataStore && dataStore.keyEnd()) || '?').replace(/-/g, '\u2011');
   function showSaving() {
     const n = Changes.list().length;
     const text = $('.pending-text', pendingEl);
     pendingEl.classList.toggle('is-bad', !!n && Changes.isReadOnly());
     if (n) {
       const count = n === 1 ? '1 change waiting to save' : n + ' changes waiting to save';
-      text.textContent = Changes.isReadOnly() ? count + ': the key here (ends in ' + ((dataStore && dataStore.keyEnd()) || '?') + ') can only read' : (savingNow ? 'Saving ' + (n === 1 ? '1 change' : n + ' changes') + '…' : count);
+      text.textContent = Changes.isReadOnly() ? count + ': the key here (ends in ' + keyName() + ') can only read' : (savingNow ? 'Saving ' + (n === 1 ? '1 change' : n + ' changes') + '…' : count);
       pendingEl.hidden = false;
     } else if (Date.now() - justSaved < 2500) {
       text.textContent = 'All saved';
@@ -358,7 +379,7 @@
     } else if (cameIn && r.why !== 'readonly' && r.why !== 'badkey' && r.why !== 'unsafe') {
       saveSoon(300); // a new change came in while that try failed: try once more now, with both
     } else if (r.why === 'readonly') {
-      toast('The key here (ends in ' + (dataStore.keyEnd() || '?') + ') can only read, so your changes are waiting. Put in a key that can save: gear, Settings, Change key.');
+      toast('The key here (ends in ' + keyName() + ') can only read, so your changes are waiting. Put in a key that can save: gear, Settings, Change key.');
     } else if (r.why === 'badkey') {
       toast('GitHub stopped accepting the key on this phone. Your changes are waiting here. Put in a new key: Menu, Settings, Change key.');
     } else if (r.why !== 'busy' && r.why !== 'nothing') {
@@ -408,6 +429,8 @@
       const id = cardEl.dataset.id, i = +sub.dataset.sub;
       change({ type: 'subtask', taskId: id, index: i, done: !tasks[id].subtasks[i].done });
     }
+    // Tap anywhere else on a card: the edit sheet (his picks, Nov 27: "Open an edit sheet", "A: same as +").
+    else if (cardEl && !e.target.closest('button') && !cardEl.classList.contains('ghost') && Date.now() - lastDrop > 400) openEdit(cardEl.dataset.id);
     const sg = e.target.closest('.sg');
     if (sg && e.target.closest('.sg-skip')) change({ file: 'suggestions', type: 'skip', suggestionId: sg.dataset.sg });
     if (sg && e.target.closest('.sg-add')) {
@@ -426,6 +449,37 @@
       addedAt: new Date().toISOString(), priority: 999,
     }, extra || {});
   }
+
+  // ---------- The edit sheet: the + form's three boxes, filled in, and Save. Moving and deleting stay drag only. ----------
+  let editing = null;
+  function openEdit(id) {
+    const t = tasks[id];
+    if (!t) return;
+    editing = id;
+    const d = dueParts(t);
+    $('#edit-name').value = t.title || '';
+    $('#edit-date').value = d.date;
+    $('#edit-time').value = d.time;
+    $('#edit-note').value = t.myNote || '';
+    openSheet('sheet-edit');
+  }
+  $('#edit-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const t = editing && tasks[editing];
+    const title = $('#edit-name').value.trim();
+    if (!title) { $('#edit-name').focus(); return; }
+    if (!t) { closeSheets(); return; }
+    const d = dueFrom($('#edit-date').value, $('#edit-time').value);
+    const was = dueParts(t);
+    const sameDue = was.date === $('#edit-date').value && was.time === $('#edit-time').value;
+    const next = { title, myNote: $('#edit-note').value.trim() };
+    // An unchanged date keeps its exact time, so opening and saving never moves a task.
+    if (!sameDue) { next.due = d ? d.due : null; next.dueNoTime = d ? d.dueNoTime : false; }
+    const changed = next.title !== t.title || next.myNote !== (t.myNote || '') || !sameDue;
+    closeSheets();
+    if (changed) change(Object.assign({ type: 'edit', taskId: editing }, next));
+    editing = null;
+  });
 
   // ---------- Sheets (add form, questions, menu, archive, settings, waiting list) ----------
   let lastFocus = null;
@@ -480,9 +534,22 @@
     const money = (a) => (a < 0 ? '−$' : '+$') + Math.abs(a).toFixed(2);
     $('#q-list').innerHTML = (ms.length ? '<li class="q-head">Charges to label</li>' + ms.map((m) => '<li class="q-charge"><span class="t">' + esc(m.name) + ' · ' + money(m.a) + '</span>' +
         '<span class="n">' + esc(m.day) + ' · ' + esc(m.account) + '</span><button type="button" class="q-label" data-label-charge="' + esc(m.id) + '">Label now</button></li>').join('') : '') +
-      (qs.length ? (ms.length ? '<li class="q-head">Questions</li>' : '') + qs.map((q) => '<li><span class="t">' + esc(q.text) + '</span>' + (q.about ? '<span class="n">About: ' + esc(q.about) + '</span>' : '') + '</li>').join('') : '') ||
+      (qs.length ? (ms.length ? '<li class="q-head">Questions</li>' : '') + qs.map((q) => '<li class="q-written"><span class="t">' + esc(q.text) + '</span>' + (q.about ? '<span class="n">About: ' + esc(q.about) + '</span>' : '') +
+        '<form class="q-answer" data-answer="' + esc(q.id) + '" autocomplete="off"><input type="text" aria-label="Your answer" placeholder="Your answer" autocapitalize="sentences"><button type="submit">Send</button></form></li>').join('') : '') ||
       '<li class="empty">Nothing waiting on you.</li>';
   }
+  // A written answer goes on the task. The robot reads it on its next run, does what it says, and clears it.
+  document.getElementById('q-list').addEventListener('submit', (e) => {
+    const f = e.target.closest('[data-answer]');
+    if (!f) return;
+    e.preventDefault();
+    const text = f.querySelector('input').value.trim();
+    if (!text) { f.querySelector('input').focus(); return; }
+    change({ type: 'answer', taskId: f.dataset.answer, answer: text });
+    fillQuestions();
+    badge();
+    toast('Sent. Claude reads it at the next check, 7:42 AM or 8:42 PM.');
+  });
   function questionCount() { return questions(tasks).length + missedCharges().length; }
   function badge() {
     const n = questionCount();
@@ -548,6 +615,7 @@
   // ---------- Hold and drag: reorder, drop on a tab to move, drop on the trash to delete ----------
   let dragging = null;
   let press = null;
+  let lastDrop = 0;
   const HOLD = 380;
 
   function pointFrom(e) { const p = e.touches ? e.touches[0] || e.changedTouches[0] : e; return { x: p.clientX, y: p.clientY }; }
@@ -621,6 +689,7 @@
   function drop() {
     const d = dragging;
     dragging = null;
+    lastDrop = Date.now();
     d.ghost.remove();
     d.cardEl.classList.remove('lifted');
     document.body.classList.remove('dragging');
