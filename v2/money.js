@@ -617,12 +617,14 @@
     };
   }
   // Savings for each day of the balance graph: today's savings, walked back through each move in or out of
-  // savings (wishlist pots aside), so it steps only on the days money moved.
+  // savings, so it steps only on the days money moved. Every savings pot the total counts is walked back too,
+  // wishlist pots like Cash App Savings included (found Nov 28: the total counted the GPU pot but the walk-back
+  // skipped its move, so the blue line never rose when the green line dropped that day). Wishlist pots stay out
+  // of To invest and Debt; that's those parts' rule, not the graph's.
   function savingsLine(fin, months, bal, total) {
     const rules = storeRules(fin);
-    const isWish = wishTest(fin);
     const netIn = {};
-    for (const t of allTx(months)) if (bucketOf(t, rules) === 'savings' && !isWish(t)) netIn[t.d] = (netIn[t.d] || 0) - t.a;
+    for (const t of allTx(months)) if (bucketOf(t, rules) === 'savings') netIn[t.d] = (netIn[t.d] || 0) - t.a;
     const out = {};
     let v = total;
     for (let i = bal.days.length - 1; i >= 0; i--) {

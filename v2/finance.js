@@ -200,15 +200,20 @@
     }
     const li = vals.length - 1;
     const endDot = '<circle cx="' + f(x(li)) + '" cy="' + f(y(vals[li])) + '" r="9" fill="' + GREEN + '" opacity="0.25"/><circle cx="' + f(x(li)) + '" cy="' + f(y(vals[li])) + '" r="4.5" fill="' + GREEN + '"/>';
-    // The date row: the first day, each pin's day, and Today. A date that would touch another is left out.
+    // The date row: the first day, each pin's day, and Today. Each date's width is worked out from its own
+    // letters, and a date that would come within 10 of another is left out (found Nov 28: fixed spacing let
+    // "October 29" run into "November 6").
     const dy = h - 8;
     const isToday = days[li] === W.today;
+    const tw = (t) => t.length * 7.8 + 4; // 13px Inter is under 7.8 a letter
+    const span = (l) => { const wd = tw(l.t); return l.a === 'start' ? [l.x, l.x + wd] : l.a === 'end' ? [l.x - wd, l.x] : [l.x - wd / 2, l.x + wd / 2]; };
     const labels = [{ x: 12, t: M.monthDay(days[0]), a: 'start' }, { x: w - 12, t: isToday ? 'Today' : M.monthDay(days[li]), a: 'end' }];
-    const mid = [];
+    if (span(labels[0])[1] + 10 > span(labels[1])[0]) labels.shift(); // too narrow for both: keep the newest
     for (const p of placed) {
-      if (p.x < 70 || p.x > w - 70 || mid.some((m) => Math.abs(m - p.x) < 60)) continue;
-      mid.push(p.x);
-      labels.push({ x: p.x, t: M.monthDay(p.day), a: 'middle' });
+      const l = { x: p.x, t: M.monthDay(p.day), a: 'middle' };
+      const [a0, a1] = span(l);
+      if (a0 < 4 || a1 > w - 4 || labels.some((o) => { const [b0, b1] = span(o); return a0 < b1 + 10 && b0 < a1 + 10; })) continue;
+      labels.push(l);
     }
     const dates = labels.map((l) => '<text x="' + f(l.x) + '" y="' + dy + '" text-anchor="' + l.a + '" class="fi-glabel" data-date-label>' + l.t + '</text>').join('');
     const seg = [[30, '30 days'], [90, '90 days'], [0, 'All']].map(([n, t]) => '<button type="button" data-range="' + n + '" aria-pressed="' + (range === n) + '">' + t + '</button>').join('');

@@ -302,6 +302,15 @@ function finRules() {
     const step = (ser, d0, d1) => ser[d1] - ser[d0];
     expect(F, Math.abs((step(w2.bal.series, before, day) - step(w1.bal.series, before, day)) + 40) < 0.01, 'a $40 move into savings did not come off the green line on its day');
     expect(F, w2.savingsLine && Math.abs((step(w2.savingsLine, before, day) - step(w1.savingsLine, before, day)) - 40) < 0.01, 'a $40 move into savings did not lift the blue Savings line by $40 on its day');
+    // Money into a wishlist pot the Savings total counts (like Cash App Savings) moves the blue line too, even with
+    // other spending the same day (found Nov 28 on his Nov 19 move).
+    const potM = addTx(addTx(MONTHS, { id: 'sv5', d: day, a: -25, k: 'First National Bank Alaska', s: 'Moved to Cash App Savings', cat: 'savings', c: 'savings', u: 'savings', m: 0, p: 0 }),
+      { id: 'sv6', d: day, a: -60, k: 'First National Bank Alaska', s: 'Sample store', c: 'groceries', u: '50', m: 0, p: 0 });
+    const wp = Money.work(FIN, potM, null, new Date(NOW));
+    expect(F, wp.savingsLine && Math.abs((step(wp.savingsLine, before, day) - step(w1.savingsLine, before, day)) - 25) < 0.01 && Math.abs((step(wp.bal.series, before, day) - step(w1.bal.series, before, day)) + 85) < 0.01,
+      'a $25 move into a wishlist savings pot should lift the blue line by $25 and take $25 off the green line beside the day\'s other spending');
+    graphMovesMatch(FIN, potM, new Date(NOW), F + ' graph');
+    graphMovesMatch(FIN, inM, new Date(NOW), F + ' graph');
     expect(F, w2.savingsLine && w2.bal.days.filter((d) => d !== day).every((d, i, a) => i === 0 || w2.savingsLine[d] === w2.savingsLine[a[i - 1]] || d === dayN(0)), 'the Savings line moved on a day with no money in or out of savings');
     expect(F, B2 && B2.movedIn === 40 && Math.abs(B2.investPlan - Math.max(0, B1.investPlan - 40)) < 0.01, 'a $40 move into savings did not come off To invest (plan ' + (B2 && B2.investPlan) + ' vs ' + (B1 && B1.investPlan) + ')');
     expect(F, B2 && B2.toInvest <= B2.investPlan + 0.005 && B2.toInvest <= Math.max(0, B2.cashLeft) + 0.005, 'To invest is more than its plan or the cash left after the other buckets');
@@ -1645,6 +1654,39 @@ async function wishParts(page, where) {
 }
 // Every part of the approved graph (canvas: graph C with B's pins) and bucket cards is there, and the graph keeps
 // its shape: never stretched, so it grows taller as it gets wider and its dots stay round.
+// The date row under the balance graph: no two dates touch, and every date sits inside the graph
+// (found Nov 28: "October 29" ran into "November 6" on his phone).
+async function dateRow(page, where) {
+  const r = await page.evaluate(() => {
+    const svg = document.querySelector('.fi-chart .fi-graph');
+    if (!svg) return null;
+    const g = svg.getBoundingClientRect();
+    const b = Array.from(svg.querySelectorAll('[data-date-label]')).map((t) => { const x = t.getBoundingClientRect(); return { t: t.textContent, l: x.left, r: x.right }; }).sort((p, q) => p.l - q.l);
+    const out = [];
+    b.forEach((x, i) => { if (x.l < g.left - 0.5 || x.r > g.right + 0.5) out.push('"' + x.t + '" runs off the graph'); if (i && x.l < b[i - 1].r + 4) out.push('"' + b[i - 1].t + '" and "' + x.t + '" touch'); });
+    return { out, n: b.length };
+  });
+  if (!r) { problem(where, 'the balance graph is missing'); return; }
+  expect(where, r.n >= 1, 'the graph has no dates under it');
+  for (const o of r.out) problem(where, 'the dates under the graph collide: ' + o);
+}
+// A move between the bank and savings changes the two lines by the same amount, opposite ways, on its day
+// (spec, Spending): it's in an account the green line counts, and the blue line steps by exactly the day's moves.
+// Run on the sample and, in the real-data check, on his own rows, so a new kind of savings move can't slip past.
+function graphMovesMatch(fin, months, now, where) {
+  const w = Money.work(fin, months, null, now);
+  if (!w.bal || !w.savingsLine) return;
+  const tx = Money.allTx(months), rules = (((fin || {}).storeRules) || {}).items || [];
+  const counted = new Set(Object.keys(((fin || {}).tracker || {}).anchors || {}));
+  const moves = tx.filter((t) => Money.bucketOf(t, rules) === 'savings' && t.d >= w.bal.days[0] && t.d <= w.bal.end);
+  for (const t of moves) if (!counted.has(t.k)) problem(where, 'a move to or from savings on ' + t.d + ' is in an account the balance line does not count, so the green line misses it');
+  const days = w.bal.days;
+  for (let i = 1; i < days.length; i++) {
+    const d = days[i], want = -moves.filter((t) => t.d === d).reduce((a, t) => a + t.a, 0);
+    const got = w.savingsLine[d] - w.savingsLine[days[i - 1]];
+    if (Math.abs(got - want) > 0.01) problem(where, 'on ' + d + ' the blue Savings line stepped by a different amount than the money moved in or out of savings, so the two lines do not match');
+  }
+}
 async function graphParts(page, where) {
   const g = await page.evaluate(() => {
     const svg = document.querySelector('.fi-chart .fi-graph');
@@ -1663,6 +1705,7 @@ async function graphParts(page, where) {
       edge: (() => { const c = document.querySelector('.fi-chart').getBoundingClientRect(); return Math.abs(r.left - c.left) < 1 && Math.abs(r.right - c.right) < 1; })() };
   });
   if (!g) { problem(where, 'the balance graph is missing'); return; }
+  await dateRow(page, where);
   expect(where, Math.abs(g.ratio - 1) < 0.02, 'the graph is stretched (its shape is ' + g.ratio.toFixed(2) + ' times its drawing\'s, ' + Math.round(g.w) + ' by ' + Math.round(g.h) + ')');
   expect(where, g.edge, 'the graph should run edge to edge across its card');
   expect(where, g.pins >= 1 && g.ring === g.pins && g.stem === g.pins && g.pinText.every((t) => /^\+\$[\d,]+$/.test(t)), 'each paycheck should get a pin with just the amount, a short line and a ringed dot (pins: ' + JSON.stringify(g.pinText) + ')');
@@ -2295,6 +2338,7 @@ async function run() {
 async function realRun() {
   const read = (p) => { try { return JSON.parse(fs.readFileSync(path.join(REAL, p), 'utf8')); } catch (e) { return undefined; } };
   for (const p of Object.keys(SAMPLE)) { const d = read(p); if (d !== undefined) SAMPLE[p] = d; else if (p !== 'meta/app.json') delete SAMPLE[p]; }
+  if (SAMPLE['data/fin.json'] && SAMPLE['data/fin.config.months.json']) graphMovesMatch(SAMPLE['data/fin.json'], SAMPLE['data/fin.config.months.json'], new Date(), 'real Spending graph');
   const server = await serve();
   const base = 'http://127.0.0.1:' + server.address().port + '/my-app/v2/';
   const browser = await webkit.launch();
@@ -2315,6 +2359,14 @@ async function realRun() {
     }
     await tap('.pl-ask'); await settle(pg, 350);
     await look(pg, 'real ' + label + ' Plan message box', size);
+    if (pg.isClosed()) continue;
+    await pg.keyboard.press('Escape').catch(() => {});
+    await tap('.tab[data-tab="finance"]'); await settle(pg);
+    await finReady(pg);
+    for (const n of ['30', '90', '0']) {
+      if (await pg.locator('.fi-seg [data-range="' + n + '"]').count()) { await tap('.fi-seg [data-range="' + n + '"]'); await settle(pg, 250); }
+      await dateRow(pg, 'real ' + label + ' graph ' + (n === '0' ? 'All' : n + ' days'));
+    }
     if (ctx.wrote || ctx.badPaths.length) problem('real ' + label, 'the app tried to save while only looking');
     await ctx.close();
   }
