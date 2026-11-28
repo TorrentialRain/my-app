@@ -176,6 +176,7 @@
     describe,
     start() { pending = loadWaiting(); readOnly = false; era++; return pending.slice(); },
     isReadOnly() { return readOnly; },
+    isSaving() { return saving; }, // the Hub waits for this before it reloads itself (fresh.js)
     add(change) {
       const c = Object.assign({ id: newId(), at: new Date().toISOString() }, change);
       pending.push(c);

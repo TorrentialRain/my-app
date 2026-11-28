@@ -118,10 +118,13 @@
   // Face ID (or Windows Hello). A "no" (he looked away, tapped Cancel, or the phone wants a tap first) comes back as
   // 'needtap'. The browser's own words are kept on the error as .reason, so the lock screen can show them.
   // withSecret asks for the secret too; only ask where the passkey can give it.
-  async function askFace(box, withSecret) {
+  // anyHub: on a PC the passkey is only a yes or no (the 'gate' way), so any of his Hub passkeys on that PC will do,
+  // not only the one saved here (found Nov 28: a PC kept failing while the saved passkey id was out of step; this is
+  // the backstop if that ever happens again). The browser picks from this site's own passkeys only.
+  async function askFace(box, withSecret, anyHub) {
     const publicKey = {
       challenge: rand(32), rpId: location.hostname, userVerification: 'required', timeout: 60000,
-      allowCredentials: [{ type: 'public-key', id: unb64(box.cred) }] };
+      allowCredentials: anyHub ? [] : [{ type: 'public-key', id: unb64(box.cred) }] };
     if (withSecret) publicKey.extensions = { prf: { eval: { first: unb64(box.salt) } } };
     try {
       return await navigator.credentials.get({ publicKey });
@@ -224,7 +227,7 @@
       if (WIN && box.mode === 'faceid') throw fail('rekey', 'This PC\'s lock is an older kind Windows Hello can\'t open.');
       let cred;
       try {
-        cred = await askFace(box, box.mode === 'faceid');
+        cred = await askFace(box, box.mode === 'faceid', WIN && box.mode === 'gate');
       } catch (e) {
         const n = fails() + 1;
         setFails(n);
@@ -243,7 +246,10 @@
       // 'gate': Face ID (or Windows Hello) said yes, so open the key with the lock kept on this device.
       const lock = await phoneLock();
       if (!lock) throw fail('broken', 'The locked key couldn\'t be opened on this device.');
-      writeCred({ cred: box.cred, prf: 'no' });
+      // The passkey Windows used becomes the saved one, so the record here stays in step with the PC.
+      const used = cred && cred.rawId ? b64(cred.rawId) : box.cred;
+      if (used !== box.cred) writeBox(Object.assign({}, box, { cred: used }));
+      writeCred({ cred: used, prf: 'no' });
       return open(lock, box);
     },
 

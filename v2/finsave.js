@@ -172,6 +172,7 @@
     FILES, newId, apply, size, describe,
     start() { pending = load(); readOnly = false; era++; return pending.slice(); },
     isReadOnly() { return readOnly; },
+    isSaving() { return saving; }, // the Hub waits for this before it reloads itself (fresh.js)
     // Every change also queues its line for the change log. who: the app is used by Josh, so app changes say so.
     add(change) {
       const c = Object.assign({ id: newId(), at: new Date().toISOString() }, change);

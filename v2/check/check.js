@@ -163,6 +163,25 @@ function expect(where, ok, what) { if (!ok) problem(where, what); }
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 // ---- 1. The sorting and saving rules, on their own ----
+// Every changed script or style gets a new version mark (found Nov 28: the marks are changed by hand, and one left
+// unchanged means phones keep the old file even after the Hub reloads itself). Compared with what's live now (main).
+function stampRules() {
+  const L = 'Version marks';
+  const { execSync } = require('child_process');
+  const git = (c) => execSync('git ' + c, { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] }).toString();
+  try { git('fetch -q origin main --depth=50'); } catch (e) { /* offline: use what's here */ }
+  let live;
+  try { live = git('show origin/main:v2/index.html'); } catch (e) { console.log('  (Version marks: no live copy to compare with, skipped)'); return; }
+  const now = fs.readFileSync(path.join(ROOT, 'v2', 'index.html'), 'utf8');
+  const refs = (h) => { const o = {}; h.replace(/(?:src|href)="([\w.-]+\.(?:js|css))(?:\?v=(\d+))?"/g, (m, f, v) => { o[f] = v || ''; return m; }); return o; };
+  const a = refs(live), b = refs(now);
+  for (const [f, v] of Object.entries(b)) {
+    if (!v) { problem(L, f + ' has no version mark (?v=) in index.html'); continue; }
+    let same = true;
+    try { same = git('show origin/main:v2/' + f) === fs.readFileSync(path.join(ROOT, 'v2', f), 'utf8'); } catch (e) { same = false; }
+    if (!same && a[f] === v) problem(L, f + ' changed but its version mark is still ?v=' + v + ', so phones would keep the old one');
+  }
+}
 function rules() {
   console.log('Checking the TO-DO rules');
   const ids = (tab) => flat(tab).map(([id]) => id);
@@ -1689,6 +1708,70 @@ function graphMovesMatch(fin, months, now, where) {
 }
 // Savings tags (his pick, Nov 28): each savings move on the graph gets a blue tag at its step that says which way
 // the money went, shown as plain blue amounts (his pick, Nov 28) that never cover a line, a paycheck amount or the dates, on the phone and a PC, at every range.
+// The Hub reloads itself when a newer version is out (found Nov 28: his PC's DuckDuckGo tab kept running the Hub from
+// before the unlock fix until a Ctrl+F5). The server here can hand out a "newer" page: it's the same app with one
+// version mark changed, so the check can tell the old page from the new one.
+async function freshReload(browser, base, edges, size) {
+  const F = 'Self-reload';
+  const ctx = await newContext(browser, 'dark', size, { hasTouch: true, isMobile: true });
+  const html = fs.readFileSync(path.join(ROOT, 'v2', 'index.html'), 'utf8');
+  const S = { serve: 'same', fetchOnly: '', docs: 0, fetches: 0 };
+  const newer = (h, tag) => h.replace(/app\.js\?v=(\d+)/, 'app.js?v=$1' + tag);
+  await ctx.route((u) => /\/my-app\/v2\/(index\.html)?$/.test(u.pathname), (route) => {
+    const doc = route.request().resourceType() === 'document';
+    if (doc) S.docs++; else S.fetches++;
+    let body = S.serve === 'same' ? html : newer(html, S.serve);
+    if (!doc && S.fetchOnly) body = newer(html, S.fetchOnly); // a mixed-up server: the check says newer, the page stays old
+    return route.fulfill({ status: 200, contentType: 'text/html', body });
+  });
+  const pg = await openConnected(ctx, base, edges);
+  const appMark = () => pg.evaluate(() => (document.querySelector('script[src^="app.js"]') || {}).getAttribute('src'));
+  const state = () => pg.evaluate(() => ({ fresh: document.documentElement.dataset.fresh || '', looked: +(document.documentElement.dataset.freshLooked || 0), kept: !!window.__keep }));
+  const comeBack = () => pg.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  // 1. Nothing newer: it looks when the Hub opens, finds it current, and doesn't reload.
+  await pg.waitForFunction(() => +(document.documentElement.dataset.freshLooked || 0) >= 1, null, { timeout: 8000 }).catch(() => {});
+  await pg.evaluate(() => { window.__keep = 1; });
+  let st = await state();
+  expect(F, st.looked >= 1 && st.fresh === 'current', 'the Hub should look for a newer version when it opens, and find none (got ' + JSON.stringify(st) + ')');
+  const first = await appMark();
+  // 2. A newer version is out, but a sheet is open: it waits and doesn't reload under him.
+  S.serve = '1';
+  await pg.tap('.td-fabs .plus');
+  await settle(pg, 300);
+  await pg.fill('#add-form input', 'Half typed');
+  await comeBack();
+  await pg.waitForFunction(() => /^waiting-/.test(document.documentElement.dataset.fresh || ''), null, { timeout: 8000 }).catch(() => {});
+  await settle(pg, 3500);
+  st = await state();
+  expect(F, st.kept && /^waiting-(sheet|typing)$/.test(st.fresh), 'with a sheet open, the Hub should wait instead of reloading (got ' + JSON.stringify(st) + ')');
+  // 3. Once the sheet closes, it reloads by itself onto the newer version, and the Hub opens again as normal.
+  const reloaded = pg.waitForEvent('load', { timeout: 15000 }).then(() => true).catch(() => false);
+  await pg.evaluate(() => { document.activeElement && document.activeElement.blur(); });
+  await pg.tap('#sheet-add [data-close]');
+  const did = await reloaded;
+  await pg.waitForFunction(() => document.documentElement.dataset.loaded === 'yes', null, { timeout: 8000 }).catch(() => {});
+  await closeMissed(pg);
+  const second = await appMark();
+  st = await state();
+  expect(F, did && !st.kept && second !== first && /v=\d+1$/.test(second || ''), 'after the sheet closed, the Hub should have reloaded itself onto the newer version (reloaded: ' + did + ', now ' + second + ', was ' + first + ')');
+  await pg.waitForFunction(() => +(document.documentElement.dataset.freshLooked || 0) >= 1, null, { timeout: 8000 }).catch(() => {});
+  st = await state();
+  expect(F, st.fresh === 'current', 'after reloading, the Hub should find itself current (got ' + JSON.stringify(st) + ')');
+  expect(F, await pg.evaluate(() => !/fresh=/.test(location.href)), 'the address should be plain again after a reload');
+  // 4. A mixed-up server that keeps saying "newer" while sending the old page: two tries at most, then it stops.
+  await pg.evaluate(() => { window.__keep = 1; });
+  S.fetchOnly = '2'; S.docs = 0;
+  for (let k = 0; k < 4; k++) {
+    await comeBack();
+    await pg.waitForLoadState('load').catch(() => {});
+    await settle(pg, 1800);
+    await closeMissed(pg).catch(() => {});
+  }
+  st = await state();
+  expect(F, S.docs <= 2 && st.fresh === 'gave-up', 'when the server keeps sending the old page, the Hub should try twice at most, then stop (reloads: ' + S.docs + ', state: ' + st.fresh + ')');
+  await ctx.close();
+}
+
 // An amount on the graph must never sit on the green or blue line (his picks, Nov 28: plain amounts with no box, so
 // a line running through one would make it hard to read). Every point of each amount's text box is tested against
 // both lines as drawn.
@@ -1903,7 +1986,7 @@ function fakeIDB() {
 function lockDevice(kind) {
   const vm = require('vm');
   const mem = new Map();
-  const dev = { kind, creates: 0, gets: 0, secretAsks: 0, refuse: false, gone: new Set(), ids: 0 };
+  const dev = { kind, creates: 0, gets: 0, secretAsks: 0, refuse: false, gone: new Set(), ids: 0, made: [], anyAsks: 0 };
   const refuse = (msg) => { const e = new Error(msg || 'The operation either timed out or was not allowed.'); e.name = 'NotAllowedError'; return e; };
   const sandbox = {
     console, setTimeout, btoa: (s) => Buffer.from(s, 'binary').toString('base64'), atob: (s) => Buffer.from(s, 'base64').toString('binary'),
@@ -1911,23 +1994,28 @@ function lockDevice(kind) {
     localStorage: { getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, String(v)), removeItem: (k) => mem.delete(k) },
     indexedDB: fakeIDB(),
     PublicKeyCredential: { isUserVerifyingPlatformAuthenticatorAvailable: async () => true },
-    navigator: { credentials: {
+    navigator: { userAgent: kind === 'windows' ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' : 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)', credentials: {
       async create() {
         if (dev.refuse) throw refuse();
         dev.creates++;
         const id = new Uint8Array([++dev.ids, 7]);
+        dev.made.push(Buffer.from(id).toString('hex'));
         return { rawId: id.buffer, getClientExtensionResults: () => (kind === 'iphone' ? { prf: { enabled: true } } : { prf: { enabled: false } }) };
       },
       async get(o) {
         dev.gets++;
         if (dev.refuse) throw refuse();
-        const id = Buffer.from(o.publicKey.allowCredentials[0].id).toString('hex');
-        if (dev.gone.has(id)) throw refuse();
+        // An empty list means "any of this site's passkeys": the device offers its newest one that still exists.
+        const allow = o.publicKey.allowCredentials || [];
+        if (!allow.length) dev.anyAsks++;
+        const id = allow.length ? Buffer.from(allow[0].id).toString('hex') : dev.made.filter((m) => !dev.gone.has(m)).pop();
+        if (!id || dev.gone.has(id)) throw refuse();
+        const rawId = Uint8Array.from(Buffer.from(id, 'hex')).buffer;
         const p = o.publicKey.extensions && o.publicKey.extensions.prf;
         if (p) dev.secretAsks++;
         if (p && kind === 'windows') throw refuse();
         const out = p ? { prf: { results: { first: new Uint8Array(p.eval.first).map((b) => b ^ 0x5a).buffer } } } : {};
-        return { rawId: o.publicKey.allowCredentials[0].id, getClientExtensionResults: () => out };
+        return { rawId, getClientExtensionResults: () => out };
       } } },
   };
   sandbox.window = sandbox;
@@ -1991,10 +2079,30 @@ async function lockRules() {
   r = await tryIt(() => del.lock.lock('saving-key'));
   if (r.e && r.e.code === 'needtap') r = await tryIt(() => del.lock.lock('saving-key'));
   expect(L, r.v === 'gate' && del.creates === 2, 'if this device\'s passkey was deleted, locking again should make a new one (got ' + (r.v || r.e) + ', passkeys made: ' + del.creates + ')');
+  // 8. The backstop (found Nov 28): on a PC any of his Hub passkeys opens the Hub, not only the saved one. Here the
+  // saved passkey is gone but another Hub passkey is on the PC: the unlock still works, and the saved one follows it.
+  const two = lockDevice('windows');
+  await two.lock.lock('saving-key');
+  await two.lock.redo(); // a second Hub passkey on the same PC; the saved one is now the second
+  const second = JSON.parse(two.mem.get('hub2.lock.v1')).cred;
+  two.gone.add(two.made[1]);
+  two.made.push(two.made.shift()); // only the first passkey is left, and the device offers it
+  two.anyAsks = 0;
+  r = await tryIt(() => two.lock.unlock());
+  const after = JSON.parse(two.mem.get('hub2.lock.v1')).cred;
+  expect(L, r.v === 'saving-key' && two.anyAsks === 1, 'on a PC any of his Hub passkeys should open the Hub (got ' + (r.v || (r.e && r.e.reason) || r.e) + ', asked for any: ' + two.anyAsks + ')');
+  expect(L, after !== second && (two.cred() || {}).cred === after, 'after a PC opens with another Hub passkey, that one should become the saved one');
+  // An iPhone still names its own passkey, so Face ID's secret comes from the right one.
+  const ip = lockDevice('iphone');
+  await ip.lock.lock('saving-key');
+  ip.anyAsks = 0;
+  await ip.lock.unlock();
+  expect(L, ip.anyAsks === 0, 'an iPhone should still ask for its own passkey by name');
 }
 
 async function run() {
   rules();
+  stampRules();
   await lockRules();
   robotRules();
   planRules();
@@ -2011,6 +2119,7 @@ async function run() {
   const pc = { W: PC.W, H: PC.H, TOP: 0, BOTTOM: 0 };
 
   await faceLock(browser, base, edges, phone);
+  await freshReload(browser, base, edges, phone);
 
   for (const scheme of ['light', 'dark']) {
     console.log('Checking ' + scheme + ' mode (phone)');
