@@ -33,7 +33,7 @@
   const GROUP_COLOR = { needs: '#2563EB', wants: '#9333EA', savings: '#16A34A', debt: '#64748B', unsorted: '#8E8E93' };
 
   let store = null, base = { fin: null, months: null, notes: null }, W = null;
-  let tab = 'spending', range = 30, pieAt = 0, openTile = null, openBreak = false, actDays = 10, showBought = false, showPaid = false;
+  let tab = 'spending', range = 30, pieAt = 0, openTile = null, openBreak = false, actDays = 10, showBought = false, showPaid = false, showBack = false;
   let saveTimer = null, retryTimer = null, savingNow = false, again = false, justSaved = 0, lastRead = 0, ready = false;
 
   const page = document.getElementById('page-finance');
@@ -409,7 +409,8 @@
     const days = W.activity.slice(0, actDays).map((d) => {
       const label = d.day === W.today ? 'Today · ' + M.longDay(d.day) : d.day === M.addDays(W.today, -1) ? 'Yesterday · ' + M.longDay(d.day) : M.longDay(d.day);
       const rows = d.rows.map((r) => {
-        const chips = (r.pending ? '<span class="fi-tag">Pending</span>' : '') + (r.ask ? '<span class="fi-tag on">What was it for?</span>' : '') + (r.naming ? '<span class="fi-tag">Name coming</span>' : '') + (r.double ? '<span class="fi-tag warn">Maybe counted twice</span>' : '') + (r.ruled ? '<span class="fi-tag">Store rule</span>' : '');
+        // Estimate: added by the robot from a receipt or alert before the bank confirms it (paychecks, refunds, own moves).
+        const chips = (r.est ? '<span class="fi-tag" data-est>Estimate</span>' : '') + (r.pending ? '<span class="fi-tag">Pending</span>' : '') + (r.ask ? '<span class="fi-tag on">What was it for?</span>' : '') + (r.naming ? '<span class="fi-tag">Name coming</span>' : '') + (r.double ? '<span class="fi-tag warn">Maybe counted twice</span>' : '') + (r.ruled ? '<span class="fi-tag">Store rule</span>' : '');
         return '<button type="button" class="fi-row" data-tx="' + esc(r.id) + '"><span class="fi-rname"><b>' + esc(r.name) + '</b><span>' + esc(oneLine([r.catName, r.bucketName, r.account])) + '</span>' + (chips ? '<span class="fi-tags">' + chips + '</span>' : '') + '</span>' +
           '<span class="num ' + (r.amount < 0 ? 'out' : 'in') + '">' + M.signed(r.amount) + '</span><span class="num"><span class="fi-bal' + (r.balance < 0 ? ' neg' : '') + '">' + (r.balance == null ? '' : M.money(r.balance)) + '</span></span></button>';
       }).join('');
@@ -470,7 +471,14 @@
       (d.fromEmail ? '<span class="fi-chip">Added from email</span>' : '') + '</section>').join('');
     const paid = D.done.length ? '<section class="fi-card fi-last"><button type="button" class="fi-fold" data-show-paid aria-expanded="' + showPaid + '">Paid off · ' + D.done.length + ic(ICON.chev, 18) + '</button>' +
       (showPaid ? '<ul class="fi-list">' + D.done.map((d) => '<li><span>' + esc(d.name) + '</span><span>' + (d.total ? M.money(d.total) : '') + '</span></li>').join('') + '</ul>' : '') + '</section>' : '';
-    return '<div class="fi-cols"><div class="fi-col"><section class="fi-card"><div class="fi-cardhead"><div><p class="fi-cap">Total owed</p><p class="fi-big">' + M.money(D.totalOwed) + '</p></div><button type="button" class="addbtn" data-add-debt>' + ic(ICON.plus, 18) + 'Add</button></div>' + next + free + '</section>' + paid + '</div><div class="fi-col">' + cards + '</div></div>';
+    // Money lent out is owed TO him: its own card, never in Total owed (Nov 28: lent money only when the note says lending).
+    const T = D.toMe || { open: [], done: [], total: 0 };
+    const back = (d) => '<li><span><b>' + esc(d.owedBy || d.name) + '</b><span>' + esc(oneLine([d.name, d.next ? 'Back by ' + M.longDay(d.next.due) : ''])) + '</span></span><span class="num">' + M.money(d.owed > 0.005 ? d.owed : d.total) + '</span></li>';
+    const toMe = T.open.length || T.done.length ? '<section class="fi-card fi-tome" data-owed-to-me><div class="fi-cardhead"><div><p class="fi-cap">Owed to you</p><p class="fi-big">' + M.money(T.total) + '</p></div></div>' +
+      '<p class="fi-note">Money you lent out. It doesn\'t count in Total owed, and comes in as income when it\'s paid back.</p>' +
+      (T.open.length ? '<ul class="fi-list">' + T.open.map(back).join('') + '</ul>' : '') +
+      (T.done.length ? '<button type="button" class="fi-fold" data-show-back aria-expanded="' + showBack + '">Paid back · ' + T.done.length + ic(ICON.chev, 18) + '</button>' + (showBack ? '<ul class="fi-list">' + T.done.map(back).join('') + '</ul>' : '') : '') + '</section>' : '';
+    return '<div class="fi-cols"><div class="fi-col"><section class="fi-card"><div class="fi-cardhead"><div><p class="fi-cap">Total owed</p><p class="fi-big">' + M.money(D.totalOwed) + '</p></div><button type="button" class="addbtn" data-add-debt>' + ic(ICON.plus, 18) + 'Add</button></div>' + next + free + '</section>' + toMe + paid + '</div><div class="fi-col">' + cards + '</div></div>';
   }
 
   // ----- Quick-budget -----
@@ -606,6 +614,7 @@
     if (b.dataset.bought) { boughtSheet(b.dataset.bought); return; }
     if (b.hasAttribute('data-show-bought')) { showBought = !showBought; render(); return; }
     if (b.hasAttribute('data-show-paid')) { showPaid = !showPaid; render(); return; }
+    if (b.hasAttribute('data-show-back')) { showBack = !showBack; render(); return; }
     if (b.hasAttribute('data-fin-waiting')) { waitingSheet(); return; }
   });
   page.addEventListener('change', (e) => { if (e.target.matches('[data-pie]')) { pieAt = +e.target.value; render(); } });

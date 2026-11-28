@@ -251,7 +251,7 @@
   // Small summaries, one per page. Kept apart from the reading so they can be tested on their own.
   const Summary = {
     finance(fin) {
-      const items = (fin && fin.debts && fin.debts.items) || [];
+      const items = ((fin && fin.debts && fin.debts.items) || []).filter((d) => !d.toJosh); // money lent out isn't his debt
       const owed = items.filter((d) => Number(d.owed) > 0).length;
       if (!items.length) return 'No debts on file';
       if (!owed) return 'No debts owed right now (' + items.length + ' on file)';

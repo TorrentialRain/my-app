@@ -467,7 +467,7 @@
       const rows = list.map((t) => {
         const c = catOf(t, rules), b = bucketOf(t, rules);
         const row = { id: t.id, name: nameOf(t), cat: c, catName: (CATS[c] || CATS.other).name, bucket: b, bucketName: bucketName(b, fin), amount: t.a, balance: after,
-          pending: !!t.p, both: !!t.both, account: SHORT[t.k] || t.k || '', ask: needsLabel(t, rules, today), naming: waitingForName(t, today), mine: t.lb === 'josh', ruled: !!myRule(t, rules) };
+          pending: !!t.p, both: !!t.both, account: SHORT[t.k] || t.k || '', ask: needsLabel(t, rules, today), naming: waitingForName(t, today), mine: t.lb === 'josh', ruled: !!myRule(t, rules), est: !!t.est };
         if (after != null) after = r2(after - t.a);
         return row;
       });
@@ -536,22 +536,28 @@
     const D = (fin && fin.debts) || {};
     const pays = (D.payments || []).filter((p) => !p.undone);
     const auto = months ? owedToSavings(fin, months) : null;
-    const items = (D.items || []).filter((d) => !d.undone && !(auto && isSavingsDebt(d) && +d.owed > 0.005)).map((d) => {
+    // Money lent out (toJosh) is owed TO Josh: it gets its own list and never counts in what he owes (Nov 28).
+    const all = (D.items || []).filter((d) => !d.undone && !(auto && isSavingsDebt(d) && +d.owed > 0.005)).map((d) => {
       const mine = pays.filter((p) => p.debtId === d.id);
       const next = mine.filter((p) => !p.paid).sort((a, b) => (a.due < b.due ? -1 : 1))[0] || null;
       const paidSum = mine.filter((p) => p.paid).reduce((s, p) => s + +p.amount, 0);
       const owed = +d.owed || 0;
       const total = +d.total > 0 ? +d.total : r2(owed + paidSum);
-      return { id: d.id, name: d.name, owedTo: d.owedTo || '', owed, total, paidShare: total > 0 ? Math.max(0, Math.min(1, 1 - owed / total)) : 1,
+      return { id: d.id, name: d.name, owedTo: d.owedTo || '', owedBy: d.owedBy || '', toJosh: !!d.toJosh, owed, total, paidShare: total > 0 ? Math.max(0, Math.min(1, 1 - owed / total)) : 1,
         next: next ? { amount: +next.amount, due: next.due } : null, fromEmail: d.source === 'email', note: d.note || '' };
     });
+    const items = all.filter((d) => !d.toJosh);
+    const mineIds = new Set(items.map((d) => d.id));
+    const lent = all.filter((d) => d.toJosh);
+    const lentOpen = lent.filter((d) => d.owed > 0.005).sort((a, b) => ((a.next && a.next.due) || '9') < ((b.next && b.next.due) || '9') ? -1 : 1);
+    const toMe = { open: lentOpen, done: lent.filter((d) => d.owed <= 0.005), total: r2(lentOpen.reduce((s, d) => s + d.owed, 0)) };
     if (auto) items.push(auto);
     const open = items.filter((d) => d.owed > 0.005).sort((a, b) => ((a.next && a.next.due) || '9') < ((b.next && b.next.due) || '9') ? -1 : 1);
     const totalOwed = r2(open.reduce((s, d) => s + d.owed, 0));
     const totalAll = open.reduce((s, d) => s + d.total, 0);
     const nextDue = open.map((d) => d.next).filter(Boolean).sort((a, b) => (a.due < b.due ? -1 : 1))[0] || null;
-    const lastPaid = pays.filter((p) => p.paid && p.paidAt).map((p) => p.paidAt.slice(0, 10)).sort().pop() || null;
-    return { open, done: items.filter((d) => d.owed <= 0.005), totalOwed, paidShare: totalAll > 0 ? 1 - totalOwed / totalAll : 1, nextDue, debtFreeSince: open.length ? null : lastPaid };
+    const lastPaid = pays.filter((p) => p.paid && p.paidAt && mineIds.has(p.debtId)).map((p) => p.paidAt.slice(0, 10)).sort().pop() || null;
+    return { open, done: items.filter((d) => d.owed <= 0.005), totalOwed, paidShare: totalAll > 0 ? 1 - totalOwed / totalAll : 1, nextDue, debtFreeSince: open.length ? null : lastPaid, toMe };
   }
 
   // ---------- Wishlists ----------

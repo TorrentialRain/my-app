@@ -109,14 +109,16 @@ const TX = [
   ['t12', 0, -6.25, 'Cash App', 'Sample Coffee · Cash App Card', 'food', '30', 1],
 ].map(([id, n, a, k, s, cat, u, p]) => ({ id, d: dayN(n), a, k, s, cat, c: cat, u, m: 0, p: p || 0 }));
 TX.find((t) => t.id === 't12').name = 'Coffee'; // the robot's label, which its tag can undo
+TX.find((t) => t.id === 't08').est = 1; // added by the robot from an alert, before the bank confirms it
 const MONTHS = {};
 for (const t of TX) (MONTHS[t.d.slice(0, 7)] = MONTHS[t.d.slice(0, 7)] || { txns: [] }).txns.push(t);
 const FIN = {
   tracker: { anchors: { 'First National Bank Alaska': { amount: 512.34, date: TODAY }, 'Cash App': { amount: 21.6, date: TODAY } } },
   rules: { gas: 120, subs: [{ name: 'Sample Music', monthly: 10.99, billDay: +dayN(-4).slice(8) }] },
   savings: { efund: { account: 'Sample savings', saved: 250, asOf: dayN(-1) }, other: [{ name: 'Cash App Savings', amount: 30, goal: 'Laptop', asOf: dayN(-1) }] },
-  debts: { items: [{ id: 'd1', name: 'Sample phone plan', owedTo: 'Sample Wireless', owed: 120, total: 200 }, { id: 'd2', name: 'Paid back a friend', owedTo: 'Sample Friend', owed: 0, total: 50 }],
-    payments: [{ id: 'p1', debtId: 'd1', name: 'Sample phone plan', amount: 40, due: dayN(5), paid: false }] },
+  debts: { items: [{ id: 'd1', name: 'Sample phone plan', owedTo: 'Sample Wireless', owed: 120, total: 200 }, { id: 'd2', name: 'Paid back a friend', owedTo: 'Sample Friend', owed: 0, total: 50 },
+    { id: 'd3', name: 'Lent to Sample Friend', owedBy: 'Sample Friend', owed: 40, total: 40, toJosh: true, source: 'email' }],
+    payments: [{ id: 'p1', debtId: 'd1', name: 'Sample phone plan', amount: 40, due: dayN(5), paid: false }, { id: 'p3', debtId: 'd3', name: 'Lent to Sample Friend', amount: 40, due: dayN(7), paid: false }] },
   wishlists: { lists: [{ id: 'l_tech', name: 'Tech', items: [{ id: 'w1', name: 'Sample laptop', amount: 600, saved: 30, setAside: [{ amount: 30, paycheck: dayN(-6), at: at(-1) }] }, { id: 'w2', name: 'Old headphones', amount: 80, saved: 80, bought: dayN(-10) }] }] },
   exceptions: { items: [{ id: 'x1', name: 'Concert ticket', amount: 45, bucket: '30', when: dayN(8) }] },
   storeRules: { items: [{ id: 'r1', store: 'Corner Store', cat: 'groceries', u: '50', at: at(-3) }] },
@@ -308,6 +310,19 @@ function finRules() {
     const back = JSON.parse(JSON.stringify(sm)); back['2026-01'].txns.push(sv('s8', '2026-01-09', -50, 'To savings'));
     const ob = Money.owedToSavings(sf, back);
     expect(F, ob && ob.owed === 0 && ob.paidOff === '2026-01-09', 'putting money back into savings did not pay off what was owed');
+  }
+  // Money lent out (toJosh) is owed TO him: its own list, never in Total owed, the next payment or the Total debt bucket (Nov 28).
+  {
+    const noLent = JSON.parse(JSON.stringify(FIN)); noLent.debts.items = noLent.debts.items.filter((d) => !d.toJosh);
+    const D0 = Money.debts(noLent, TODAY, MONTHS), D1 = Money.debts(FIN, TODAY, MONTHS);
+    expect(F, D1.totalOwed === D0.totalOwed && !D1.open.some((d) => d.toJosh) && !D1.done.some((d) => d.toJosh) && JSON.stringify(D1.nextDue) === JSON.stringify(D0.nextDue),
+      'money lent out counted in what he owes (Total owed ' + D1.totalOwed + ' vs ' + D0.totalOwed + ')');
+    expect(F, D1.toMe && D1.toMe.total === 40 && D1.toMe.open.length === 1 && D1.toMe.open[0].owedBy === 'Sample Friend', 'money lent out did not show as owed to him (' + JSON.stringify(D1.toMe && [D1.toMe.total, D1.toMe.open.length]) + ')');
+    const tile = Money.work(FIN, MONTHS, null, new Date(NOW)).budget.tiles.find((t) => t.key === 'debt');
+    expect(F, tile && tile.left === D0.totalOwed, 'the Total debt bucket counted money lent out');
+    const back = JSON.parse(JSON.stringify(FIN)); back.debts.items.find((d) => d.id === 'd3').owed = 0;
+    const D2 = Money.debts(back, TODAY, MONTHS);
+    expect(F, D2.toMe.total === 0 && D2.toMe.done.length === 1 && D2.totalOwed === D0.totalOwed, 'money paid back should leave "Owed to you" and fold under Paid back');
   }
   // To invest (his picks, Nov 26): a move into savings comes off the green balance line and off To invest on its
   // day, and the blue Savings line goes up by the same amount. Money taken out of savings never refills To invest,
@@ -1083,6 +1098,7 @@ async function phoneTodo(page, scheme, size) {
   await page.tap('.tab[data-tab="todo"]');
   await settle(page);
   await tapTab(page, 'all');
+  await mockupParts(page, T, 'todo');
   expect(T, same(await cardIds(page), ['b', 'a', 'm', 'c', 'l', 'd']), 'All shows the wrong cards: ' + await cardIds(page));
   expect(T, !(await page.locator('.td-list').textContent()).includes('Robot history'), "a card shows the robot's notes; only Josh's own note may show");
   expect(T, (await page.locator('.td-list').textContent()).includes('Check Costco first'), "Josh's own note does not show");
@@ -1435,6 +1451,7 @@ async function phonePlan(page, scheme, size) {
   await planReady(page);
   // Opens on today, in the day view.
   if ((await page.locator('.pl-wrap').getAttribute('data-view')) !== 'day') { await page.tap('[data-view-pick="day"]'); await settle(page, 200); }
+  await mockupParts(page, P, 'plan');
   const headRow = async () => page.evaluate(() => {
     const mid = (el) => { const r = el.getBoundingClientRect(); return r.top + r.height / 2; };
     const h1 = document.querySelector('#page-plan .pl-head h1');
@@ -1609,6 +1626,7 @@ async function pcPlan(pp, scheme, size) {
   await pp.click('.tab[data-tab="plan"]');
   await settle(pp);
   await planReady(pp);
+  await mockupParts(pp, P, 'pc-plan');
   const lay = await pp.evaluate(() => {
     const r = (s) => document.querySelector(s).getBoundingClientRect();
     const d = r('.pl-daycard'), w = r('.pl-weekcard'), k = r('.pl-key'), b = r('.pl-ask'), h = r('.pl-head');
@@ -1723,6 +1741,27 @@ async function pickersShowArrows(page, where) {
   const bad = await page.evaluate(() => Array.from(document.querySelectorAll('#sheet-fin select')).filter((x) => !/url\(/.test(getComputedStyle(x).backgroundImage) && !x.closest('.fi-select')).map((x) => x.name || 'a picker'));
   for (const b of bad) problem(where, 'the ' + b + ' picker has no arrow, so it looks like a box to type in');
 }
+// Every part of each page's mockup, as the spec lists it (Nov 28, from the final history read: a check that a build
+// has every part of its mockup). A part that's missing or doesn't show fails the build. When a new mockup is drawn,
+// its parts go in this list before the page is built, so a part can't be left out without the check saying so.
+const MOCKUP = {
+  'finance-spending': [['.fi-chart .fi-graph', 'the graph'], ['.fi-two', 'Total balance and Savings balance'], ['.fi-buckets', 'the buckets'], ['.fi-pie', '"Where your money went"']],
+  'finance-activity': [['text:Total balance', 'Total balance'], ['.fi-week', '"Spent the last 7 days"'], ['.fi-dayhead', 'a day heading'], ['.fi-row', 'a charge row'], ['[data-est]', 'the Estimate mark'], ['text:Store rules', 'Store rules']],
+  'finance-wishlists': [['.fi-wgrid', 'the wishlist items'], ['[data-aside-pick]', 'the round +'], ['[data-show-bought]', 'Bought and archived']],
+  'finance-debt': [['text:Total owed', 'Total owed'], ['[data-add-debt]', 'the Add button'], ['.fi-debtcard', 'a debt card'], ['.fi-debtcard .fi-bar', 'the paid-off bar'], ['[data-owed-to-me]', '"Owed to you"'], ['[data-show-paid]', 'Paid off']],
+  'finance-quick': [['[data-note-form]', 'the note box'], ['text:Planned', 'Planned']],
+  'todo': [['.td-sub', 'the count line'], ['.td-list .card', 'a task card'], ['.td-fabs', 'the round +']],
+  'plan': [['.pl-head h1', 'the title'], ['.pl-ask', 'the message box'], ['.pl-grid', 'the day view']],
+  'pc-plan': [['.pl-key', 'the calendar list'], ['.pl-daycard', 'the day'], ['.pl-weekcard', 'the week'], ['.pl-ask', 'the message box']],
+};
+async function mockupParts(page, where, key) {
+  const missing = await page.evaluate(([parts, pageId]) => {
+    const root = document.getElementById(pageId);
+    const shows = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden'; };
+    return parts.filter(([sel]) => sel.startsWith('text:') ? !root.innerText.includes(sel.slice(5)) : !Array.from(root.querySelectorAll(sel)).some(shows)).map(([, name]) => name);
+  }, [MOCKUP[key], 'page-' + key.replace(/^pc-/, '').split('-')[0]]);
+  for (const m of missing) problem(where, 'a part of the mockup is missing or doesn\'t show: ' + m);
+}
 async function phoneFinance(page, scheme, size) {
   const F = scheme + ' Finance';
   await page.tap('.tab[data-tab="finance"]');
@@ -1741,6 +1780,7 @@ async function phoneFinance(page, scheme, size) {
     await lookFin(page, F + ' ' + t, size, scheme + '-finance-' + t);
     await spelledOut(page, F + ' ' + t);
     await finWords(page, F + ' ' + t);
+    await mockupParts(page, F + ' ' + t, 'finance-' + t);
     const tabName = (await page.locator('.fi-tabs [data-fi-tab="quick"]').textContent()).trim();
     if (t === 'quick') expect(F, tabName === 'Quick-Budget', 'the tab should read "Quick-Budget" (got "' + tabName + '")');
     if (t === 'activity') {
@@ -1749,7 +1789,14 @@ async function phoneFinance(page, scheme, size) {
       expect(F + ' activity', !wrapped.length, 'a day\'s date breaks onto two lines: ' + wrapped.join(', '));
       expect(F + ' activity', (await page.locator('.fi-cols .fi-cap').first().textContent()).trim() === 'Total balance', 'Activity\'s balance should be called "Total balance"');
     }
+    if (t === 'activity') {
+      const est = await page.evaluate(() => ({ on: !!document.querySelector('.fi-row[data-tx="t08"] [data-est]'), other: document.querySelectorAll('[data-est]').length }));
+      expect(F + ' activity', est.on && est.other === 1, 'a row the robot added before the bank confirmed it should say Estimate, and only that row (' + JSON.stringify(est) + ')');
+    }
     if (t === 'debt') {
+      const lent = await page.evaluate(() => { const c = document.querySelector('[data-owed-to-me]'); return c ? c.innerText : ''; });
+      expect(F + ' debt', /Owed to you/.test(lent) && /Sample Friend/.test(lent) && /\$40\.00/.test(lent), 'money lent out should show in its own "Owed to you" card (got "' + lent.replace(/\s+/g, ' ').slice(0, 120) + '")');
+      expect(F + ' debt', !(await page.locator('.fi-debtcard[data-debt="d3"]').count()), 'money lent out shows as a debt he owes');
       const once = await page.evaluate(() => { const open = document.querySelectorAll('.fi-debtcard').length; const top = document.querySelector('.fi-col .fi-card'); return { open, nextTop: /Next due/.test(top.textContent) }; });
       expect(F + ' debt', !(once.open === 1 && once.nextTop), 'with one debt, its next payment should show once, on its own card, not again in Total owed');
     }
@@ -2121,6 +2168,7 @@ async function pcFinance(pp, scheme, size) {
     await settle(pp, 250);
     await lookFin(pp, F + ' ' + t, size, scheme + '-pc-finance-' + t);
     await finWords(pp, F + ' ' + t);
+    await mockupParts(pp, F + ' ' + t, 'finance-' + t);
     if (t === 'spending') await pieNames(pp, F + ' ' + t);
     if (t === 'wishlists') {
       // One item fills the row instead of taking half of it (found Nov 28).
