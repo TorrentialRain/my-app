@@ -1695,7 +1695,7 @@ async function finWords(page, where) {
       gl.forEach((a, i) => gl.slice(0, i).forEach((b) => { if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) out.push('two dollar labels on the graph sit on top of each other'); }));
       for (const o of window.__onLine(svg, '[data-grid-label]')) out.push(o.replace('the amount', 'the dollar label'));
     }
-    const sums = Array.from(pg.querySelectorAll('.fi-pie .fi-gsum[data-pct]')).map((x) => +x.dataset.pct);
+    const sums = Array.from(pg.querySelectorAll('.fi-groups .fi-gsum[data-pct]')).map((x) => +x.dataset.pct);
     if (sums.length && sums.reduce((a, b) => a + b, 0) !== 100) out.push('the pie\'s percents add up to ' + sums.reduce((a, b) => a + b, 0) + ', not 100');
     return out;
   });
@@ -1703,11 +1703,19 @@ async function finWords(page, where) {
 }
 // Every name in "Where your money went" stays whole on one line (found Nov 28 on a PC: "Subscriptio / ns").
 async function pieNames(page, where) {
-  const bad = await page.evaluate(() => Array.from(document.querySelectorAll('.fi-pie .fi-list li > span:first-of-type')).filter((n) => {
+  const bad = await page.evaluate(() => Array.from(document.querySelectorAll('.fi-groups .fi-list li > span:first-of-type')).filter((n) => {
     const lh = parseFloat(getComputedStyle(n).lineHeight) || 20;
     return n.getBoundingClientRect().height > lh + 1 || n.scrollWidth > n.clientWidth + 1;
   }).map((n) => n.textContent));
   for (const b of bad) problem(where, 'the pie\'s "' + b + '" does not fit on one line');
+  // ...and every row of the list shows, none cut off by the bottom of its card (found Nov 28 on a PC: "Sent to people" was missing).
+  const cut = await page.evaluate(() => Array.from(document.querySelectorAll('.fi-groups .fi-list li')).filter((li) => {
+    const r = li.getBoundingClientRect(), c = li.closest('.fi-card').getBoundingClientRect();
+    return r.height < 1 || r.bottom > c.bottom + 0.5 || r.right > c.right + 0.5;
+  }).map((li) => li.textContent.trim()));
+  for (const c of cut) problem(where, 'the pie\'s "' + c + '" row is cut off by its card');
+  const sums = await page.evaluate(() => document.querySelectorAll('.fi-groups .fi-gsum[data-pct]').length);
+  expect(where, sums > 0, 'the pie\'s groups should carry their percents, so the check can add them up');
 }
 // Every picker on a Finance sheet shows its arrow (found Nov 28: "Fix this charge" had plain boxes).
 async function pickersShowArrows(page, where) {
