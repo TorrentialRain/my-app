@@ -421,7 +421,9 @@
     const range = rangeOf(calendar);
     wrap.dataset.view = view;
     $$('[data-view-pick]', page).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.viewPick === view)));
-    const away = !(weekStart(picked) === weekStart(todayKey) && (view === 'week' || pc.matches || picked === todayKey));
+    // On a PC the day card always shows the picked day, so Today shows whenever that day isn't today (found Nov 28: after a
+    // week block moved the day, Today stayed hidden and there was no quick way back).
+    const away = pc.matches ? picked !== todayKey : !(weekStart(picked) === weekStart(todayKey) && (view === 'week' || picked === todayKey));
     // On the phone the date shares its line with Today, so it shortens ("Wed, Nov 25") while Today shows.
     $('.pl-date', page).textContent = away && !pc.matches ? shortLong(picked) : longDay(picked);
     $$('.pl-today', page).forEach((b) => { b.hidden = !away; });

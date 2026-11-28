@@ -1633,6 +1633,7 @@ async function pcPlan(pp, scheme, size) {
     await settle(pp, 400);
     const ok = await pp.evaluate((k) => { const ev = Array.from(document.querySelectorAll('.pl-daycard .pl-ev')).find((e) => e.dataset.k === k); const sc = document.querySelector('.pl-daycard .pl-scroll').getBoundingClientRect(); const r = ev && ev.getBoundingClientRect(); return !!r && r.top >= sc.top - 1 && r.top < sc.bottom; }, pk);
     expect(P, ok, 'clicking a week block on a PC should move the day to that event');
+    expect(P, await pp.locator('.pl-today.pc-only').isVisible(), 'after a week block moves the day to another day, Today should show so the day can come back');
     if (await pp.locator('.pl-today.pc-only').isVisible()) await pp.click('.pl-today.pc-only');
     await settle(pp, 300);
   }
