@@ -179,58 +179,76 @@
       const last = sav.length - 1;
       if (sav[last] != null) savEnd = '<circle cx="' + f(x(last)) + '" cy="' + f(y(sav[last])) + '" r="4.5" fill="' + BLUE + '"/>';
     }
-    // Pins: a tag with the amount only (like +$941), a short line down and a ringed dot. Pins close together sit
-    // at different heights so they never touch.
+    // Amounts on the graph (his picks, Nov 28: "No dots or tag, just dollar amount in blue", "Same for spending").
+    // Each paycheck shows only its amount (like +$941) in plain green just over its peak, and each savings move only its
+    // amount (like −$93) in plain blue beside its step: no box, no line down, no dot. An amount never sits on a
+    // line, another amount, a dollar label or the dates: it tries the spots next to its own peak or step first, then a
+    // row higher, and if every spot is taken it is left out rather than cover anything.
+    const lines = [];
+    vals.forEach((v, i) => lines.push([x(i), y(v)]));
+    const savPts = [];
+    if (hasSav) {
+      let prev = null;
+      sav.forEach((v, i) => {
+        if (v == null) return;
+        if (prev != null) savPts.push([x(i), y(prev)]);
+        savPts.push([x(i), y(v)]);
+        prev = v;
+      });
+    }
+    // Every line as short dots, so a box can be tested against it.
+    const dots = [];
+    for (const pts of [lines, savPts]) {
+      for (let k = 1; k < pts.length; k++) {
+        const [x0, y0] = pts[k - 1], [x1, y1] = pts[k];
+        const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 2));
+        for (let j = 0; j <= n; j++) dots.push([x0 + (x1 - x0) * j / n, y0 + (y1 - y0) * j / n]);
+      }
+    }
+    const taken = [[0, h - 24, w, h]]; // the date row
+    grid.replace(/<text x="12" y="([\d.]+)"[^>]*>([^<]*)</g, (m0, gy, t) => { taken.push([8, +gy - 13, 16 + t.length * 7.8, +gy + 4]); return m0; });
+    const clear = (b) => b[0] >= 2 && b[2] <= w - 2 && b[1] >= 4 &&
+      !taken.some((o) => b[0] < o[2] + 3 && o[0] < b[2] + 3 && b[1] < o[3] + 2 && o[1] < b[3] + 2) &&
+      !dots.some(([px, py]) => px > b[0] - 3 && px < b[2] + 3 && py > b[1] - 3 && py < b[3] + 3);
+    const textAt = (t, cx, base, size, width) => {
+      const tw = t.length * width;
+      return { box: [cx - tw / 2, base - size + 2, cx + tw / 2, base + 3], cx, base };
+    };
     const pins = pinsFor(days, vals);
-    let pinSvg = '', lastRight = -1e9, lift = 0;
+    let pinSvg = '';
     const placed = [];
     for (const p of pins) {
       const px = x(p.i), py = y(vals[p.i]);
       const label = '+' + M.money0(p.amount);
-      const tw = Math.round(label.length * 7.6 + 16);
-      const left0 = Math.max(2, Math.min(w - 2 - tw, px - tw / 2));
-      lift = left0 < lastRight + 6 ? (lift ? 0 : 30) : 0;
-      let tagBottom = py - 26 - lift;
-      if (tagBottom - 22 < 2) tagBottom = 24; // never off the top
-      lastRight = left0 + tw;
-      placed.push({ day: p.day, x: px, box: [left0, tagBottom - 22, left0 + tw, py + 6] });
-      pinSvg += '<g class="fi-pin" data-pin="' + p.day + '"><line x1="' + f(px) + '" x2="' + f(px) + '" y1="' + f(tagBottom) + '" y2="' + f(py - 6) + '" class="fi-pinline"/>' +
-        '<rect x="' + f(left0) + '" y="' + f(tagBottom - 22) + '" width="' + tw + '" height="22" rx="11" fill="' + GREEN + '"/>' +
-        '<text x="' + f(left0 + tw / 2) + '" y="' + f(tagBottom - 6.5) + '" text-anchor="middle" class="fi-pintext">' + label + '</text>' +
-        '<circle cx="' + f(px) + '" cy="' + f(py) + '" r="5" class="fi-pindot"/></g>';
+      const tw = label.length * 8.2;
+      const spots = [];
+      for (let up = 0; up < 4; up++) for (const dx of [0, tw / 2 + 4, -(tw / 2 + 4)]) spots.push(textAt(label, Math.max(tw / 2 + 3, Math.min(w - 3 - tw / 2, px + dx)), py - 9 - up * 18, 13, 8.2));
+      const put = spots.find((s) => clear(s.box));
+      placed.push({ day: p.day, x: px });
+      if (!put) continue;
+      taken.push(put.box);
+      pinSvg += '<g class="fi-pin" data-pin="' + p.day + '"><text x="' + f(put.cx) + '" y="' + f(put.base) + '" text-anchor="middle" class="fi-pintext">' + label + '</text></g>';
     }
-    // Savings tags (his pick, Nov 28: "Yes, add tags"): each day money moved in or out of savings gets a small blue
-    // tag at its step, like "−$93 to savings", so a move hidden in a busy day still shows. A tag never covers a pin,
-    // another tag or the dates: it climbs a row at a time, then shortens to just the amount, before it's left out.
     let tagSvg = '';
     if (hasSav) {
-      const taken = placed.map((p) => p.box);
-      const hits = (b) => taken.some((o) => b[0] < o[2] + 4 && o[0] < b[2] + 4 && b[1] < o[3] + 3 && o[1] < b[3] + 3);
       for (let i = 1; i < sav.length; i++) {
         if (sav[i] == null || sav[i - 1] == null) continue;
         const d = r2(sav[i] - sav[i - 1]);
         if (Math.abs(d) < 0.5) continue;
-        const amt = (d > 0 ? '\u2212' : '+') + M.money0(Math.abs(d));
-        const px = x(i), base = Math.min(y(sav[i]), y(sav[i - 1])) - 6;
-        let put = null;
-        for (const t of [amt + (d > 0 ? ' to savings' : ' from savings'), amt]) {
-          const tw = Math.round(t.length * 6.4 + 14);
-          const left = Math.max(2, Math.min(w - 2 - tw, px - tw / 2));
-          for (let k = 0; k < 5 && !put; k++) {
-            const b = base - k * 24;
-            if (b - 20 < 4) break;
-            const box = [left, b - 20, left + tw, b];
-            if (!hits(box)) put = { t, box };
-          }
-          if (put) break;
-        }
+        const amt = (d > 0 ? '−' : '+') + M.money0(Math.abs(d));
+        const tw = amt.length * 7.4;
+        const px = x(i), hiY = Math.min(y(sav[i]), y(sav[i - 1])), loY = Math.max(y(sav[i]), y(sav[i - 1]));
+        const mid = (hiY + loY) / 2 + 4;
+        const cxs = [px, px + tw / 2 + 4, px - tw / 2 - 4];
+        const spots = [];
+        for (const cx of cxs) spots.push(textAt(amt, cx, hiY - 6, 12, 7.4));
+        for (const cx of cxs) spots.push(textAt(amt, cx, loY + 15, 12, 7.4));
+        spots.push(textAt(amt, px + tw / 2 + 5, mid, 12, 7.4), textAt(amt, px - tw / 2 - 5, mid, 12, 7.4));
+        for (let up = 1; up < 4; up++) for (const cx of cxs) spots.push(textAt(amt, cx, hiY - 6 - up * 16, 12, 7.4));
+        const put = spots.find((s) => clear(s.box));
         if (!put) continue;
         taken.push(put.box);
-        const [l, t0, r, b] = put.box;
-        tagSvg += '<g class="fi-stag" data-savings-tag="' + days[i] + '" data-amount="' + d + '">' +
-          (b < base - 1 ? '<line x1="' + f(px) + '" x2="' + f(px) + '" y1="' + f(b) + '" y2="' + f(base + 6) + '" class="fi-stagline"/>' : '') +
-          '<rect x="' + f(l) + '" y="' + f(t0) + '" width="' + f(r - l) + '" height="20" rx="10" class="fi-stagbox"/>' +
-          '<text x="' + f((l + r) / 2) + '" y="' + f(b - 6) + '" text-anchor="middle" class="fi-stagtext">' + put.t + '</text></g>';
+        tagSvg += '<g class="fi-stag" data-savings-tag="' + days[i] + '" data-amount="' + d + '"><text x="' + f(put.cx) + '" y="' + f(put.base) + '" text-anchor="middle" class="fi-stagtext">' + amt + '</text></g>';
       }
     }
     const li = vals.length - 1;

@@ -1688,7 +1688,27 @@ function graphMovesMatch(fin, months, now, where) {
   }
 }
 // Savings tags (his pick, Nov 28): each savings move on the graph gets a blue tag at its step that says which way
-// the money went, and no tag covers a pin, another tag or the dates, on the phone and a PC, at every range.
+// the money went, shown as plain blue amounts (his pick, Nov 28) that never cover a line, a paycheck amount or the dates, on the phone and a PC, at every range.
+// An amount on the graph must never sit on the green or blue line (his picks, Nov 28: plain amounts with no box, so
+// a line running through one would make it hard to read). Every point of each amount's text box is tested against
+// both lines as drawn.
+const ON_LINE = () => {
+  window.__onLine = (svg, sel) => {
+    const out = [];
+    const strokes = Array.from(svg.querySelectorAll('.fi-lineg, [data-savings-line]'));
+    const pt = svg.createSVGPoint();
+    for (const t of svg.querySelectorAll(sel)) {
+      const b = t.getBBox();
+      let hit = false;
+      for (let px = b.x; px <= b.x + b.width && !hit; px += 1.5) for (let py = b.y + 2; py <= b.y + b.height - 1 && !hit; py += 1.5) {
+        pt.x = px; pt.y = py;
+        if (strokes.some((s) => s.isPointInStroke(pt))) hit = true;
+      }
+      if (hit) out.push('the amount "' + t.textContent + '" sits on a line');
+    }
+    return out;
+  };
+};
 async function savingsTags(browser, base, scheme, size, extra, edges) {
   const where = scheme + (size.W > 1000 ? ' PC' : '') + ' savings tags';
   const ctx = await newContext(browser, scheme, size, extra);
@@ -1702,15 +1722,21 @@ async function savingsTags(browser, base, scheme, size, extra, edges) {
   await (extra.hasTouch ? pg.tap('.tab[data-tab="finance"]') : pg.click('.tab[data-tab="finance"]'));
   await settle(pg);
   await finReady(pg);
+  await pg.evaluate(ON_LINE);
   for (const n of ['30', '90', '0']) {
     const btn = '.fi-seg [data-range="' + n + '"]';
     if (await pg.locator(btn).count()) { await (extra.hasTouch ? pg.tap(btn) : pg.click(btn)); await settle(pg, 250); }
     const r = await pg.evaluate(() => {
       const svg = document.querySelector('.fi-chart .fi-graph'), g = svg.getBoundingClientRect();
       const box = (el) => el.getBoundingClientRect();
-      const tags = Array.from(svg.querySelectorAll('[data-savings-tag]')).map((t) => ({ day: t.dataset.savingsTag, amount: +t.dataset.amount, text: t.querySelector('text').textContent, b: box(t.querySelector('rect')) }));
-      const others = Array.from(svg.querySelectorAll('.fi-pin rect, [data-date-label]')).map(box);
+      const tags = Array.from(svg.querySelectorAll('[data-savings-tag]')).map((t) => ({ day: t.dataset.savingsTag, amount: +t.dataset.amount, text: t.querySelector('text').textContent, b: box(t.querySelector('text')), extra: t.querySelectorAll('rect, line, circle, path').length, fill: getComputedStyle(t.querySelector('text')).fill }));
+      const others = Array.from(svg.querySelectorAll('.fi-pin text, [data-date-label]')).map(box);
       const out = [];
+      tags.forEach((t) => {
+        if (t.extra) out.push('the amount on ' + t.day + ' has a box, line or dot (his pick: just the amount)');
+        if (t.fill !== 'rgb(100, 160, 255)') out.push('the amount on ' + t.day + ' should be blue (got ' + t.fill + ')');
+      });
+      for (const o of window.__onLine ? window.__onLine(svg, '[data-savings-tag] text, .fi-pin text') : []) out.push(o);
       tags.forEach((t, i) => {
         if (t.b.left < g.left - 0.5 || t.b.right > g.right + 0.5 || t.b.top < g.top - 0.5) out.push('the tag on ' + t.day + ' runs off the graph');
         if (others.some((o) => t.b.left < o.right && o.left < t.b.right && t.b.top < o.bottom && o.top < t.b.bottom)) out.push('the tag on ' + t.day + ' covers a pin or a date');
@@ -1723,7 +1749,7 @@ async function savingsTags(browser, base, scheme, size, extra, edges) {
     const want = { [dayN(-5)]: [93, '\u2212$93'], [dayN(-4)]: [25, '\u2212$25'], [dayN(-1)]: [-50, '+$50'] };
     for (const [d, [a, t]] of Object.entries(want)) {
       const got = r.tags.find((x) => x[0] === d);
-      expect(where + ' ' + R, got && Math.abs(got[1] - a) < 0.01 && got[2].startsWith(t) && (a > 0 ? /( to savings)?$/ : /( from savings)?$/).test(got[2]), 'the move on ' + d + ' should have a tag starting "' + t + '" (got ' + JSON.stringify(got || null) + ')');
+      expect(where + ' ' + R, got && Math.abs(got[1] - a) < 0.01 && got[2] === t, 'the move on ' + d + ' should show just "' + t + '" in blue (got ' + JSON.stringify(got || null) + ')');
     }
     expect(where + ' ' + R, r.tags.length === 3, 'only days with a savings move should get a tag (got ' + JSON.stringify(r.tags) + ')');
     if (n === '30') { await look(pg, where, size); await pg.screenshot({ path: path.join(OUT, scheme + (size.W > 1000 ? '-pc' : '') + '-finance-savings-tags.png') }); }
@@ -1731,6 +1757,7 @@ async function savingsTags(browser, base, scheme, size, extra, edges) {
   await ctx.close();
 }
 async function graphParts(page, where) {
+  await page.evaluate(ON_LINE);
   const g = await page.evaluate(() => {
     const svg = document.querySelector('.fi-chart .fi-graph');
     if (!svg) return null;
@@ -1739,9 +1766,10 @@ async function graphParts(page, where) {
     const tiles = document.querySelectorAll('.fi-buckets .fi-tile').length;
     const fills = Array.from(document.querySelectorAll('.fi-buckets .fi-tile .fi-fill i')).filter((i) => i.style.height !== '').length;
     return { ratio: (r.width / r.height) / (vb.width / vb.height), h: r.height, w: r.width,
-      pins: svg.querySelectorAll('.fi-pin rect').length, pinText: Array.from(svg.querySelectorAll('.fi-pintext')).map((t) => t.textContent),
+      pins: svg.querySelectorAll('.fi-pin').length, pinText: Array.from(svg.querySelectorAll('.fi-pintext')).map((t) => t.textContent),
       pinColor: Array.from(svg.querySelectorAll('.fi-pintext')).map((t) => { const c = getComputedStyle(t); return c.fill + '|' + c.stroke; }),
-      ring: svg.querySelectorAll('.fi-pin .fi-pindot').length, stem: svg.querySelectorAll('.fi-pin .fi-pinline').length,
+      extra: svg.querySelectorAll('.fi-pin rect, .fi-pin line, .fi-pin circle').length,
+      onLine: window.__onLine ? window.__onLine(svg, '.fi-pin text, [data-savings-tag] text') : ['the line check did not load'],
       dollars: svg.querySelectorAll('.fi-glabel:not([data-date-label])').length, grid: svg.querySelectorAll('.fi-gline').length,
       savings: !!svg.querySelector('[data-savings-line]'), key: (document.querySelector('.fi-chart .fi-key') || {}).textContent || '',
       dates, tiles, fills, bars: document.querySelectorAll('.fi-buckets .fi-bar').length,
@@ -1751,8 +1779,9 @@ async function graphParts(page, where) {
   await dateRow(page, where);
   expect(where, Math.abs(g.ratio - 1) < 0.02, 'the graph is stretched (its shape is ' + g.ratio.toFixed(2) + ' times its drawing\'s, ' + Math.round(g.w) + ' by ' + Math.round(g.h) + ')');
   expect(where, g.edge, 'the graph should run edge to edge across its card');
-  expect(where, g.pins >= 1 && g.ring === g.pins && g.stem === g.pins && g.pinText.every((t) => /^\+\$[\d,]+$/.test(t)), 'each paycheck should get a pin with just the amount, a short line and a ringed dot (pins: ' + JSON.stringify(g.pinText) + ')');
-  expect(where, g.pinColor.every((c) => /^rgb\(255, 255, 255\)\|none$/.test(c)), 'each pin\'s amount should be white with no outline, his pick Nov 26 (got ' + JSON.stringify(g.pinColor) + ')');
+  expect(where, g.pins >= 1 && g.extra === 0 && g.pinText.length === g.pins && g.pinText.every((t) => /^\+\$[\d,]+$/.test(t)), 'each paycheck should show just its amount, with no box, line or dot, his pick Nov 28 (pins: ' + JSON.stringify(g.pinText) + ', extra parts: ' + g.extra + ')');
+  expect(where, g.pinColor.every((c) => /^rgb\(48, 209, 88\)\|none$/.test(c)), 'each paycheck amount should be plain green, his pick Nov 28 (got ' + JSON.stringify(g.pinColor) + ')');
+  for (const o of g.onLine) problem(where, o);
   expect(where, g.dollars >= 1 && g.grid >= 1, 'the graph should have faint dollar labels inside it');
   expect(where, g.savings && /Balance \$/.test(g.key) && /Savings \$/.test(g.key), 'the graph should have the blue Savings line and a key with both amounts (key: "' + g.key + '")');
   expect(where, g.dates.length >= 2 && g.dates[1] === 'Today', 'the date row should show the first day, the paycheck dates and "Today" (got ' + JSON.stringify(g.dates) + ')');
