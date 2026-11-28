@@ -448,7 +448,7 @@ body.dragging .td-fabs { visibility: hidden; }
 
 /* The top bar: always in sight; the whole thing opens the message box. Its tile stands past the top edge. */
 .pl-ask {
-  position: relative; margin-top: 8px; min-height: 48px; width: 100%; border: 0; border-radius: 20px; box-shadow: var(--shadow);
+  position: relative; margin-top: 8px; min-height: 48px; width: 100%; border: 0; border-radius: 22px; box-shadow: var(--shadow);
   color: var(--ink); font: inherit; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 68px;
 }
 /* Slimmer top (his pick, Nov 28): the message bar, week strip and all-day row take less room, so the hours get more. */
@@ -534,7 +534,6 @@ body.dragging .td-fabs { visibility: hidden; }
 .pl-wday.off .l, .pl-wday.off .n { color: var(--ink2); }
 .pl-ocol, .pl-tcol { position: absolute; top: 0; bottom: 0; pointer-events: none; }
 .pl-tcol { background: var(--chip); opacity: 0.6; }
-.pl-wev { border-radius: 8px; }
 .pl-wgrid .pl-hr { font-size: 11px; width: calc(var(--gut) - 5px); }
 .pl-wgrid .pl-now::before { display: none; }
 
@@ -835,7 +834,7 @@ body.dragging .td-fabs { visibility: hidden; }
 .fi-main { flex: 1 0 auto; }
 .fi-body { flex: 1 0 auto; }
 .fi-body:has(> .fi-fabs) { display: flex; flex-direction: column; }
-.fi-fabs { margin-top: auto; }
+.fi-fabs { margin-top: auto; order: 4; } /* after every card, the archive included (it has order 3 for Spending's stacking) */
 .fi-fabs .plus { pointer-events: auto; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5); }
 .fi-wamt { margin: 0; font-size: 15px; line-height: 20px; color: var(--ink2); font-variant-numeric: tabular-nums; }
 .fi-wamt b { color: var(--ink); font-size: 20px; }
