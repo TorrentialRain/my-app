@@ -826,7 +826,9 @@ body.dragging .td-fabs { visibility: hidden; }
 .fi-wgrid + .fi-last { margin-top: 14px; }
 /* The round + floats bottom right like TO-DO's, held at the bottom of the screen while the page scrolls. It keeps its
    own room under the last card, so at the end of the page it sits below everything. */
-.fi-fabs { position: sticky; bottom: calc(var(--safe-bottom) + var(--bar-h) + 16px); display: flex; justify-content: flex-end; padding-top: 16px; pointer-events: none; z-index: 3; }
+/* A sticky part's bottom is measured from the page's padding, which already clears the bar (bar + 24), so -8px puts the + 16 above
+   the bar like TO-DO's. Found Nov 28: counting the bar again held it about 100 pixels too high. */
+.fi-fabs { position: sticky; bottom: -8px; display: flex; justify-content: flex-end; padding-top: 16px; pointer-events: none; z-index: 3; }
 /* The page fills the screen top to bottom, so on a short list the + sits in the bottom corner like TO-DO's, not right
    under the last card (found Nov 28: it floated mid-screen). On a long list it stays held at the bottom while scrolling. */
 #page-finance { display: flex; flex-direction: column; }
