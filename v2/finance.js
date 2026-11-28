@@ -479,7 +479,7 @@
       (showPaid ? '<ul class="fi-list">' + D.done.map((d) => '<li><span>' + esc(d.name) + '</span><span>' + (d.total ? M.money(d.total) : '') + '</span></li>').join('') + '</ul>' : '') + '</section>' : '';
     // Money lent out is owed TO him: its own card, never in Total owed (Nov 28: lent money only when the note says lending).
     const T = D.toMe || { open: [], done: [], total: 0 };
-    const back = (d) => '<li><span><b>' + esc(d.owedBy || d.name) + '</b><span>' + esc(oneLine([d.name, d.next ? 'Back by ' + M.longDay(d.next.due) : ''])) + '</span></span><span class="num">' + M.money(d.owed > 0.005 ? d.owed : d.total) + '</span></li>';
+    const back = (d) => '<li><span><b>' + esc(d.owedBy || d.name) + '</b><span>' + esc(oneLine([d.owedBy && d.name.toLowerCase().includes(d.owedBy.toLowerCase()) ? '' : d.name, d.next ? 'Back by ' + M.longDay(d.next.due) : ''])) + '</span></span><span class="num">' + M.money(d.owed > 0.005 ? d.owed : d.total) + '</span></li>';
     const toMe = T.open.length || T.done.length ? '<section class="fi-card fi-tome" data-owed-to-me><div class="fi-cardhead"><div><p class="fi-cap">Owed to you</p><p class="fi-big">' + M.money(T.total) + '</p></div></div>' +
       '<p class="fi-note">Money you lent out. It doesn\'t count in Total owed, and comes in as income when it\'s paid back.</p>' +
       (T.open.length ? '<ul class="fi-rules">' + T.open.map(back).join('') + '</ul>' : '') +
