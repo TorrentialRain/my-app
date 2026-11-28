@@ -2006,6 +2006,10 @@ async function savingsTags(browser, base, scheme, size, extra, edges) {
   add({ id: 'st1', d: dayN(-5), a: -93, k: 'First National Bank Alaska', s: 'To savings x0000' });
   add({ id: 'st2', d: dayN(-4), a: -25, k: 'Cash App', s: 'Moved to Cash App Savings' });
   add({ id: 'st3', d: dayN(-1), a: 50, k: 'First National Bank Alaska', s: 'From savings x0000' });
+  // Three more moves a day apart, like Nov 17, 18 and 19 on his own graph, where the middle one ($221) got no amount (found Nov 28).
+  add({ id: 'st4', d: dayN(-8), a: -65, k: 'First National Bank Alaska', s: 'To savings x0000' });
+  add({ id: 'st5', d: dayN(-7), a: -221, k: 'First National Bank Alaska', s: 'To savings x0000' });
+  add({ id: 'st6', d: dayN(-6), a: -26.31, k: 'Cash App', s: 'Moved to Cash App Savings' });
   const pg = await openConnected(ctx, base, edges);
   await closeMissed(pg);
   await (extra.hasTouch ? pg.tap('.tab[data-tab="finance"]') : pg.click('.tab[data-tab="finance"]'));
@@ -2031,16 +2035,28 @@ async function savingsTags(browser, base, scheme, size, extra, edges) {
         if (others.some((o) => t.b.left < o.right && o.left < t.b.right && t.b.top < o.bottom && o.top < t.b.bottom)) out.push('the tag on ' + t.day + ' covers a pin or a date');
         tags.slice(0, i).forEach((u) => { if (t.b.left < u.b.right && u.b.left < t.b.right && t.b.top < u.b.bottom && u.b.top < t.b.bottom) out.push('the tags on ' + u.day + ' and ' + t.day + ' overlap'); });
       });
-      return { tags: tags.map((t) => [t.day, t.amount, t.text]), out };
+      // Where each step is: the blue path's vertical runs.
+      const far = [];
+      const m = svg.getScreenCTM(), pt = svg.createSVGPoint();
+      Array.from(svg.querySelectorAll('[data-savings-tag]')).forEach((g, k) => {
+        pt.x = +g.dataset.stepX; pt.y = 0;
+        const sx = pt.matrixTransform(m).x, t = tags[k];
+        const gap = Math.max(0, t.b.left - sx, sx - t.b.right);
+        if (!(gap <= t.b.width)) far.push('the amount on ' + t.day + ' sits ' + Math.round(gap) + 'px away from its step');
+      });
+      return { tags: tags.map((t) => [t.day, t.amount, t.text]), out, far };
     });
     const R = (n === '0' ? 'All' : n + ' days');
     for (const o of r.out) problem(where + ' ' + R, o);
-    const want = { [dayN(-5)]: [93, '\u2212$93'], [dayN(-4)]: [25, '\u2212$25'], [dayN(-1)]: [-50, '+$50'] };
+    // Read from savings' side: into savings is +, out of savings is − (his pick, Nov 28: "Swap the + and - for savings my brain has it backwards").
+    const want = { [dayN(-8)]: [65, '+$65'], [dayN(-7)]: [221, '+$221'], [dayN(-6)]: [26.31, '+$26'], [dayN(-5)]: [93, '+$93'], [dayN(-4)]: [25, '+$25'], [dayN(-1)]: [-50, '\u2212$50'] };
     for (const [d, [a, t]] of Object.entries(want)) {
       const got = r.tags.find((x) => x[0] === d);
       expect(where + ' ' + R, got && Math.abs(got[1] - a) < 0.01 && got[2] === t, 'the move on ' + d + ' should show just "' + t + '" in blue (got ' + JSON.stringify(got || null) + ')');
     }
-    expect(where + ' ' + R, r.tags.length === 3, 'only days with a savings move should get a tag (got ' + JSON.stringify(r.tags) + ')');
+    expect(where + ' ' + R, r.tags.length === 6, 'every savings move gets its amount, and only those (got ' + JSON.stringify(r.tags) + ')');
+    // Each amount stays by its own step: its nearest edge is within one label's width of the step.
+    for (const st of r.far) problem(where + ' ' + R, st);
     if (n === '30') { await look(pg, where, size); await pg.screenshot({ path: path.join(OUT, scheme + (size.W > 1000 ? '-pc' : '') + '-finance-savings-tags.png') }); }
   }
   await ctx.close();

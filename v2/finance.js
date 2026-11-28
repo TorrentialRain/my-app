@@ -260,20 +260,28 @@
         if (sav[i] == null || sav[i - 1] == null) continue;
         const d = r2(sav[i] - sav[i - 1]);
         if (Math.abs(d) < 0.5) continue;
-        const amt = (d > 0 ? '−' : '+') + M.money0(Math.abs(d));
+        // Read from savings' side: money going into savings is +, money taken out is − (his pick, Nov 28: "Swap the + and - for
+        // savings my brain has it backwards", "I meant just on the graph").
+        const amt = (d > 0 ? '+' : '−') + M.money0(Math.abs(d));
         const tw = amt.length * 7.9;
         const px = x(i), hiY = Math.min(y(sav[i]), y(sav[i - 1])), loY = Math.max(y(sav[i]), y(sav[i - 1]));
         const mid = (hiY + loY) / 2 + 4;
-        const cxs = [px, px + tw / 2 + 4, px - tw / 2 - 4];
+        // Every step gets its amount (found Nov 28: the $221 move on Nov 18 sat between two other moves a day apart and
+        // next to a paycheck peak, found no clear spot in the few it tried, and was left out without a word). Now it tries
+        // spots in widening rings around its own step, nearest first, so a label also stays by its step, and if none is
+        // clear of the lines it still goes in the nearest spot that covers no other text.
         const spots = [];
-        for (const cx of cxs) spots.push(textAt(amt, cx, hiY - 6, 13, 7.9));
-        for (const cx of cxs) spots.push(textAt(amt, cx, loY + 15, 13, 7.9));
+        const cxs = [px, px + tw / 2 + 4, px - tw / 2 - 4, px + tw + 8, px - tw - 8];
+        for (let up = 0; up < 9; up++) for (const cx of cxs) spots.push(textAt(amt, cx, hiY - 6 - up * 16, 13, 7.9));
+        for (let dn = 0; dn < 6; dn++) for (const cx of cxs) spots.push(textAt(amt, cx, loY + 15 + dn * 16, 13, 7.9));
         spots.push(textAt(amt, px + tw / 2 + 5, mid, 13, 7.9), textAt(amt, px - tw / 2 - 5, mid, 13, 7.9));
-        for (let up = 1; up < 4; up++) for (const cx of cxs) spots.push(textAt(amt, cx, hiY - 6 - up * 16, 13, 7.9));
-        const put = spots.find((s) => clear(s.box));
-        if (!put) continue;
+        const far = (sp) => Math.hypot(sp.cx - px, Math.max(0, hiY - sp.base, sp.base - 13 - loY));
+        spots.sort((p1, p2) => far(p1) - far(p2));
+        const noText = (b) => b[0] >= 2 && b[2] <= w - 2 && b[1] >= 4 && b[3] <= h - 24 &&
+          !taken.some((o) => b[0] < o[2] + 3 && o[0] < b[2] + 3 && b[1] < o[3] + 2 && o[1] < b[3] + 2);
+        const put = spots.find((sp) => clear(sp.box)) || spots.find((sp) => noText(sp.box)) || spots[0];
         taken.push(put.box);
-        tagSvg += '<g class="fi-stag" data-savings-tag="' + days[i] + '" data-amount="' + d + '"><text x="' + f(put.cx) + '" y="' + f(put.base) + '" text-anchor="middle" class="fi-stagtext">' + amt + '</text></g>';
+        tagSvg += '<g class="fi-stag" data-savings-tag="' + days[i] + '" data-amount="' + d + '" data-step-x="' + f(px) + '"><text x="' + f(put.cx) + '" y="' + f(put.base) + '" text-anchor="middle" class="fi-stagtext">' + amt + '</text></g>';
       }
     }
     const li = vals.length - 1;
