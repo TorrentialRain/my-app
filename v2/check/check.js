@@ -2019,7 +2019,8 @@ async function run() {
     // PC cards match the PC board (his pick, Nov 26): the due tag at the card's right end and steps side by side,
     // and the tab list starts level with the title (found Nov 27: the tag sat under the name and the tabs sat low).
     const pcl = await pp.evaluate(() => {
-      const card = document.querySelector('.td-list .card[data-id="d"]'), due = card && card.querySelector('.meta'), t = card && card.querySelector('.t');
+      const card = Array.from(document.querySelectorAll('.td-list .card')).find((c) => c.querySelector('.meta')), due = card && card.querySelector('.meta'), t = card && card.querySelector('.t');
+      if (!card) return { dueRight: false, at: 'no card with a date', stepsRow: false, tabsGap: 0 };
       const c = card.getBoundingClientRect(), d = due ? due.getBoundingClientRect() : null, tt = t.getBoundingClientRect();
       const subs = Array.from(document.querySelectorAll('.td-list .card[data-id="c"] .sub')).map((s) => Math.round(s.getBoundingClientRect().top));
       const tabs = document.querySelector('.td-tabs .tdtab').getBoundingClientRect(), h1 = document.querySelector('#page-todo h1').getBoundingClientRect();
