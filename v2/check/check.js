@@ -887,7 +887,7 @@ async function faceLock(browser, base, edges, phone) {
   await pg.click('#lock-go');
   await pg.waitForFunction(() => /didn/.test(document.getElementById('lock-error').textContent), null, { timeout: 5000 }).catch(() => {});
   const w2 = await pg.evaluate(() => ({ err: document.getElementById('lock-error').textContent, other: document.getElementById('lock-other').textContent }));
-  expect(W2, /NotAllowedError/.test(w2.err) && /Set up Windows Hello again/.test(w2.err), 'a failed try should say what really went wrong and how to fix it (got "' + w2.err + '")');
+  expect(W2, !/NotAllowedError/.test(w2.err) && /didn't open the Hub/.test(w2.err) && /Set up Windows Hello again/.test(w2.err), 'a refused try on a PC should say plainly what to do, not the raw error (got "' + w2.err + '")');
   // Found Nov 27: when Windows Hello refuses this PC's passkey, the first way out makes a new one, with no key to paste.
   const w3 = await pg.evaluate(() => { const r = document.getElementById('lock-redo'), o = document.getElementById('lock-other'), g = document.getElementById('lock-go'); return { redo: !r.hidden && r.textContent, redoQuiet: r.classList.contains('quiet'), other: o.textContent, otherQuiet: o.classList.contains('quiet'), goQuiet: g.classList.contains('quiet'), secretAsks: window.__secretAsks }; });
   expect(W2, w3.redo === 'Set up Windows Hello again' && !w3.redoQuiet && w3.goQuiet && w3.otherQuiet && w3.other === 'Use my key instead', 'after Windows Hello refuses, "Set up Windows Hello again" should come first, with "Use my key instead" under it (got ' + JSON.stringify(w3) + ')');
@@ -895,10 +895,10 @@ async function faceLock(browser, base, edges, phone) {
   await look(pg, W2 + ' unlock screen after a refusal', { W: 1440, H: 900, TOP: 0, BOTTOM: 0 });
   await pg.screenshot({ path: path.join(OUT, 'dark-pc-unlock-stuck.png') });
   await pg.click('#lock-redo');
-  await pg.waitForFunction(() => window.__creates > 0, null, { timeout: 5000 }).catch(() => {});
+  await pg.waitForFunction(() => window.__creates > 0 && /set up again/.test(document.getElementById('lock-error').textContent), null, { timeout: 5000 }).catch(() => {});
   const w4 = await pg.evaluate(() => ({ creates: window.__creates, createSecret: window.__createSecret, err: document.getElementById('lock-error').textContent }));
   expect(W2, w4.creates === 1 && w4.createSecret === 0, '"Set up Windows Hello again" should make one new passkey without asking for the secret (got ' + JSON.stringify(w4) + ')');
-  expect(W2, /didn't set it up/.test(w4.err) && /key instead/.test(w4.err), 'a cancelled set-up should say so and offer the key (got "' + w4.err + '")');
+  expect(W2, /wasn't set up again/.test(w4.err) && /key instead/.test(w4.err) && !/NotAllowedError/.test(w4.err), 'a cancelled set-up should say so and offer the key (got "' + w4.err + '")');
   await pg.click('#lock-other');
   expect(W2, await pg.locator('#connect').isVisible(), '"Use my key instead" should open the key screen');
   await pg.close();

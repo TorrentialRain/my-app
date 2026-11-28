@@ -264,7 +264,12 @@
       if (e.code === 'needtap' || e.code === 'noface') {
         // Say what really went wrong, in the browser's own words (found Nov 26: every failure looked the same).
         const why = e.reason ? ' ' + FACE + ' said: "' + String(e.reason).slice(0, 160) + '"' : '';
-        const next = KeyLock.canRedo && KeyLock.canRedo() ? ' ' + TAP + ' "Set up ' + FACE + ' again" to fix it.' : KeyLock.fails() >= 2 ? ' You can use your key instead.' : ' ' + TAP + ' to try again.';
+        // A PC whose passkey Windows Hello refused (found Nov 27: he saw only the raw NotAllowedError): say plainly what to do.
+        if (KeyLock.canRedo && KeyLock.canRedo()) {
+          showLock('unlock', lockCard.hidden ? '' : FACE + ' didn\'t open the Hub on this PC. ' + TAP + ' "Set up ' + FACE + ' again" below to fix it. It asks for your PIN once and then opens the Hub.');
+          return;
+        }
+        const next = KeyLock.fails() >= 2 ? ' You can use your key instead.' : ' ' + TAP + ' to try again.';
         showLock('unlock', lockCard.hidden ? '' : 'That didn\'t work.' + why + next);
         return;
       }
@@ -300,8 +305,7 @@
       hideLock();
       await load();
     } catch (e) {
-      const why = e.reason ? ' ' + FACE + ' said: "' + String(e.reason).slice(0, 160) + '"' : '';
-      showLock('unlock', 'That didn\'t set it up.' + why + ' You can use your key instead.');
+      showLock('unlock', FACE + ' wasn\'t set up again. ' + TAP + ' "Set up ' + FACE + ' again" to try once more, or use your key instead.');
     }
   });
   lockOther.addEventListener('click', () => { hideLock(); askForKey('Paste your key. It replaces the locked one on this ' + HERE + ' and gets locked with ' + FACE + '.'); });
