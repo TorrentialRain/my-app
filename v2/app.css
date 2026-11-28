@@ -428,7 +428,7 @@ body.dragging .td-fabs { visibility: hidden; }
   padding-bottom: calc(var(--safe-bottom) + var(--bar-h) + 10px);
 }
 #page-plan .title { color: var(--deep); margin: 0; line-height: 41px; }
-.pl-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+.pl-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
 .pl-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .pl-titles { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .pl-dline { display: flex; align-items: center; flex-wrap: wrap; gap: 0 6px; min-height: 20px; }
@@ -448,19 +448,20 @@ body.dragging .td-fabs { visibility: hidden; }
 
 /* The top bar: always in sight; the whole thing opens the message box. Its tile stands past the top edge. */
 .pl-ask {
-  position: relative; margin-top: 10px; min-height: 56px; width: 100%; border: 0; border-radius: 22px; box-shadow: var(--shadow);
-  color: var(--ink); font: inherit; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 10px 14px 10px 78px;
+  position: relative; margin-top: 8px; min-height: 48px; width: 100%; border: 0; border-radius: 20px; box-shadow: var(--shadow);
+  color: var(--ink); font: inherit; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 68px;
 }
-.pl-tile { position: absolute; left: 14px; top: -12px; width: 50px; height: 50px; border-radius: 14px; background: #0369a1; display: flex; align-items: center; justify-content: center;
+/* Slimmer top (his pick, Nov 28): the message bar, week strip and all-day row take less room, so the hours get more. */
+.pl-tile { position: absolute; left: 14px; top: -8px; width: 42px; height: 42px; border-radius: 12px; background: #0369a1; display: flex; align-items: center; justify-content: center;
   transform: translate(calc(var(--tx) * 4px), calc(var(--ty) * 3px)) rotate(-4deg); transition: transform .12s linear, box-shadow .12s linear;
   box-shadow: calc(var(--tx) * -5px) calc(12px + var(--ty) * -4px) 20px -6px rgba(0,0,0,0.55), 0 4px 8px rgba(0,0,0,0.16); }
 @media (prefers-reduced-motion: reduce) { .pl-tile { top: 3px; transform: none; } }
-.pl-bt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.pl-bt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .pl-bl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .pl-cap { font-size: 13px; line-height: 18px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--deep); }
 .pl-chip { font-size: 13px; line-height: 18px; font-weight: 600; padding: 1px 9px; border-radius: 12px; background: var(--chip); color: var(--ink); }
 .pl-chip.none { font-weight: 500; color: var(--ink2); }
-.pl-hl { font-size: 17px; line-height: 21px; color: var(--ink); overflow-wrap: anywhere; }
+.pl-hl { font-size: 15px; line-height: 20px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pl-chev { flex: none; color: var(--ink2); }
 
 .pl-body { flex: 1; min-height: 0; display: flex; }
@@ -469,14 +470,14 @@ body.dragging .td-fabs { visibility: hidden; }
 .pl-cardname { margin: 0; padding: 12px 16px 4px; font-size: 15px; font-weight: 700; color: var(--ink); align-items: center; }
 
 /* Day: the week strip, the all-day row, then the hours. */
-.pl-strip { display: flex; padding: 6px 6px 2px; }
-.pl-sday { flex: 1; min-width: 44px; min-height: 52px; border: 0; border-radius: 14px; background: transparent; color: var(--ink); font: inherit; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; cursor: pointer; padding: 0; }
+.pl-strip { display: flex; padding: 4px 6px 0; }
+.pl-sday { flex: 1; min-width: 44px; min-height: 44px; border: 0; border-radius: 14px; background: transparent; color: var(--ink); font: inherit; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; cursor: pointer; padding: 0; }
 .pl-sday .l { font-size: 11px; line-height: 15px; color: var(--ink2); font-weight: 600; }
 .pl-sday .n { font-size: 17px; line-height: 22px; font-weight: 600; }
 .pl-sday.today .n { color: var(--deep); }
 .pl-sday.on { background: var(--on); color: var(--on-ink); }
 .pl-sday.on .l, .pl-sday.on .n { color: var(--on-ink); }
-.pl-allday { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--line); max-height: 40%; overflow-y: auto; }
+.pl-allday { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 12px; border-bottom: 1px solid var(--line); max-height: 40%; overflow-y: auto; }
 .pl-late { min-height: 44px; padding: 0 14px; border: 0; border-radius: 12px; background: var(--od); color: #1c1c1e; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; }
 .pl-chip-ev { min-height: 44px; max-width: 100%; padding: 11px 12px; border-radius: 12px; background: var(--c); color: var(--k); font-size: 15px; line-height: 20px; font-weight: 500; overflow-wrap: anywhere; cursor: pointer; }
 .pl-off, .pl-empty { margin: 0; font-size: 13px; line-height: 19px; color: var(--ink2); }
@@ -484,7 +485,7 @@ body.dragging .td-fabs { visibility: hidden; }
 .pl-off { width: 100%; }
 .pl-scroll { position: relative; flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; }
 .pl-grid, .pl-wgrid {
-  position: relative; height: calc(var(--hr) * 24); margin: 10px 8px 12px 0;
+  position: relative; height: calc(var(--hr) * 24); margin: 9px 8px 12px 0;
   background-image: linear-gradient(to bottom, var(--line) 1px, transparent 1px);
   background-size: calc(100% - var(--gut)) var(--hr); background-position: var(--gut) 0; background-repeat: repeat-y;
 }
@@ -496,6 +497,13 @@ body.dragging .td-fabs { visibility: hidden; }
 /* The name: whole words, split with a hyphen only when one word is wider than the block, and "…" on the last line that fits. */
 .pl-ev .nm, .pl-wev .nm { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; overflow: hidden;
   overflow-wrap: break-word; -webkit-hyphens: manual; hyphens: manual; }
+/* A long event keeps its name in sight while scrolled through its middle (found Nov 28: the work shift became a plain
+   block). "clip" isn't a scroller, so the name can stick to the top of the hours; its own color covers the time line. */
+.pl-ev { overflow: hidden; overflow: clip; }
+.pl-ev .nm { position: sticky; top: 4px; background: var(--c); }
+.pl-ev.late .nm { background: var(--od); }
+/* A week block tapped: the day opens on it, and it glows for a moment. */
+.pl-ev.pl-flash { box-shadow: 0 0 0 3px var(--on); }
 .pl-ev.notime::after { display: none; }
 .pl-ev .nm.oneline, .pl-wev .nm.oneline { display: block; white-space: nowrap; text-overflow: ellipsis; }
 .pl-ev.tiny, .pl-wev.tiny { padding-top: 0; padding-bottom: 0; }
@@ -507,7 +515,7 @@ body.dragging .td-fabs { visibility: hidden; }
 .pl-now::before { content: ""; position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: 5px; background: var(--now); }
 
 /* Week: day letters across the top, an all-day row, then seven columns of blocks. */
-.pl-weekcard { --gut: 34px; --hr: 44px; }
+.pl-weekcard { --gut: 46px; --hr: 44px; }
 .pl-whead, .pl-wallday { display: flex; padding-right: 8px; }
 .pl-gut { flex: none; width: var(--gut); }
 .pl-wday { flex: 1; min-width: 0; min-height: 52px; border: 0; background: transparent; color: var(--ink); font: inherit; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 4px 0; cursor: pointer; }
@@ -516,6 +524,8 @@ body.dragging .td-fabs { visibility: hidden; }
 .pl-wday.on .n { box-shadow: inset 0 0 0 2px var(--on); }
 .pl-wday.today .n { background: var(--on); color: var(--on-ink); }
 .pl-wnote { margin: 0; padding: 0 12px 4px; font-size: 13px; line-height: 18px; color: var(--ink2); }
+.pl-wlate { padding: 0 12px 6px; }
+.pl-wlate .pl-late { width: 100%; }
 .pl-wallday { border-bottom: 1px solid var(--line); padding-bottom: 6px; }
 .pl-wcol { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 0 1px; }
 .pl-wchip { border-radius: 12px; padding: 1px 3px; background: var(--c, var(--chip)); color: var(--k, var(--ink)); font-size: 11px; line-height: 15px; font-weight: 600; overflow: hidden; height: 17px; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; }
@@ -524,7 +534,7 @@ body.dragging .td-fabs { visibility: hidden; }
 .pl-wday.off .l, .pl-wday.off .n { color: var(--ink2); }
 .pl-ocol, .pl-tcol { position: absolute; top: 0; bottom: 0; pointer-events: none; }
 .pl-tcol { background: var(--chip); opacity: 0.6; }
-.pl-wev { border-radius: 12px; font-size: 11px; line-height: 14px; padding: 2px 3px; }
+.pl-wev { border-radius: 8px; }
 .pl-wgrid .pl-hr { font-size: 11px; width: calc(var(--gut) - 5px); }
 .pl-wgrid .pl-now::before { display: none; }
 
@@ -558,12 +568,16 @@ body.dragging .td-fabs { visibility: hidden; }
 /* Plan on a PC: calendar key on the left, buttons along the top, the day and the week side by side. */
 @media (min-width: 900px) {
   #page-plan { padding: 104px 32px 32px; }
-  .pl-wrap { width: 100%; max-width: 1360px; margin: 0 auto; display: grid; grid-template-columns: 220px minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); gap: 16px 24px; }
-  .pl-head { grid-column: 2; }
+  /* The calendar list starts at the top, beside the title (found Nov 28: it lined up with the day, leaving a gap above). */
+  .pl-wrap { width: 100%; max-width: 1360px; margin: 0 auto; display: grid; grid-template-columns: 220px minmax(320px, 400px) minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); gap: 16px 24px; }
+  .pl-head { grid-column: 2 / span 2; }
   .pl-head .pl-nav { margin-left: auto; gap: 6px; }
   .pl-seg { display: none; }
-  .pl-ask { grid-column: 2; margin-top: 12px; }
-  .pl-body { grid-column: 1 / span 2; display: grid; grid-template-columns: 220px minmax(320px, 400px) minmax(0, 1fr); gap: 24px; }
+  .pl-ask { grid-column: 2 / span 2; margin-top: 12px; }
+  .pl-body { display: contents; }
+  .pl-key { grid-column: 1; grid-row: 1 / -1; }
+  .pl-daycard { grid-column: 2; grid-row: 3; }
+  .pl-weekcard { grid-column: 3; grid-row: 3; }
   .pl-wrap[data-view] .pl-daycard, .pl-wrap[data-view] .pl-weekcard { display: flex; }
   .pl-key { flex-direction: column; gap: 4px; align-self: start; padding: 14px 16px; background: var(--card); border-radius: 22px; box-shadow: var(--shadow); }
   .pl-keyrow { display: flex; align-items: center; gap: 10px; min-height: 32px; font-size: 15px; color: var(--ink); }
@@ -582,6 +596,8 @@ body.dragging .td-fabs { visibility: hidden; }
   .page { padding: 104px 32px 48px; }
   .phone-only { display: none !important; }
   .pc-only { display: flex !important; }
+  /* Hidden still means hidden (found Nov 28: the PC's Today button showed on today, because the line above won). */
+  .pc-only[hidden], .phone-only[hidden] { display: none !important; }
   /* The space under the page pill is a margin, not the scroller's padding, so the sticky tab list and Done panel
      start level with the title in every browser (found Nov 27: they sat 104 lower). */
   .td-scroll { padding: 0 32px 48px; }
@@ -898,7 +914,7 @@ body.dragging .td-fabs { visibility: hidden; }
 .rb-mark { outline: 2px solid var(--rb); outline-offset: -2px; }
 @media (min-width: 900px) {
   .pl-wrap { grid-template-rows: auto auto auto minmax(0, 1fr); }
-  .rb-strip { grid-column: 2; grid-row: 3; }
-  .pl-body { grid-row: 4; }
-  .pl-wrap:not(.has-rb) .pl-body { margin-top: -16px; }
+  .rb-strip { grid-column: 2 / span 2; grid-row: 3; }
+  .pl-daycard, .pl-weekcard { grid-row: 4; }
+  .pl-wrap:not(.has-rb) .pl-daycard, .pl-wrap:not(.has-rb) .pl-weekcard { margin-top: -16px; }
 }

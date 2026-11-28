@@ -209,7 +209,7 @@
   let view = store.get('hub2.planView', 'day') === 'week' ? 'week' : 'day';
   let picked = dayKey(Date.now());       // the day being looked at; opens on today
   let shownToday = picked;
-  let lastScrolled = '';                 // so a re-render keeps the scroll place
+  let focusK = '';                       // a week block tapped: the day opens centered on it
 
   function colorsOf(it) { return it.late ? LATE : (KINDS[it.kind] || KINDS.main); }
   function tipAttrs(it, when) {
@@ -221,6 +221,8 @@
     return timeText(it.start) + ' – ' + timeText(it.end) + ' · ' + it.cal;
   }
   function style(it) { const c = colorsOf(it); return '--c:' + c.color + ';--k:' + c.ink; }
+  // One event or due task, the same in the day and the week, so a tap in the week can find it in the day.
+  const keyOf = (it) => it.id + '|' + (it.start || it.from || '');
   // Long words get split points of our own (a soft hyphen), so a word that's wider than its block breaks
   // with a "-" at a sensible place, the same on the iPhone and in the phone check (which has no hyphen dictionary).
   const VOW = /[aeiouy]/i, PAIR = /^(th|ch|sh|ck|ph|wh|gh|ng|qu|tr|br|cr|dr|fr|gr|pr|bl|cl|fl|gl|pl|sl|sc|sp|st|wr|kn)$/i, LET = /[a-z]/i;
@@ -261,13 +263,13 @@
       'left:calc(var(--gut) + (100% - var(--gut)) * ' + it.col + ' / ' + it.cols + ');width:calc((100% - var(--gut)) / ' + it.cols + ' - 3px)';
     const short = it.z - it.a < 45 ? ' short' : '';
     const time = it.task ? timeText(it.end) : timeText(it.start) + ' – ' + timeText(it.end);
-    return '<div class="' + cls + short + (it.late ? ' late' : '') + '" role="button" tabindex="0" style="' + pos + ';' + style(it) + '" data-time="' + esc(time) + '"' +
+    return '<div class="' + cls + short + (it.late ? ' late' : '') + '" role="button" tabindex="0" style="' + pos + ';' + style(it) + '" data-time="' + esc(time) + '" data-k="' + esc(keyOf(it)) + '"' +
       tipAttrs(it, whenOf(it)) + '><span class="nm">' + breakable(it.name) + '</span></div>';
   }
   // Every block gets as many whole lines of its name as it has room for, the last one ending in "…".
   // The time line under a name shows only when a line of name still fits above it.
   function fitNames(root) {
-    root.querySelectorAll('.pl-ev, .pl-wev').forEach((b) => {
+    root.querySelectorAll('.pl-ev').forEach((b) => {
       const nm = b.firstElementChild;
       if (!nm) return;
       b.classList.remove('notime', 'tiny');
@@ -285,14 +287,14 @@
       nm.classList.toggle('oneline', widestPiece(nm) > nm.clientWidth + 0.5);
     });
   }
-  function hourLabel(h, small) {
-    if (h === 12) return small ? '12p' : 'Noon';
-    const ap = h < 12 ? (small ? 'a' : ' AM') : (small ? 'p' : ' PM');
-    return (h % 12 || 12) + ap;
+  // The same words in the day and the week (found Nov 28: the week said "3p" and "12p"). Midnight gets its "12 AM" too.
+  function hourLabel(h) {
+    if (h === 12) return 'Noon';
+    return (h % 12 || 12) + (h < 12 ? ' AM' : ' PM');
   }
-  function hours(small) {
+  function hours() {
     let s = '';
-    for (let h = 1; h < 24; h++) s += '<span class="pl-hr" style="top:calc(var(--hr) * ' + h + ' - 8px)">' + hourLabel(h, small) + '</span>';
+    for (let h = 0; h < 24; h++) s += '<span class="pl-hr" style="top:calc(var(--hr) * ' + h + ' - 8px)">' + hourLabel(h) + '</span>';
     return s;
   }
   function nowLine(now, key, left, width) {
@@ -332,7 +334,7 @@
     all.innerHTML = top;
     all.hidden = !top;
     const empty = !d.timed.length && !d.allDay.length && loaded(range, picked) ? '<p class="pl-empty">Nothing on this day.</p>' : '';
-    $('.pl-grid', page).innerHTML = hours(false) + d.timed.map((it) => block(it, 'pl-ev')).join('') + nowLine(now, picked, 'var(--gut)', 'calc(100% - var(--gut))') + empty;
+    $('.pl-grid', page).innerHTML = hours() + d.timed.map((it) => block(it, 'pl-ev')).join('') + nowLine(now, picked, 'var(--gut)', 'calc(100% - var(--gut))') + empty;
     fitNames($('.pl-grid', page));
   }
 
@@ -350,8 +352,7 @@
     const cols = per.map((d, i) => {
       const k = days[i];
       const chips = [];
-      if (k === today && lateN) chips.push('<div class="pl-wchip late" role="button" tabindex="0" data-open="sheet-overdue" data-jump="overdue" data-tip="' + lateN + ' overdue" data-when="Tap to see them all">' + lateN + ' late</div>');
-      const room = 3 - chips.length;
+      const room = 3;
       const show = d.allDay.length > room ? d.allDay.slice(0, room - 1) : d.allDay;
       for (const it of show) chips.push('<div class="pl-wchip' + (it.late ? ' late' : '') + '" role="button" tabindex="0" style="' + style(it) + '"' + tipAttrs(it, whenOf(it)) + '>' + esc(it.name) + '</div>');
       const rest = d.allDay.slice(show.length);
@@ -362,11 +363,16 @@
     const wall = $('.pl-wallday', page);
     wall.innerHTML = '<span class="pl-gut" aria-hidden="true"></span>' + cols.join('');
     wall.hidden = !most;
+    // The week's overdue button: the same yellow "N overdue" as the day (found Nov 28: the week said "2 late").
+    const wl = $('.pl-wlate', page);
+    const thisWeek = weekStart(today) === ws && lateN > 0;
+    wl.innerHTML = thisWeek ? '<button type="button" class="pl-late" data-open="sheet-overdue" data-jump="overdue">' + lateN + ' overdue</button>' : '';
+    wl.hidden = !thisWeek;
     const anyOff = days.some((k) => !loaded(range, k));
     $('.pl-wnote', page).hidden = !anyOff;
     // The grid: seven columns of blocks.
     const colW = '(100% - var(--gut)) / 7';
-    let grid = hours(true);
+    let grid = hours();
     per.forEach((d, i) => {
       const k = days[i];
       if (k === today) grid += '<div class="pl-tcol" style="left:calc(var(--gut) + ' + colW + ' * ' + i + ');width:calc(' + colW + ')" aria-hidden="true"></div>';
@@ -374,7 +380,9 @@
       for (const it of d.timed) {
         const pos = 'top:' + (it.a / 14.4) + '%;height:calc(' + ((it.z - it.a) / 14.4) + '% - 1px);' +
           'left:calc(var(--gut) + ' + colW + ' * ' + i + ' + ' + colW + ' * ' + it.col + ' / ' + it.cols + ');width:calc(' + colW + ' / ' + it.cols + ' - 2px)';
-        grid += '<div class="pl-wev' + (it.late ? ' late' : '') + '" role="button" tabindex="0" style="' + pos + ';' + style(it) + '"' + tipAttrs(it, whenOf(it)) + '><span class="nm">' + breakable(it.name) + '</span></div>';
+        // Color only, no name (his pick, Nov 28): a tap opens that day, centered on this event.
+        grid += '<div class="pl-wev' + (it.late ? ' late' : '') + '" role="button" tabindex="0" style="' + pos + ';' + style(it) + '" data-day="' + k + '" data-k="' + esc(keyOf(it)) + '"' +
+          ' aria-label="' + esc(it.name + ', ' + whenOf(it) + '. Show it in the day') + '"></div>';
       }
       grid += nowLine(now, k, 'calc(var(--gut) + ' + colW + ' * ' + i + ')', 'calc(' + colW + ')');
     });
@@ -421,22 +429,60 @@
     renderDay(items, tasks, now, range);
     renderWeek(items, tasks, now, range);
     renderKey();
-    // Scroll to a useful hour once per day or view shown: near now on today, else the first thing that day.
-    const spot = view + '|' + picked + '|' + (pc.matches ? 'pc' : 'phone');
-    if (spot !== lastScrolled) { lastScrolled = spot; requestAnimationFrame(() => scrollToHour(items, now)); }
+    lastItems = items;
+    requestAnimationFrame(scrollCards);
     page.dataset.plan = 'ready';
     document.documentElement.dataset.plan = 'ready';
   }
-  function scrollToHour(items, now) {
-    const pick = (key, list) => {
-      if (dayKey(now) === key || list === 'week' && weekStart(dayKey(now)) === weekStart(key)) return (now - dayStart(dayKey(now))) / MIN - 60;
-      const d = list === 'week' ? null : dayOf(items, key, 0);
-      const first = d && d.timed[0];
-      return first ? first.a - 30 : 7 * 60;
-    };
-    const put = (sc, m) => { const g = sc.firstElementChild; sc.scrollTop = Math.max(0, Math.min(g.offsetHeight, g.offsetHeight * m / 1440)); };
-    put($('.pl-daycard .pl-scroll', page), pick(picked, 'day'));
-    put($('.pl-weekcard .pl-scroll', page), pick(picked, 'week'));
+  // Each card scrolls to a useful hour once per day (or week) shown: an hour before now on today, else just before the
+  // first thing that day, or centered on a week block that was tapped. Found Nov 28: the scroll ran the moment a view
+  // was switched, before that card had any height, so the week, the PC and Week back to Day all opened at midnight.
+  // Now each card waits until it can really scroll, checks that the scroll took, and tries again when its size changes
+  // (shown, switched to, the page opened, the screen turned). A card that comes back into view scrolls again.
+  let lastItems = [];
+  const cards = { day: { done: '', h: 0 }, week: { done: '', h: 0 } };
+  function scrollCards() {
+    if (!ready) return;
+    const now = Date.now(), today = dayKey(now), mode = pc.matches ? 'pc' : 'phone';
+    for (const which of ['day', 'week']) {
+      const c = cards[which];
+      const sc = $('.pl-' + which + 'card .pl-scroll', page);
+      const g = sc && sc.firstElementChild;
+      if (!g) continue;
+      const shownH = sc.clientHeight;
+      if (!shownH || !g.offsetHeight) { c.h = 0; continue; }  // hidden for now: scroll when it shows
+      if (!c.h) c.done = '';                                  // just came into view
+      c.h = shownH;
+      const target = which === 'day' && focusK ? 'k:' + focusK : '';
+      const spot = which + '|' + (which === 'day' ? picked : weekStart(picked)) + '|' + mode + '|' + target;
+      if (c.done === spot) continue;
+      let y;
+      const el = target && $('.pl-grid [data-k="' + CSS.escape(focusK) + '"]', page);
+      if (target && !el) focusK = '';                         // not in this day after all: its usual hour
+      if (el) y = g.offsetTop + el.offsetTop + el.offsetHeight / 2 - shownH / 2;
+      else {
+        let m;
+        const onNow = which === 'day' ? picked === today : weekStart(picked) === weekStart(today);
+        if (onNow) m = (now - dayStart(today)) / MIN - 60;
+        else { const first = which === 'day' && dayOf(lastItems, picked, 0).timed[0]; m = first ? first.a - 30 : 7 * 60; }
+        y = g.offsetTop + g.offsetHeight * m / 1440 - 8;
+      }
+      const max = sc.scrollHeight - shownH;
+      const want = Math.round(Math.max(0, Math.min(max, y)));
+      sc.scrollTop = want;
+      if (Math.abs(sc.scrollTop - want) > 2) continue;         // didn't take yet: the next size change tries again
+      c.done = spot;
+      if (el) {
+        focusK = '';
+        c.done = which + '|' + picked + '|' + mode + '|';     // a re-render later keeps this place
+        el.classList.add('pl-flash');
+        setTimeout(() => el.classList.toggle('pl-flash', false), 1600);
+      }
+    }
+  }
+  if (typeof ResizeObserver === 'function') {
+    const ro = new ResizeObserver(() => requestAnimationFrame(scrollCards));
+    $$('.pl-scroll', page).forEach((sc) => ro.observe(sc));
   }
 
   // ---- Taps ----
@@ -460,6 +506,15 @@
   }
   function hideTip() { bubble.hidden = true; }
   page.addEventListener('click', (e) => {
+    // A week block: open that day centered on it (on a PC the day sits beside the week, so it just moves there).
+    const wev = e.target.closest('.pl-wev');
+    if (wev) {
+      picked = wev.dataset.day;
+      focusK = wev.dataset.k || '';
+      if (!pc.matches) { view = 'day'; store.set('hub2.planView', view); }
+      cards.day.done = '';
+      hideTip(); render(); return;
+    }
     const day = e.target.closest('[data-day]');
     if (day) {
       picked = day.dataset.day;

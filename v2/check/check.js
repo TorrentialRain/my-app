@@ -1340,7 +1340,13 @@ async function underlines(page, where, rowsSel) {
 async function namesFit(page, where) {
   const bad = await page.evaluate(() => {
     const out = [];
-    for (const b of document.querySelectorAll('#page-plan .pl-ev, #page-plan .pl-wev, #page-plan .pl-wchip')) {
+    // Week blocks are color only (his pick, Nov 28): no name inside, and the name read out for a screen reader.
+    for (const b of document.querySelectorAll('#page-plan .pl-wev')) {
+      if (!b.offsetParent) continue;
+      if (b.textContent.trim()) out.push('a week block should be color only, but shows "' + b.textContent.trim() + '"');
+      if (!b.getAttribute('aria-label')) out.push('a week block has no name for a screen reader');
+    }
+    for (const b of document.querySelectorAll('#page-plan .pl-ev, #page-plan .pl-wchip')) {
       if (!b.offsetParent) continue;
       const nm = b.classList.contains('pl-wchip') ? b : b.querySelector('.nm');
       if (!nm) { out.push('a block has no name in it'); continue; }
@@ -1392,6 +1398,36 @@ async function lookSheet(page, where, size, sel) {
   await page.evaluate((sel) => { document.querySelector(sel + ' .sheet-card').scrollTop = 0; }, sel);
 }
 const planText = (page) => page.evaluate(() => document.getElementById('page-plan').innerText.replace(/\u00AD/g, ''));
+// Hidden means hidden, everywhere (found Nov 28: a hidden PC-only button still showed, because the PC line won).
+async function hiddenHides(page, where) {
+  const bad = await page.evaluate(() => Array.from(document.querySelectorAll('[hidden]'))
+    .filter((el) => getComputedStyle(el).display !== 'none')
+    .map((el) => el.id || el.className || el.tagName));
+  for (const b of bad) problem(where, 'something marked hidden still shows: ' + b);
+}
+// Where a card's hours sit: the hour at the top and the middle of what shows, and whether the red now line is in sight.
+const planSpot = (page, which) => page.evaluate((which) => {
+  const sc = document.querySelector('.pl-' + which + 'card .pl-scroll'), g = sc.firstElementChild;
+  const hr = g.offsetHeight / 24, top = (sc.scrollTop - g.offsetTop) / hr;
+  const now = sc.querySelector('.pl-now');
+  const r = sc.getBoundingClientRect(), n = now && now.getBoundingClientRect();
+  return { shown: sc.clientHeight > 0, top: Math.round(top * 10) / 10, hours: Math.round(sc.clientHeight / hr * 10) / 10,
+    nowSeen: !!n && n.top >= r.top && n.bottom <= r.bottom };
+}, which);
+// Each view opens near now on today (found Nov 28: the week, the PC, and Week back to Day all opened at midnight).
+async function opensNearNow(page, where, which) {
+  await settle(page, 250);
+  const sp = await planSpot(page, which);
+  expect(where, sp.shown && sp.top > 1 && sp.nowSeen, 'the ' + which + ' view should open near now with the red line in sight, not at midnight (top at hour ' + sp.top + ')');
+}
+// Every hour has its label, midnight too, written the same in the day and the week ("3 PM", "Noon").
+async function hourWords(page, where, which) {
+  const labels = await page.locator('.pl-' + which + 'card .pl-hr').allTextContents();
+  expect(where, labels.length === 24 && labels[0] === '12 AM' && labels[12] === 'Noon' && labels[15] === '3 PM' && labels.every((t) => /^(\d{1,2} (AM|PM)|Noon)$/.test(t)),
+    'the ' + which + ' hours should run 12 AM, 1 AM … Noon … 11 PM (got ' + labels.slice(0, 3).join(', ') + ' … ' + labels.length + ' labels)');
+  const fit = await page.evaluate((which) => Array.from(document.querySelectorAll('.pl-' + which + 'card .pl-hr')).filter((h) => h.scrollWidth > h.clientWidth + 1 || h.getBoundingClientRect().top < h.closest('.pl-scroll').getBoundingClientRect().top - 9999).length, which);
+  expect(where, !fit, 'an hour label is cut off in the ' + which + ' view');
+}
 async function phonePlan(page, scheme, size) {
   const P = scheme + ' Plan';
   await page.tap('.tab[data-tab="plan"]');
@@ -1424,9 +1460,30 @@ async function phonePlan(page, scheme, size) {
   expect(P, (await page.locator('.pl-hl').textContent()).trim() === 'Message Claude about your calendar', 'the top bar should offer to message Claude about the calendar');
   expect(P, (await page.locator('.pl-ask [data-line="plan"]').textContent()).trim() === Plan.dueLine(Plan.dueToday(TASKS, NOW).length), "the top bar should show today's due count");
   expect(P, (await page.locator('.pl-msg, #sheet-brief').count()) === 0, 'the old brief and the small message button should be gone');
-  const late = page.locator('.pl-late');
+  const late = page.locator('.pl-daycard .pl-late');
   expect(P, (await late.isVisible()) && (await late.textContent()).trim() === LATE_N + ' overdue', 'today should show a yellow "' + LATE_N + ' overdue" button');
+  // Slimmer top (his pick, Nov 28): the message line stays on one line, and the day shows at least 7 hours.
+  const slim = await page.evaluate(() => { const h = document.querySelector('.pl-hl'); return { h: h.getBoundingClientRect().height, lh: parseFloat(getComputedStyle(h).lineHeight) }; });
+  expect(P, slim.h <= slim.lh + 1, 'the message bar\'s words should sit on one line (' + slim.h + 'px tall)');
+  const sp0 = await planSpot(page, 'day');
+  expect(P, sp0.hours >= 7, 'the phone\'s day should show at least 7 hours under the top (shows ' + sp0.hours + ')');
+  await opensNearNow(page, P + ' day', 'day');
+  await hourWords(page, P + ' day', 'day');
+  expect(P, (await page.locator('.pl-chev path').getAttribute('d')) === 'M9 6l6 6-6 6', 'the message bar\'s arrow should point right (it opens), not up');
+  await hiddenHides(page, P);
   await lookPlan(page, P + ' day', size, scheme + '-plan-day');
+  // A long event keeps its name in sight when scrolled to its middle (found Nov 28: the work shift was a plain block).
+  const stick = await page.evaluate(() => {
+    const sc = document.querySelector('.pl-daycard .pl-scroll'), g = sc.firstElementChild;
+    const ev = Array.from(g.querySelectorAll('.pl-ev')).sort((a, b) => b.offsetHeight - a.offsetHeight)[0];
+    if (!ev || ev.offsetHeight < sc.clientHeight / 2) return { skip: true };
+    sc.scrollTop = g.offsetTop + ev.offsetTop + ev.offsetHeight / 3;
+    const r = sc.getBoundingClientRect(), n = ev.querySelector('.nm').getBoundingClientRect(), b = ev.getBoundingClientRect();
+    return { name: ev.dataset.tip, seen: n.top >= r.top - 1 && n.bottom <= b.bottom + 1 && n.top <= r.top + 12 };
+  });
+  if (stick.skip) console.log('  note: no event long enough to check that its name stays in sight');
+  else expect(P, stick.seen, 'scrolled into the middle of "' + stick.name + '", its name should stay at the top of what shows');
+  await page.screenshot({ path: path.join(OUT, scheme + '-plan-longname.png') });
   // Tapping a block shows just its name.
   await page.evaluate(() => { document.querySelector('.pl-daycard .pl-scroll').scrollTop = document.querySelector('.pl-grid').offsetHeight * 9 / 24; });
   await settle(page, 150);
@@ -1446,7 +1503,7 @@ async function phonePlan(page, scheme, size) {
   await page.tap('#sheet-planmsg [data-close]');
   await settle(page, 250);
   // The yellow button opens a plain overdue list.
-  await page.tap('.pl-late');
+  await page.tap('.pl-daycard .pl-late');
   await settle(page, 400);
   expect(P, await page.locator('#sheet-overdue').isVisible(), 'the overdue button did not open the overdue list');
   expect(P, (await page.locator('#overdue-body .pl-row.late').count()) === LATE_N, 'the overdue list should show every overdue task');
@@ -1487,7 +1544,47 @@ async function phonePlan(page, scheme, size) {
   await page.tap('[data-view-pick="week"]');
   await settle(page, 300);
   expect(P, (await page.locator('.pl-wday').count()) === 7 && (await page.locator('.pl-wev').count()) >= 7, 'the week grid should show 7 days with blocks');
+  await opensNearNow(page, P + ' week', 'week');
+  await hourWords(page, P + ' week', 'week');
+  const wl = page.locator('.pl-weekcard .pl-late');
+  expect(P, (await wl.isVisible()) && (await wl.textContent()).trim() === LATE_N + ' overdue' && !/\blate\b/.test(await planText(page)),
+    'the week should show the same yellow "' + LATE_N + ' overdue" button as the day, never "late"');
+  const wlw = await page.evaluate(() => { const b = document.querySelector('.pl-weekcard .pl-late').getBoundingClientRect(), c = document.querySelector('.pl-weekcard').getBoundingClientRect(); return c.width - b.width; });
+  expect(P, wlw < 30, 'the week\'s overdue button should run the width of the week');
+  await hiddenHides(page, P + ' week');
   await lookPlan(page, P + ' week', size, scheme + '-plan-week');
+  // Tapping a block in the week opens that day, centered on that event, and it glows for a moment (his pick, Nov 28).
+  await page.evaluate(() => { const sc = document.querySelector('.pl-weekcard .pl-scroll'); sc.scrollTop = sc.firstElementChild.offsetHeight * 7 / 24; });
+  await settle(page, 150);
+  const pickW = await page.evaluate(() => {
+    const sc = document.querySelector('.pl-weekcard .pl-scroll').getBoundingClientRect();
+    const all = Array.from(document.querySelectorAll('.pl-wev')).filter((b) => { const r = b.getBoundingClientRect(); return r.top > sc.top + 4 && r.bottom < sc.bottom - 4 && r.height > 20; });
+    const today = document.querySelector('.pl-wday.today');
+    const b = all.find((x) => !today || x.dataset.day !== today.dataset.day) || all[0];
+    if (!b) return null;
+    b.setAttribute('data-test-pick', '1');
+    return { k: b.dataset.k, day: b.dataset.day, label: b.getAttribute('aria-label') };
+  });
+  expect(P, !!pickW, 'there should be a week block in sight to tap');
+  if (pickW) {
+    await page.locator('[data-test-pick]').tap();
+    await settle(page, 400);
+    const got = await page.evaluate((k) => {
+      const ev = Array.from(document.querySelectorAll('.pl-daycard .pl-ev')).find((e) => e.dataset.k === k);
+      const el = document.querySelector('.pl-daycard .pl-scroll'), sc = el.getBoundingClientRect();
+      const r = ev && ev.getBoundingClientRect();
+      const atEnd = el.scrollTop < 2 || el.scrollTop > el.scrollHeight - el.clientHeight - 2;
+      return { view: document.querySelector('.pl-wrap').dataset.view, found: !!ev, mid: r ? (atEnd ? 0 : Math.abs((r.top + r.bottom) / 2 - (sc.top + sc.bottom) / 2)) : 999,
+        inView: !!r && r.top >= sc.top - 1 && r.top < sc.bottom, flash: !!ev && ev.classList.contains('pl-flash'), bubble: !document.querySelector('.pl-bubble').hidden };
+    }, pickW.k);
+    expect(P, got.view === 'day' && got.found && got.inView && got.mid < 40, 'tapping a week block should open that day centered on "' + pickW.label + '" (' + JSON.stringify(got) + ')');
+    expect(P, got.flash, 'the event opened from the week should glow for a moment');
+    await page.screenshot({ path: path.join(OUT, scheme + '-plan-week-tap.png') });
+    if (await page.locator('.pl-today.phone-only').isVisible()) await page.tap('.pl-today.phone-only');
+    await settle(page, 200);
+    await page.tap('[data-view-pick="week"]');
+    await settle(page, 300);
+  }
   // Weeks past the calendar copy say so.
   for (let i = 0; i < 4; i++) { await page.tap('.pl-next'); await settle(page, 120); }
   expect(P, await page.locator('.pl-wnote').isVisible(), 'a week past the calendar copy should say it isn\'t copied yet');
@@ -1500,6 +1597,10 @@ async function phonePlan(page, scheme, size) {
   expect(P, (await page.locator('.pl-wrap').getAttribute('data-view')) === 'day', 'tapping a day in the week should open that day');
   if (await page.locator('.pl-today.phone-only').isVisible()) await page.tap('.pl-today.phone-only'); // hidden when that day is today
   await settle(page, 200);
+  await page.tap('[data-view-pick="week"]');
+  await settle(page, 250);
+  await page.tap('[data-view-pick="day"]');
+  await opensNearNow(page, P + ' Week back to Day', 'day');
   const dk = await page.evaluate(() => { const m = getComputedStyle(document.getElementById('page-plan')).backgroundColor.match(/[\d.]+/g).map(Number); return Math.round(0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]); });
   expect(P, dk < 50, 'Plan should be dark, even on a phone set to ' + scheme + ' (got ' + dk + ')');
 }
@@ -1510,17 +1611,35 @@ async function pcPlan(pp, scheme, size) {
   await planReady(pp);
   const lay = await pp.evaluate(() => {
     const r = (s) => document.querySelector(s).getBoundingClientRect();
-    const d = r('.pl-daycard'), w = r('.pl-weekcard'), k = r('.pl-key'), b = r('.pl-ask');
+    const d = r('.pl-daycard'), w = r('.pl-weekcard'), k = r('.pl-key'), b = r('.pl-ask'), h = r('.pl-head');
     return { side: d.width > 0 && w.width > 0 && d.right <= w.left && Math.abs(d.top - w.top) < 2, key: k.width > 0 && k.right <= d.left, askTop: b.bottom <= d.top,
+      keyUp: Math.round(k.top - h.top),
       bg: (() => { const m = getComputedStyle(document.getElementById('page-plan')).backgroundColor.match(/[\d.]+/g).map(Number); return Math.round(0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]); })(),
       switches: document.querySelectorAll('#page-plan input[type="checkbox"], #page-plan [role="switch"]').length };
   });
   expect(P, lay.side, 'the day and the week should sit side by side');
   expect(P, lay.key && lay.askTop, 'the calendar list should be on the left and the message bar on top');
+  expect(P, Math.abs(lay.keyUp) <= 2, 'the calendar list should start at the top, level with the title (it starts ' + lay.keyUp + 'px lower)');
+  expect(P, await pp.locator('.pl-today.pc-only').isHidden(), 'the Today button should not show while today is open');
+  await hiddenHides(pp, P);
+  await opensNearNow(pp, P + ' day', 'day');
+  await opensNearNow(pp, P + ' week', 'week');
+  await hourWords(pp, P, 'week');
+  // On a PC a week block moves the day beside it to that event.
+  const pk = await pp.evaluate(() => { const b = Array.from(document.querySelectorAll('.pl-wev')).find((x) => x.offsetHeight > 20 && !x.closest('.today')); if (!b) return null; b.setAttribute('data-test-pick', '1'); return b.dataset.k; });
+  if (pk) {
+    await pp.locator('[data-test-pick]').scrollIntoViewIfNeeded();
+    await pp.click('[data-test-pick]');
+    await settle(pp, 400);
+    const ok = await pp.evaluate((k) => { const ev = Array.from(document.querySelectorAll('.pl-daycard .pl-ev')).find((e) => e.dataset.k === k); const sc = document.querySelector('.pl-daycard .pl-scroll').getBoundingClientRect(); const r = ev && ev.getBoundingClientRect(); return !!r && r.top >= sc.top - 1 && r.top < sc.bottom; }, pk);
+    expect(P, ok, 'clicking a week block on a PC should move the day to that event');
+    if (await pp.locator('.pl-today.pc-only').isVisible()) await pp.click('.pl-today.pc-only');
+    await settle(pp, 300);
+  }
   expect(P, lay.switches === 0, 'Plan should have no hide switches');
   expect(P, lay.bg < 50, 'a PC should always be dark (got ' + lay.bg + ')');
   await lookPlan(pp, P, size, scheme + '-pc-plan');
-  await pp.click('.pl-late');
+  await pp.click('.pl-daycard .pl-late');
   await settle(pp, 300);
   expect(P, await pp.locator('#sheet-overdue').isVisible(), 'the overdue list did not open on a PC');
   await underlines(pp, P + ' overdue list', '#overdue-body .pl-row');
