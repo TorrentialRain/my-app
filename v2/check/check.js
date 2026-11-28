@@ -586,7 +586,11 @@ function inspect({ W, H, TOP, BOTTOM }) {
   for (const b of document.querySelectorAll('button, a[href], input, textarea, select')) {
     if (!vis(b) || (cover && !cover.contains(b))) continue;
     const r = b.getBoundingClientRect();
-    if (r.width < 43.5 || r.height < 43.5) out.push(name(b) + ' is smaller than 44 by 44 (' + Math.round(r.width) + ' by ' + Math.round(r.height) + ')');
+    // A button can reach past its drawn edge with an invisible ::after (TO-DO steps, Nov 28): the part a thumb can hit counts.
+    const af = getComputedStyle(b, '::after');
+    const reach = (v) => (af.content !== 'none' && af.position === 'absolute' && /px$/.test(v) ? Math.max(0, -parseFloat(v)) : 0);
+    const w = r.width + reach(af.left) + reach(af.right), h = r.height + reach(af.top) + reach(af.bottom);
+    if (w < 43.5 || h < 43.5) out.push(name(b) + ' is smaller than 44 by 44 (' + Math.round(w) + ' by ' + Math.round(h) + ')');
   }
   return out;
 }
@@ -2015,11 +2019,12 @@ async function run() {
     // PC cards match the PC board (his pick, Nov 26): the due tag at the card's right end and steps side by side,
     // and the tab list starts level with the title (found Nov 27: the tag sat under the name and the tabs sat low).
     const pcl = await pp.evaluate(() => {
-      const card = document.querySelector('.td-list .card[data-id="d"]'), due = card && card.querySelector('.due'), t = card && card.querySelector('.t');
+      const card = document.querySelector('.td-list .card[data-id="d"]'), due = card && card.querySelector('.meta'), t = card && card.querySelector('.t');
       const c = card.getBoundingClientRect(), d = due ? due.getBoundingClientRect() : null, tt = t.getBoundingClientRect();
       const subs = Array.from(document.querySelectorAll('.td-list .card[data-id="c"] .sub')).map((s) => Math.round(s.getBoundingClientRect().top));
       const tabs = document.querySelector('.td-tabs .tdtab').getBoundingClientRect(), h1 = document.querySelector('#page-todo h1').getBoundingClientRect();
-      return { dueRight: !!d && d.left > tt.right && c.right - d.right < 140 && Math.abs((d.top + d.bottom) / 2 - (tt.top + tt.bottom) / 2) < 14,
+      return { dueRight: !!d && d.left >= tt.right - 1 && c.right - d.right < 140 && Math.abs((d.top + d.bottom) / 2 - (tt.top + tt.bottom) / 2) < 14,
+        at: d && [Math.round(tt.right), Math.round(d.left), Math.round(c.right - d.right), Math.round(d.top - tt.top)],
         stepsRow: subs.length > 1 && new Set(subs).size < subs.length, tabsGap: Math.round(tabs.top - h1.top) };
     });
     expect(scheme + ' PC', pcl.dueRight, 'on a PC the due tag should sit at the right end of the card, level with the name (' + JSON.stringify(pcl) + ')');
