@@ -482,8 +482,8 @@
     const back = (d) => '<li><span><b>' + esc(d.owedBy || d.name) + '</b><span>' + esc(oneLine([d.name, d.next ? 'Back by ' + M.longDay(d.next.due) : ''])) + '</span></span><span class="num">' + M.money(d.owed > 0.005 ? d.owed : d.total) + '</span></li>';
     const toMe = T.open.length || T.done.length ? '<section class="fi-card fi-tome" data-owed-to-me><div class="fi-cardhead"><div><p class="fi-cap">Owed to you</p><p class="fi-big">' + M.money(T.total) + '</p></div></div>' +
       '<p class="fi-note">Money you lent out. It doesn\'t count in Total owed, and comes in as income when it\'s paid back.</p>' +
-      (T.open.length ? '<ul class="fi-list">' + T.open.map(back).join('') + '</ul>' : '') +
-      (T.done.length ? '<button type="button" class="fi-fold" data-show-back aria-expanded="' + showBack + '">Paid back · ' + T.done.length + ic(ICON.chev, 18) + '</button>' + (showBack ? '<ul class="fi-list">' + T.done.map(back).join('') + '</ul>' : '') : '') + '</section>' : '';
+      (T.open.length ? '<ul class="fi-rules">' + T.open.map(back).join('') + '</ul>' : '') +
+      (T.done.length ? '<button type="button" class="fi-fold" data-show-back aria-expanded="' + showBack + '">Paid back · ' + T.done.length + ic(ICON.chev, 18) + '</button>' + (showBack ? '<ul class="fi-rules">' + T.done.map(back).join('') + '</ul>' : '') : '') + '</section>' : '';
     return '<div class="fi-cols"><div class="fi-col"><section class="fi-card"><div class="fi-cardhead"><div><p class="fi-cap">Total owed</p><p class="fi-big">' + M.money(D.totalOwed) + '</p></div><button type="button" class="addbtn" data-add-debt>' + ic(ICON.plus, 18) + 'Add</button></div>' + next + free + '</section>' + toMe + paid + '</div><div class="fi-col">' + cards + '</div></div>';
   }
 
