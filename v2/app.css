@@ -745,7 +745,7 @@ body.dragging .td-fabs { visibility: hidden; }
 .fi-break[aria-expanded="true"] svg, .fi-fold[aria-expanded="true"] svg { transform: rotate(180deg); }
 .fi-list { list-style: none; margin: 0; padding: 0; }
 .fi-list li { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 0.5px solid var(--line); font-size: 15px; line-height: 20px; }
-.fi-list li > span:first-of-type { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.fi-list li > span:first-of-type { flex: 1; min-width: 0; overflow-wrap: break-word; }
 .fi-list li > span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .sq { flex: none; width: 12px; height: 12px; border-radius: 50%; }
 
@@ -773,6 +773,13 @@ body.dragging .td-fabs { visibility: hidden; }
 .fi-day { padding: 12px 0 4px; gap: 0; overflow: hidden; }
 .fi-dayhead { display: grid; grid-template-columns: minmax(0, 1fr) 92px 96px; gap: 8px; align-items: end; padding: 0 12px 8px; }
 .fi-dayhead h3 { margin: 0; font-size: 15px; line-height: 20px; font-weight: 700; }
+/* The day's full date gets its own line on the phone, with Amount and Balance under it at their columns
+   (found Nov 28: "Monday, November / 23" broke in two on every day). */
+@media (max-width: 899px) {
+  .fi-dayhead { row-gap: 2px; }
+  .fi-dayhead h3 { grid-column: 1 / -1; }
+  .fi-dayhead span:nth-of-type(1) { grid-column: 2; }
+}
 .fi-dayhead span { font-size: 13px; line-height: 17px; color: var(--ink2); text-align: right; font-weight: 600; }
 .fi-row { display: grid; grid-template-columns: minmax(0, 1fr) 92px 96px; gap: 8px; align-items: center; min-height: 64px; width: 100%; border: 0; background: var(--card); color: var(--ink); font: inherit; text-align: left; padding: 10px 12px; cursor: pointer; }
 .fi-row:nth-of-type(even) { background: var(--stripe); }
@@ -807,7 +814,7 @@ body.dragging .td-fabs { visibility: hidden; }
 /* Wishlists, his pick C (Nov 26; canvas board WishC2). */
 .fi-wrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .fi-addw { display: inline-flex; align-items: center; gap: 6px; }
-.fi-wgrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 34px 12px; padding-top: 22px; }
+.fi-wgrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 34px 12px; padding-top: 34px; } /* room for the icon under the Add row (found Nov 28: they touched) */
 .fi-wish { position: relative; isolation: isolate; padding: 14px 76px 16px 16px; gap: 8px; }
 .fi-wish h2 { margin: 0; font-size: 17px; line-height: 22px; font-weight: 600; }
 .fi-wish .fi-fill i { background: rgba(48, 209, 88, 0.16); }
@@ -821,6 +828,14 @@ body.dragging .td-fabs { visibility: hidden; }
 /* The round + floats bottom right like TO-DO's, held at the bottom of the screen while the page scrolls. It keeps its
    own room under the last card, so at the end of the page it sits below everything. */
 .fi-fabs { position: sticky; bottom: calc(var(--safe-bottom) + var(--bar-h) + 16px); display: flex; justify-content: flex-end; padding-top: 16px; pointer-events: none; z-index: 3; }
+/* The page fills the screen top to bottom, so on a short list the + sits in the bottom corner like TO-DO's, not right
+   under the last card (found Nov 28: it floated mid-screen). On a long list it stays held at the bottom while scrolling. */
+#page-finance { display: flex; flex-direction: column; }
+#page-finance > .fi-wrap { flex: 1 0 auto; }
+.fi-main { flex: 1 0 auto; }
+.fi-body { flex: 1 0 auto; }
+.fi-body:has(> .fi-fabs) { display: flex; flex-direction: column; }
+.fi-fabs { margin-top: auto; }
 .fi-fabs .plus { pointer-events: auto; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5); }
 .fi-wamt { margin: 0; font-size: 15px; line-height: 20px; color: var(--ink2); font-variant-numeric: tabular-nums; }
 .fi-wamt b { color: var(--ink); font-size: 20px; }
@@ -838,6 +853,8 @@ body.dragging .td-fabs { visibility: hidden; }
 .fi-noteform, .fi-form { display: flex; flex-direction: column; gap: 12px; }
 .fi-form select, .fi-noteform textarea { font: inherit; font-size: 16px; min-height: 46px; padding: 11px 12px; border-radius: 14px; border: 0; background: var(--field); color: var(--ink); width: 100%; }
 .fi-form select { -webkit-appearance: none; appearance: none; }
+/* A picker shows its arrow, so it never looks like a box to type in (found Nov 28 on "Fix this charge"). */
+.fi-form select { padding-right: 40px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%23a1a1a8' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; background-size: 18px 18px; }
 .fi-check { position: relative; display: flex; align-items: center; gap: 12px; min-height: 48px; font-size: 15px; line-height: 21px; cursor: pointer; }
 /* The real tick box covers the whole line (so the whole line is the tap target); the drawn box shows its state. */
 .fi-check input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
@@ -859,11 +876,14 @@ body.dragging .td-fabs { visibility: hidden; }
   .fi-wrap { flex-direction: row; align-items: flex-start; gap: 24px; width: 100%; max-width: 1360px; margin: 0 auto; }
   .fi-side { flex-direction: column; flex: 0 0 220px; gap: 4px; padding: 14px 10px; background: var(--card); border-radius: 24px; box-shadow: var(--shadow); position: sticky; top: 88px; }
   .fi-side .fi-tab { width: 100%; min-height: 48px; justify-content: flex-start; padding: 0 14px; }
-  .fi-main { flex: 1; gap: 12px; }
+  .fi-main { flex: 1; gap: 12px; align-self: stretch; }
   .fi-wgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fi-wgrid.one { grid-template-columns: minmax(0, 1fr); } /* one item fills the row (found Nov 28: it took half) */
   .fi-card.fi-wish { padding: 14px 76px 16px 16px; gap: 8px; }
   .fi-fabs { bottom: 24px; }
-  .fi-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 540px); gap: 24px; align-items: start; }
+  /* The buckets side is a little narrower, so the pie's list has room for every name on one line
+     (found Nov 28: "Subscriptio / ns" and "Sent to / people"). */
+  .fi-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 480px); gap: 24px; align-items: start; }
   .fi-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
   .fi-card { padding: 12px 16px; gap: 6px; }
   /* The graph's key sits in the title row on a PC (still above the graph), so the graph gets that height. */
@@ -884,9 +904,10 @@ body.dragging .td-fabs { visibility: hidden; }
   .fi-two .fi-chips { grid-row: 1 / span 2; align-content: flex-start; }
   .fi-two .fi-card:has(> .rb-tag) .fi-chips { grid-row: auto; }
   .fi-two .fi-chips + .rb-tag { margin-top: 0; }
-  .fi-donut { width: 128px; height: 128px; }
+  .fi-donut { width: 120px; height: 120px; }
   /* The pie's groups flow in two columns like a newspaper, so a short group fills the gap under a long one. */
-  .fi-groups { flex: 1; display: block; columns: 2; column-gap: 18px; }
+  .fi-groups { flex: 1; min-width: 0; display: block; columns: 2; column-gap: 18px; }
+  .fi-groups .fi-list li > span:first-of-type { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .fi-groups .fi-group { break-inside: avoid; -webkit-column-break-inside: avoid; margin-bottom: 10px; }
   .fi-groups .fi-list li { padding: 3px 0; }
   .fi-grid { gap: 36px 14px; padding-top: 22px; }

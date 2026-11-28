@@ -127,7 +127,7 @@
   const bucketName = (b, fin) => {
     if (String(b).startsWith('x:')) {
       const x = ((fin && fin.exceptions && fin.exceptions.items) || []).find((i) => i.id === b.slice(2));
-      return 'Quick-budget' + (x ? ': ' + x.name : '');
+      return 'Quick-Budget' + (x ? ': ' + x.name : '');
     }
     return BUCKETS[b] || 'Wants';
   };
@@ -362,11 +362,11 @@
     ];
     // What each tile's money went to, for its Breakdown.
     const breakdown = {
-      needs: { set: [['Half of the paycheck', n50], ['Gas', -R.gas], ['Subscriptions', -subsRes]].concat(ex50 ? [['Quick-budget', -ex50]] : []), spent: parts['50'], covered: cov.needs },
+      needs: { set: [['Half of the paycheck', n50], ['Gas', -R.gas], ['Subscriptions', -subsRes]].concat(ex50 ? [['Quick-Budget', -ex50]] : []), spent: parts['50'], covered: cov.needs },
       gas: { set: [['Each paycheck', R.gas]], spent: parts.gas },
       subs: { set: subsParts.filter((x) => x.amount).map((x) => [x.name, x.amount]), spent: parts.subs },
       medical: { set: medOf ? [['Medical money this paycheck', medOf]] : [], spent: parts.medical, note: medLeft < 0 ? 'Past the medical money, ' + money(-medLeft) + ' came out of Needs.' : '' },
-      wants: { set: [['30% of the paycheck', w30]].concat(ex30 ? [['Quick-budget', -ex30]] : []).concat([['Half goes to Future spoils', -spoilsAdd]]), spent: parts['30'], covered: cov.wants },
+      wants: { set: [['30% of the paycheck', w30]].concat(ex30 ? [['Quick-Budget', -ex30]] : []).concat([['Half goes to Future spoils', -spoilsAdd]]), spent: parts['30'], covered: cov.wants },
       spoils: { set: [['Half of Wants', spoilsAdd]], spent: parts.spoils, covered: cov.spoils },
       invest: { set: [['20% of the paycheck', s20]].concat(movedIn ? [['Moved into savings', -movedIn]] : []).concat(spentPast ? [['Spending no other bucket covered', -spentPast]] : []),
         note: investCapped ? 'Only ' + money(Math.max(0, cashLeft)) + ' is left in the bank after the other buckets' + (takenOut ? ', not counting money taken out of savings' : '') + ', so that\'s all that shows here.' : 'Ready to move to savings. Each move into savings comes off here.' },

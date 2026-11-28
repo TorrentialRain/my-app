@@ -1673,6 +1673,47 @@ async function spelledOut(page, where) {
   });
   expect(where, !bad, 'a label is shortened ("' + bad + '"); every Finance label is spelled out');
 }
+// Finance's look-over list (Nov 28), each fixed for good: the check fails if one comes back.
+// On whatever Finance tab is open: no line says a word twice, Quick-Budget is spelled with a capital B, the balance
+// is called Total balance, and the dollar labels on the graph never touch each other or sit on a line.
+async function finWords(page, where) {
+  await page.evaluate(ON_LINE);
+  const bad = await page.evaluate(() => {
+    const out = [];
+    const pg = document.getElementById('page-finance');
+    const lines = Array.from(pg.querySelectorAll('.fi-rname > span:not(.fi-tags), .fi-rules li > span > span, .fi-missed > span > span'));
+    for (const l of lines) {
+      const parts = l.textContent.split(' · ').map((x) => x.trim().toLowerCase());
+      if (parts.some((x, i) => parts.some((o, j) => j !== i && (o === x || o.startsWith(x + ' '))))) out.push('a line says the same word twice: "' + l.textContent + '"');
+    }
+    const text = pg.innerText + ' ' + Array.from(document.querySelectorAll('#sheet-fin:not([hidden])')).map((x) => x.innerText).join(' ');
+    if (/Quick-budget/.test(text)) out.push('"Quick-budget" should be spelled "Quick-Budget", with a capital B');
+    if (/In the bank/.test(text)) out.push('the balance should be called "Total balance" here too, not "In the bank"');
+    const svg = pg.querySelector('.fi-chart .fi-graph');
+    if (svg) {
+      const gl = Array.from(svg.querySelectorAll('[data-grid-label]')).map((t) => t.getBoundingClientRect());
+      gl.forEach((a, i) => gl.slice(0, i).forEach((b) => { if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) out.push('two dollar labels on the graph sit on top of each other'); }));
+      for (const o of window.__onLine(svg, '[data-grid-label]')) out.push(o.replace('the amount', 'the dollar label'));
+    }
+    const sums = Array.from(pg.querySelectorAll('.fi-pie .fi-gsum[data-pct]')).map((x) => +x.dataset.pct);
+    if (sums.length && sums.reduce((a, b) => a + b, 0) !== 100) out.push('the pie\'s percents add up to ' + sums.reduce((a, b) => a + b, 0) + ', not 100');
+    return out;
+  });
+  for (const b of [...new Set(bad)]) problem(where, b);
+}
+// Every name in "Where your money went" stays whole on one line (found Nov 28 on a PC: "Subscriptio / ns").
+async function pieNames(page, where) {
+  const bad = await page.evaluate(() => Array.from(document.querySelectorAll('.fi-pie .fi-list li > span:first-of-type')).filter((n) => {
+    const lh = parseFloat(getComputedStyle(n).lineHeight) || 20;
+    return n.getBoundingClientRect().height > lh + 1 || n.scrollWidth > n.clientWidth + 1;
+  }).map((n) => n.textContent));
+  for (const b of bad) problem(where, 'the pie\'s "' + b + '" does not fit on one line');
+}
+// Every picker on a Finance sheet shows its arrow (found Nov 28: "Fix this charge" had plain boxes).
+async function pickersShowArrows(page, where) {
+  const bad = await page.evaluate(() => Array.from(document.querySelectorAll('#sheet-fin select')).filter((x) => !/url\(/.test(getComputedStyle(x).backgroundImage) && !x.closest('.fi-select')).map((x) => x.name || 'a picker'));
+  for (const b of bad) problem(where, 'the ' + b + ' picker has no arrow, so it looks like a box to type in');
+}
 async function phoneFinance(page, scheme, size) {
   const F = scheme + ' Finance';
   await page.tap('.tab[data-tab="finance"]');
@@ -1690,6 +1731,19 @@ async function phoneFinance(page, scheme, size) {
     expect(F, (await page.getAttribute(`.fi-tabs [data-fi-tab="${t}"]`, 'aria-pressed')) === 'true', 'the ' + t + ' tab did not open');
     await lookFin(page, F + ' ' + t, size, scheme + '-finance-' + t);
     await spelledOut(page, F + ' ' + t);
+    await finWords(page, F + ' ' + t);
+    const tabName = (await page.locator('.fi-tabs [data-fi-tab="quick"]').textContent()).trim();
+    if (t === 'quick') expect(F, tabName === 'Quick-Budget', 'the tab should read "Quick-Budget" (got "' + tabName + '")');
+    if (t === 'activity') {
+      // The full date of each day sits on one line (found Nov 28: "Monday, November / 23").
+      const wrapped = await page.evaluate(() => Array.from(document.querySelectorAll('.fi-dayhead h3')).filter((h) => h.getBoundingClientRect().height > parseFloat(getComputedStyle(h).lineHeight) + 1).map((h) => h.textContent));
+      expect(F + ' activity', !wrapped.length, 'a day\'s date breaks onto two lines: ' + wrapped.join(', '));
+      expect(F + ' activity', (await page.locator('.fi-cols .fi-cap').first().textContent()).trim() === 'Total balance', 'Activity\'s balance should be called "Total balance"');
+    }
+    if (t === 'debt') {
+      const once = await page.evaluate(() => { const open = document.querySelectorAll('.fi-debtcard').length; const top = document.querySelector('.fi-col .fi-card'); return { open, nextTop: /Next due/.test(top.textContent) }; });
+      expect(F + ' debt', !(once.open === 1 && once.nextTop), 'with one debt, its next payment should show once, on its own card, not again in Total owed');
+    }
   }
   // A bucket opens one short line, with the breakdown in a dropdown.
   await page.tap('.fi-tabs [data-fi-tab="spending"]');
@@ -1717,6 +1771,19 @@ async function phoneFinance(page, scheme, size) {
   await page.tap('[data-add-debt]');
   await settle(page, 250);
   await lookSheet(page, F + ' add a debt', size, '#sheet-fin');
+  // The money boxes show a hint, never a "$0.00" that reads like a typed amount, and the boxes that can stay empty say so.
+  const form = await page.evaluate(() => ({ zero: Array.from(document.querySelectorAll('#sheet-fin input')).filter((i) => /^\$?0(\.00)?$/.test(i.placeholder)).length,
+    labels: Array.from(document.querySelectorAll('#sheet-fin .fld > span')).map((x) => x.textContent) }));
+  expect(F + ' add a debt', form.zero === 0, 'a money box shows "$0.00", which reads like a typed amount');
+  expect(F + ' add a debt', ['Who it\'s owed to (optional)', 'Next payment (optional)', 'Due (optional)'].every((l) => form.labels.includes(l)), 'the boxes that can stay empty should say (optional) (got ' + form.labels.join(', ') + ')');
+  // Next payment without a day is not dropped without a word.
+  await page.fill('#sheet-fin [name="name"]', 'Test');
+  await page.fill('#sheet-fin [name="owed"]', '50');
+  await page.fill('#sheet-fin [name="pay"]', '10');
+  await page.locator('#sheet-fin button[type="submit"]').tap();
+  await settle(page, 200);
+  const half = await page.evaluate(() => ({ open: !document.getElementById('sheet-fin').hidden, msg: document.querySelector('#sheet-fin [name="due"]').validationMessage }));
+  expect(F + ' add a debt', half.open && /both/.test(half.msg), 'a next payment with no due day should ask for both, not save without it (' + JSON.stringify(half) + ')');
   await page.screenshot({ path: path.join(OUT, scheme + '-finance-add-debt.png') });
   await page.tap('#sheet-fin .sheet-top [data-close]');
   await settle(page, 200);
@@ -1730,6 +1797,7 @@ async function phoneFinance(page, scheme, size) {
   expect(F, /Fix this charge/.test(await page.locator('#fin-sheet-title').textContent()), 'tapping a charge should open "Fix this charge"');
   await lookSheet(page, F + ' fix a charge', size, '#sheet-fin');
   await spelledOut(page, F + ' fix a charge');
+  await pickersShowArrows(page, F + ' fix a charge');
   await page.screenshot({ path: path.join(OUT, scheme + '-finance-fix-charge.png') });
   await page.tap('#sheet-fin .sheet-top [data-close]');
   await settle(page, 200);
@@ -1737,6 +1805,17 @@ async function phoneFinance(page, scheme, size) {
   await settle(page, 200);
   await wishParts(page, F + ' Wishlists');
   await floatsClear(page, F + ' Wishlists', '#page-finance');
+  // The round + sits in the bottom right corner just above the bar, like TO-DO's (found Nov 28: mid-screen),
+  // and each item's icon keeps clear of the Add row (found Nov 28: they touched).
+  const corner = await page.evaluate(() => {
+    const pg = document.getElementById('page-finance');
+    pg.scrollTop = 0;
+    const p = document.querySelector('[data-aside-pick]').getBoundingClientRect(), bar = document.querySelector('.bar').getBoundingClientRect();
+    const add = document.querySelector('.fi-wrow').getBoundingClientRect(), icon = document.querySelector('.fi-wicon');
+    return { gap: Math.round(bar.top - p.bottom), right: Math.round(window.innerWidth - p.right), iconGap: icon ? Math.round(icon.getBoundingClientRect().top - add.bottom) : 99 };
+  });
+  expect(F + ' Wishlists', corner.gap >= 8 && corner.gap <= 40 && corner.right <= 40, 'the round + should sit in the bottom right corner just above the bar, like TO-DO\'s (' + JSON.stringify(corner) + ')');
+  expect(F + ' Wishlists', corner.iconGap >= 6, 'an item\'s icon touches the Add row above it (' + corner.iconGap + 'px apart)');
   await page.locator('[data-aside-pick]').first().tap();
   await settle(page, 250);
   await lookSheet(page, F + ' set money aside', size, '#sheet-fin');
@@ -2014,6 +2093,13 @@ async function pcFinance(pp, scheme, size) {
     await pp.click(`.fi-side [data-fi-tab="${t}"]`);
     await settle(pp, 250);
     await lookFin(pp, F + ' ' + t, size, scheme + '-pc-finance-' + t);
+    await finWords(pp, F + ' ' + t);
+    if (t === 'spending') await pieNames(pp, F + ' ' + t);
+    if (t === 'wishlists') {
+      // One item fills the row instead of taking half of it (found Nov 28).
+      const w = await pp.evaluate(() => { const g = document.querySelector('.fi-wgrid'), k = g && g.children; return k && k.length === 1 ? Math.round(k[0].getBoundingClientRect().width - g.getBoundingClientRect().width) : 0; });
+      expect(F + ' wishlists', Math.abs(w) <= 2, 'one wishlist item should fill the row (it is ' + w + ' pixels off)');
+    }
   }
   await pp.click('.fi-side [data-fi-tab="spending"]');
   await settle(pp, 200);
@@ -2269,6 +2355,7 @@ async function run() {
     expect(scheme + ' missed charges', mt === 'You have 1 missed charge', 'opening the Hub with a charge nobody sorted should pop up "You have 1 missed charge" (got "' + mt + '")');
     if (mt) {
       await lookSheet(page, scheme + ' missed charges', phone, '#sheet-fin');
+      expect(scheme + ' missed charges', /Until you label it, it counts in Wants/.test(await page.locator('#sheet-fin').innerText()), 'one missed charge should say "label it, it counts", not "them, they"');
       await page.screenshot({ path: path.join(OUT, scheme + '-missed-charges.png') });
       await page.tap('#sheet-fin [data-label-now]');
       await settle(page, 300);

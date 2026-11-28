@@ -26,7 +26,7 @@
     chev: '<path d="M6 9l6 6 6-6"/>',
     close: '<path d="M6 6l12 12M18 6L6 18"/>',
   };
-  const TABS = [['spending', 'Spending'], ['activity', 'Activity'], ['wishlists', 'Wishlists'], ['debt', 'Debt'], ['quick', 'Quick-budget']];
+  const TABS = [['spending', 'Spending'], ['activity', 'Activity'], ['wishlists', 'Wishlists'], ['debt', 'Debt'], ['quick', 'Quick-Budget']];
   const GROUP_OF = { needs: 'needs', gas: 'needs', subs: 'needs', medical: 'needs', wants: 'wants', spoils: 'wants', invest: 'invest', debt: 'debt' };
   // Pie shades: Needs blues, Wants purples, Savings green, Debt slate, not sorted gray.
   const SHADES = { needs: ['#1D4ED8', '#2563EB', '#3B82F6', '#60A5FA', '#93C5FD', '#BFDBFE'], wants: ['#7E22CE', '#9333EA', '#A855F7', '#C084FC', '#D8B4FE', '#E9D5FF'], savings: ['#16A34A', '#4ADE80'], debt: ['#64748B', '#94A3B8'], unsorted: ['#8E8E93', '#AEAEB2'] };
@@ -118,6 +118,20 @@
   const PC = window.matchMedia('(min-width: 900px)');
   const GREEN = '#30D158', BLUE = '#64A0FF';
   const r2 = (n) => Math.round(n * 100) / 100;
+  // A line of parts ("Gas · Needs · Bank") never says a word twice (found Nov 28: "Gas · Gas · Bank" and
+  // "Transfer · Transfer (not spending) · Bank"). A part that another part already says, or starts, is left out.
+  function oneLine(parts) {
+    const xs = parts.map((x) => String(x == null ? '' : x).trim()).filter(Boolean);
+    const low = (x) => x.toLowerCase();
+    return xs.filter((x, i) => !xs.some((o, j) => j !== i && (low(o) === low(x) ? j < i : low(o).startsWith(low(x) + ' ')))).join(' · ');
+  }
+  // Whole percents that add up to 100 (found Nov 28: 56 + 28 + 15 = 99): the leftover goes to the biggest remainders.
+  function percents(shares) {
+    const raw = shares.map((x) => x * 100), base = raw.map(Math.floor);
+    let left = Math.round(raw.reduce((a, b) => a + b, 0)) - base.reduce((a, b) => a + b, 0);
+    raw.map((v, i) => [v - base[i], i]).sort((a, b) => b[0] - a[0]).forEach(([, i]) => { if (left > 0) { base[i]++; left--; } });
+    return base;
+  }
   PC.addEventListener('change', () => { if (W) render(); }); // the picture's shape differs on the PC
   function niceStep(span) {
     const raw = span / 3, mag = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1))));
@@ -153,14 +167,47 @@
     const x = (i) => (days.length < 2 ? (w - endIn) / 2 : (i / (days.length - 1)) * (w - endIn));
     const y = (v) => top + (1 - (v - lo) / (hi - lo)) * (bot - top);
     const f = (n) => n.toFixed(1);
-    // Faint dollar lines, inside the picture.
-    const step = niceStep(hi - lo);
+    const lines = [];
+    vals.forEach((v, i) => lines.push([x(i), y(v)]));
+    const savPts = [];
+    if (hasSav) {
+      let prev = null;
+      sav.forEach((v, i) => {
+        if (v == null) return;
+        if (prev != null) savPts.push([x(i), y(prev)]);
+        savPts.push([x(i), y(v)]);
+        prev = v;
+      });
+    }
+    // Every line as short dots, so a box can be tested against it.
+    const dots = [];
+    for (const pts of [lines, savPts]) {
+      for (let k = 1; k < pts.length; k++) {
+        const [x0, y0] = pts[k - 1], [x1, y1] = pts[k];
+        const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 2));
+        for (let j = 0; j <= n; j++) dots.push([x0 + (x1 - x0) * j / n, y0 + (y1 - y0) * j / n]);
+      }
+    }
+    // Faint dollar lines, inside the picture. Found Nov 28: on a PC's short graph "$500" and "$250" printed on top of
+    // each other, and on the phone the blue line ran through "$250". Now the lines are spaced at least 24 apart, and each
+    // label sits on the left, or on the right if a line runs through the left, or is left out if both are crossed.
+    let step = niceStep(hi - lo);
+    while (step / (hi - lo) * (bot - top) < 24) step = niceStep(step * 3.01);
+    const onLine = (b) => dots.some(([px, py]) => px > b[0] - 3 && px < b[2] + 3 && py > b[1] - 3 && py < b[3] + 3);
+    const gridBoxes = [];
     let grid = '';
     for (let g = Math.ceil(lo / step) * step; g <= hi + 0.01; g += step) {
       const gy = y(g);
       if (g <= lo + 0.01 && lo === 0) continue; // the bottom edge needs no line
       if (gy > bot - 14 || gy < top - 20) continue;
-      grid += '<line x1="0" x2="' + w + '" y1="' + f(gy) + '" y2="' + f(gy) + '" class="fi-gline"/><text x="12" y="' + f(gy - 5) + '" class="fi-glabel">' + M.money0(g) + '</text>';
+      const t = M.money0(g), tw = t.length * 7.8 + 2;
+      const left = [10, gy - 18, 12 + tw, gy - 1], right = [w - 12 - tw, gy - 18, w - 10, gy - 1];
+      const box = !onLine(left) ? left : !onLine(right) ? right : null;
+      grid += '<line x1="0" x2="' + w + '" y1="' + f(gy) + '" y2="' + f(gy) + '" class="fi-gline"/>';
+      if (!box) continue;
+      gridBoxes.push(box);
+      grid += box === left ? '<text x="12" y="' + f(gy - 5) + '" class="fi-glabel" data-grid-label>' + t + '</text>'
+        : '<text x="' + f(w - 12) + '" y="' + f(gy - 5) + '" text-anchor="end" class="fi-glabel" data-grid-label>' + t + '</text>';
     }
     const pts = vals.map((v, i) => f(x(i)) + ',' + f(y(v)));
     const area = '<path d="M' + f(x(0)) + ',' + bot + ' L' + pts.join(' L') + ' L' + f(x(vals.length - 1)) + ',' + bot + ' Z" class="fi-area"/>';
@@ -184,29 +231,7 @@
     // amount (like −$93) in plain blue beside its step: no box, no line down, no dot. An amount never sits on a
     // line, another amount, a dollar label or the dates: it tries the spots next to its own peak or step first, then a
     // row higher, and if every spot is taken it is left out rather than cover anything.
-    const lines = [];
-    vals.forEach((v, i) => lines.push([x(i), y(v)]));
-    const savPts = [];
-    if (hasSav) {
-      let prev = null;
-      sav.forEach((v, i) => {
-        if (v == null) return;
-        if (prev != null) savPts.push([x(i), y(prev)]);
-        savPts.push([x(i), y(v)]);
-        prev = v;
-      });
-    }
-    // Every line as short dots, so a box can be tested against it.
-    const dots = [];
-    for (const pts of [lines, savPts]) {
-      for (let k = 1; k < pts.length; k++) {
-        const [x0, y0] = pts[k - 1], [x1, y1] = pts[k];
-        const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 2));
-        for (let j = 0; j <= n; j++) dots.push([x0 + (x1 - x0) * j / n, y0 + (y1 - y0) * j / n]);
-      }
-    }
-    const taken = [[0, h - 24, w, h]]; // the date row
-    grid.replace(/<text x="12" y="([\d.]+)"[^>]*>([^<]*)</g, (m0, gy, t) => { taken.push([8, +gy - 13, 16 + t.length * 7.8, +gy + 4]); return m0; });
+    const taken = [[0, h - 24, w, h]].concat(gridBoxes); // the date row and the dollar labels
     const clear = (b) => b[0] >= 2 && b[2] <= w - 2 && b[1] >= 4 &&
       !taken.some((o) => b[0] < o[2] + 3 && o[0] < b[2] + 3 && b[1] < o[3] + 2 && o[1] < b[3] + 2) &&
       !dots.some(([px, py]) => px > b[0] - 3 && px < b[2] + 3 && py > b[1] - 3 && py < b[3] + 3);
@@ -306,7 +331,7 @@
       if (openHere) html += tileInfo(tiles.find((x) => x.key === openTile));
     });
     const NC = Bd.notCovered || {};
-    const gaps = [['planned', ' of your Quick-budget plans'], ['wish', ' set aside for wishlists'], ['subs', ' of Subscriptions'], ['gas', ' of Gas'], ['more', ' more']]
+    const gaps = [['planned', ' of your Quick-Budget plans'], ['wish', ' set aside for wishlists'], ['subs', ' of Subscriptions'], ['gas', ' of Gas'], ['more', ' more']]
       .filter(([k]) => NC[k] > 0.005).map(([k, w]) => M.money(NC[k]) + w);
     const gapText = gaps.length ? ' Not covered until payday: ' + (gaps.length > 1 ? gaps.slice(0, -1).join(', ') + ' and ' + gaps[gaps.length - 1] : gaps[0]) + '.' : '';
     const short = Bd.shortBy > 0.005 ? '<p class="fi-warn">Your accounts are ' + M.money(Bd.shortBy) + ' short of this paycheck\'s plan.' + gapText + '</p>' : '';
@@ -334,7 +359,8 @@
     const sel = '<label class="fi-select"><select data-pie aria-label="Which paycheck">' + names.map((n, i) => '<option value="' + i + '"' + (i === pieAt ? ' selected' : '') + '>' + n + '</option>').join('') + '</select>' + ic(ICON.chev, 18) + '</label>';
     const r = 70, C = 2 * Math.PI * r;
     let off = 0, arcs = '', lists = '';
-    for (const g of P.groups) {
+    const pct = percents(P.groups.map((g) => g.share || 0));
+    for (const [gi, g] of P.groups.entries()) {
       const shades = SHADES[g.group] || SHADES.unsorted;
       const rows = g.cats.map((c, i) => {
         const col = shades[Math.min(i, shades.length - 1)];
@@ -346,7 +372,7 @@
       const back = g.group === 'savings' && g.out > 0.005;
       const extra = back ? '<li class="fi-out"><i class="sq" aria-hidden="true"></i><span>Taken back out</span><span>' + M.signed(-g.out) + '</span></li><li class="fi-kept"><i class="sq" aria-hidden="true" style="background:' + GROUP_COLOR.savings + '"></i><span>Kept</span><span>' + M.money(g.kept) + '</span></li>' : '';
       const shown = back ? M.money(g.kept) + ' kept' : M.money(g.total);
-      lists += '<div class="fi-group"><p class="fi-gname" style="--gc:' + GROUP_COLOR[g.group] + '">' + esc(g.name) + '</p><p class="fi-gsum">' + Math.round(g.share * 100) + '% · ' + shown + '</p><ul class="fi-list">' + rows + extra + '</ul></div>';
+      lists += '<div class="fi-group"><p class="fi-gname" style="--gc:' + GROUP_COLOR[g.group] + '">' + esc(g.name) + '</p><p class="fi-gsum" data-pct="' + pct[gi] + '">' + pct[gi] + '% · ' + shown + '</p><ul class="fi-list">' + rows + extra + '</ul></div>';
     }
     // The total sits inside the ring, drawn as part of the picture so nothing can slide over it.
     const donut = '<div class="fi-donut"><svg viewBox="0 0 180 180" role="img" aria-label="Spent ' + M.money(P.total) + ' since ' + M.monthDay(p.start) + '"><g transform="rotate(-90 90 90)"><circle r="' + r + '" cx="90" cy="90" fill="none" class="fi-ring" stroke-width="30"/>' + arcs + '</g>' +
@@ -364,20 +390,20 @@
       const label = d.day === W.today ? 'Today · ' + M.longDay(d.day) : d.day === M.addDays(W.today, -1) ? 'Yesterday · ' + M.longDay(d.day) : M.longDay(d.day);
       const rows = d.rows.map((r) => {
         const chips = (r.pending ? '<span class="fi-tag">Pending</span>' : '') + (r.ask ? '<span class="fi-tag on">What was it for?</span>' : '') + (r.naming ? '<span class="fi-tag">Name coming</span>' : '') + (r.double ? '<span class="fi-tag warn">Maybe counted twice</span>' : '') + (r.ruled ? '<span class="fi-tag">Store rule</span>' : '');
-        return '<button type="button" class="fi-row" data-tx="' + esc(r.id) + '"><span class="fi-rname"><b>' + esc(r.name) + '</b><span>' + esc(r.catName) + ' · ' + esc(r.bucketName) + ' · ' + esc(r.account) + '</span>' + (chips ? '<span class="fi-tags">' + chips + '</span>' : '') + '</span>' +
+        return '<button type="button" class="fi-row" data-tx="' + esc(r.id) + '"><span class="fi-rname"><b>' + esc(r.name) + '</b><span>' + esc(oneLine([r.catName, r.bucketName, r.account])) + '</span>' + (chips ? '<span class="fi-tags">' + chips + '</span>' : '') + '</span>' +
           '<span class="num ' + (r.amount < 0 ? 'out' : 'in') + '">' + M.signed(r.amount) + '</span><span class="num"><span class="fi-bal' + (r.balance < 0 ? ' neg' : '') + '">' + (r.balance == null ? '' : M.money(r.balance)) + '</span></span></button>';
       }).join('');
       return '<section class="fi-card fi-day"><div class="fi-dayhead"><h3>' + label + '</h3><span>Amount</span><span>Balance</span></div>' + rows + '</section>';
     }).join('');
     const more = W.activity.length > actDays ? '<button type="button" class="fi-more" data-more>Show earlier days</button>' : '';
     return '<div class="fi-cols"><div class="fi-col">' +
-      '<section class="fi-card"><p class="fi-cap">In the bank</p><p class="fi-big">' + M.money(B ? B.current : 0) + '</p><div class="fi-chips">' + each + '</div></section>' +
+      '<section class="fi-card"><p class="fi-cap">Total balance</p><p class="fi-big">' + M.money(B ? B.current : 0) + '</p><div class="fi-chips">' + each + '</div></section>' +
       '<section class="fi-card"><div class="fi-cardhead"><h2>Spent the last 7 days</h2><b class="num">' + M.money(W.week.total) + '</b></div><p class="fi-note">Leaves out transfers, savings moves and debt payoffs.</p><ul class="fi-week">' + week + '</ul></section>' +
       rulesCard() + '</div><div class="fi-col">' +
       '<p class="fi-hint">Tap a charge to fix its name, category or bucket.</p>' + days + more + '</div></div>';
   }
   function rulesCard() {
-    const rows = W.rules.map((r) => '<li><span><b>' + esc(r.store) + '</b><span>' + esc((M.CATS[r.cat] || { name: 'Same category' }).name) + ' · ' + esc(M.BUCKETS[r.u] || 'Same bucket') + '</span></span><button type="button" class="fi-small" data-undo-rule="' + esc(r.id) + '">Undo</button></li>').join('');
+    const rows = W.rules.map((r) => '<li><span><b>' + esc(r.store) + '</b><span>' + esc(oneLine([(M.CATS[r.cat] || { name: 'Same category' }).name, M.BUCKETS[r.u] || 'Same bucket'])) + '</span></span><button type="button" class="fi-small" data-undo-rule="' + esc(r.id) + '">Undo</button></li>').join('');
     return '<section class="fi-card fi-last"><div class="fi-cardhead"><h2>Store rules</h2></div>' + (rows ? '<ul class="fi-rules">' + rows + '</ul>' : '<p class="fi-note">None yet. When you fix a charge, you can make that store always go the same way.</p>') + '</section>';
   }
 
@@ -406,14 +432,16 @@
       (showBought ? '<ul class="fi-list">' + Wl.bought.map((i) => '<li><span>' + esc(i.name) + '</span><span>' + (i.bought ? M.monthDay(i.bought) : '') + '</span></li>').join('') + '</ul>' : '') + '</section>' : '';
     const fab = Wl.open.length && W.budget ? '<div class="fi-fabs" data-floats><button type="button" class="plus" data-aside-pick aria-label="Set money aside">' + ic(ICON.plus, 28) + '</button></div>' : '';
     return '<div class="fi-wrow"><span class="fi-cap">Your wishlist</span><button type="button" class="fi-small fi-addw" data-add-wish>' + ic(ICON.plus, 18) + 'Add</button></div>' +
-      '<div class="fi-wgrid">' + (items || '<p class="fi-note">Nothing on your wishlists yet.</p>') + '</div>' + bought + fab;
+      '<div class="fi-wgrid' + (Wl.open.length === 1 ? ' one' : '') + '">' + (items || '<p class="fi-note">Nothing on your wishlists yet.</p>') + '</div>' + bought + fab;
   }
 
 
   // ----- Debt -----
   function debt() {
     const D = W.debts;
-    const next = D.nextDue ? '<p class="fi-note">Next due ' + M.longDay(D.nextDue.due) + ' · ' + M.money(D.nextDue.amount) + '</p>' : '';
+    // The soonest payment shows on the top card only with 2 or more debts; with one, its own card already says it
+    // (found Nov 28: "Next due Wednesday, December 2 · $40.00" showed twice).
+    const next = D.nextDue && D.open.length > 1 ? '<p class="fi-note">Next due ' + M.longDay(D.nextDue.due) + ' · ' + M.money(D.nextDue.amount) + '</p>' : '';
     const free = !D.open.length ? '<span class="fi-chip on">' + (D.debtFreeSince ? 'Debt-free since ' + M.longDay(D.debtFreeSince) : 'Debt-free') + '</span>' : '';
     const cards = D.open.map((d) => '<section class="fi-card fi-debtcard" data-debt="' + esc(d.id) + '"><div class="fi-cardhead"><div><h2>' + esc(d.name) + '</h2>' + (d.owedTo ? '<p class="fi-note">Owed to ' + esc(d.owedTo) + '</p>' : '') + '</div><div class="fi-right"><b>' + M.money(d.owed) + ' left</b><span class="fi-note">Of ' + M.money(d.total) + '</span></div></div>' +
       (d.next ? '<p class="fi-line2">Next: ' + M.money(d.next.amount) + ' on ' + M.longDay(d.next.due) + '</p>' : '') +
@@ -497,7 +525,7 @@
     const rows = L.now.map((m) => '<li class="fi-missed" data-missed-id="' + esc(m.id) + '"><span><b>' + esc(m.name) + '</b><span>' + esc(M.longDay(m.d)) + ' · ' + esc(m.account) + '</span></span>' +
       '<span class="num out">' + M.signed(m.a) + '</span>' +
       '<div class="fi-btns"><button type="button" class="wide" data-label-now="' + esc(m.id) + '">Label now</button><button type="button" class="fi-small" data-label-later="' + esc(m.id) + '">Label later</button></div></li>').join('');
-    openSheet(title, '<p class="hint">Claude couldn\'t sort ' + (n === 1 ? 'this charge' : 'these charges') + '. Until you label them, they count in Wants.</p>' +
+    openSheet(title, '<p class="hint">Claude couldn\'t sort ' + (n === 1 ? 'this charge' : 'these charges') + '. Until you label ' + (n === 1 ? 'it, it counts' : 'them, they count') + ' in Wants.</p>' +
       '<ul class="fi-rules">' + rows + '</ul><p class="fi-note">Label later keeps it in your Questions inbox, to answer any time.</p>');
   }
   function whoSheet() {
@@ -508,16 +536,17 @@
   function addDebtSheet() {
     openSheet('Add a debt', '<form class="fi-form" data-add-debt-form autocomplete="off">' +
       '<label class="fld"><span>What it is</span><input name="name" required placeholder="For example: Klarna for the headphones"></label>' +
-      '<label class="fld"><span>Who it\'s owed to</span><input name="owedTo" placeholder="For example: Klarna"></label>' +
-      '<label class="fld"><span>Amount owed</span><input name="owed" required inputmode="decimal" placeholder="$0.00"></label>' +
-      '<div class="fld-row"><label class="fld"><span>Next payment</span><input name="pay" inputmode="decimal" placeholder="$0.00"></label><label class="fld"><span>Due</span><input name="due" type="date"></label></div>' +
+      '<label class="fld"><span>Who it\'s owed to (optional)</span><input name="owedTo" placeholder="For example: Klarna"></label>' +
+      '<label class="fld"><span>Amount owed</span><input name="owed" required inputmode="decimal" placeholder="For example: $120"></label>' +
+      '<div class="fld-row"><label class="fld"><span>Next payment (optional)</span><input name="pay" inputmode="decimal" placeholder="For example: $40"></label><label class="fld"><span>Due (optional)</span><input name="due" type="date"></label></div>' +
+      '<p class="hint">Next payment and Due go together: fill in both, or leave both empty.</p>' +
       '<div class="fi-btns"><button type="button" class="fi-small" data-close>Cancel</button><button type="submit" class="wide">Save</button></div></form>');
   }
   function addWishSheet() {
     const lists = W.wish.lists;
     openSheet('Add to a wishlist', '<form class="fi-form" data-add-wish-form autocomplete="off">' +
       '<label class="fld"><span>What it is</span><input name="name" required></label>' +
-      '<label class="fld"><span>Price</span><input name="amount" required inputmode="decimal" placeholder="$0.00"></label>' +
+      '<label class="fld"><span>Price</span><input name="amount" required inputmode="decimal" placeholder="For example: $60"></label>' +
       (lists.length ? '<label class="fld"><span>Wishlist</span><select name="list">' + lists.map((l) => '<option value="' + esc(l.id) + '">' + esc(l.name) + '</option>').join('') + '</select></label>' : '') +
       '<button type="submit" class="wide">Save</button></form>');
   }
@@ -528,7 +557,7 @@
     const pick = open.find((x) => x.id === id) || open[0];
     openSheet('Set money aside', '<form class="fi-form" data-aside-form autocomplete="off">' +
       '<label class="fld"><span>For</span><select name="item">' + open.map((i) => '<option value="' + esc(i.id) + '"' + (i.id === pick.id ? ' selected' : '') + '>' + esc(i.name) + ' · ' + M.money(i.saved) + ' of ' + M.money(i.amount) + '</option>').join('') + '</select></label>' +
-      '<label class="fld"><span>Amount</span><input name="amount" required inputmode="decimal" placeholder="$0.00"></label>' +
+      '<label class="fld"><span>Amount</span><input name="amount" required inputmode="decimal" placeholder="For example: $25"></label>' +
       '<p class="hint">From the paycheck of ' + M.monthDay(W.budget.P.start) + '. It\'s held from then on, so it can\'t be spent by accident.</p>' +
       '<button type="submit" class="wide">Set aside</button></form>');
   }
@@ -588,6 +617,11 @@
       const owed = amt(v('owed'));
       if (!v('name') || !owed) { f.reportValidity(); return; }
       const id = S.newId('d'), pay = amt(v('pay'));
+      // A payment needs both its amount and its day; one alone used to be dropped without a word.
+      const half = !!pay !== !!v('due');
+      const other = f.elements[pay ? 'due' : 'pay'];
+      other.setCustomValidity(half ? 'Fill in both, or leave both empty' : '');
+      if (half) { other.reportValidity(); other.addEventListener('input', () => other.setCustomValidity(''), { once: true }); return; }
       add({ type: 'addDebt', item: { id, name: v('name'), owedTo: v('owedTo'), owed, total: owed, source: 'app', added: at },
         payment: pay && v('due') ? { id: S.newId('p'), debtId: id, name: v('name'), amount: pay, due: v('due'), paid: false } : null });
     } else if (f.hasAttribute('data-add-wish-form')) {
