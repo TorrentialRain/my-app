@@ -2005,6 +2005,8 @@ async function savingsTags(browser, base, scheme, size, extra, edges) {
   const m = ctx.box.files['data/fin.config.months.json'];
   const add = (t) => (m[t.d.slice(0, 7)] = m[t.d.slice(0, 7)] || { txns: [] }).txns.push(Object.assign({ m: 0, p: 0, c: 'savings', cat: 'savings', u: 'savings' }, t));
   // Moves on six days in a row: like Nov 17, 18 and 19 on his own graph, where the middle one ($221) got no amount (found Nov 28).
+  // An ordinary charge before them, so the graph starts before the first move (its first day has no step to label).
+  add({ id: 'st0', d: dayN(-9), a: -4, k: 'First National Bank Alaska', s: 'Coffee', c: 'food', cat: 'food', u: 'wants' });
   add({ id: 'st1', d: dayN(-6), a: -93, k: 'First National Bank Alaska', s: 'To savings x0000' });
   add({ id: 'st2', d: dayN(-5), a: -25, k: 'Cash App', s: 'Moved to Cash App Savings' });
   add({ id: 'st4', d: dayN(-4), a: -65, k: 'First National Bank Alaska', s: 'To savings x0000' });
