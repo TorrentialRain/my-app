@@ -1789,6 +1789,12 @@ async function phoneFinance(page, scheme, size) {
       expect(F + ' activity', !wrapped.length, 'a day\'s date breaks onto two lines: ' + wrapped.join(', '));
       expect(F + ' activity', (await page.locator('.fi-cols .fi-cap').first().textContent()).trim() === 'Total balance', 'Activity\'s balance should be called "Total balance"');
     }
+    if (t === 'spending') {
+      // "Not sorted yet" stays out of the circle but keeps its line below (Josh, Nov 28).
+      const gray = await page.evaluate(() => ({ arcs: Array.from(document.querySelectorAll('.fi-donut circle[stroke]')).filter((c) => /^#(8E8E93|AEAEB2)$/i.test(c.getAttribute('stroke'))).length,
+        row: /Not sorted yet/.test(document.querySelector('.fi-pie').innerText), mark: !!document.querySelector('.fi-pie [data-not-in-pie]') }));
+      expect(F + ' spending', !gray.arcs && gray.row && gray.mark, '"Not sorted yet" should be left out of the circle and still listed below it (' + JSON.stringify(gray) + ')');
+    }
     if (t === 'activity') {
       const est = await page.evaluate(() => ({ on: !!document.querySelector('.fi-row[data-tx="t08"] [data-est]'), other: document.querySelectorAll('[data-est]').length }));
       expect(F + ' activity', est.on && est.other === 1, 'a row the robot added before the bank confirmed it should say Estimate, and only that row (' + JSON.stringify(est) + ')');

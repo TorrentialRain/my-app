@@ -379,20 +379,26 @@
     const sel = '<label class="fi-select"><select data-pie aria-label="Which paycheck">' + names.map((n, i) => '<option value="' + i + '"' + (i === pieAt ? ' selected' : '') + '>' + n + '</option>').join('') + '</select>' + ic(ICON.chev, 18) + '</label>';
     const r = 70, C = 2 * Math.PI * r;
     let off = 0, arcs = '', lists = '';
-    const pct = percents(P.groups.map((g) => g.share || 0));
+    // "Not sorted yet" (gray) stays out of the circle, so the sorted groups fill it, but keeps its line in the list
+    // below (Josh, Nov 28: "Grey shouldn't display on the pie chart, keep it posted below though").
+    const inPie = (g) => g.group !== 'unsorted';
+    const pieTotal = P.groups.filter(inPie).reduce((s, g) => s + g.total, 0);
+    const shares = percents(P.groups.filter(inPie).map((g) => (pieTotal ? g.total / pieTotal : 0)));
+    let si = 0;
+    const pct = P.groups.map((g) => (inPie(g) ? shares[si++] : null));
     for (const [gi, g] of P.groups.entries()) {
       const shades = SHADES[g.group] || SHADES.unsorted;
       const rows = g.cats.map((c, i) => {
         const col = shades[Math.min(i, shades.length - 1)];
-        const len = P.total ? (c.total / P.total) * C : 0;
-        arcs += '<circle r="' + r + '" cx="90" cy="90" fill="none" stroke="' + col + '" stroke-width="30" stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2) + '" stroke-dashoffset="' + (-off).toFixed(2) + '"/>';
+        const len = inPie(g) && pieTotal ? (c.total / pieTotal) * C : 0;
+        if (len > 0) arcs += '<circle r="' + r + '" cx="90" cy="90" fill="none" stroke="' + col + '" stroke-width="30" stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2) + '" stroke-dashoffset="' + (-off).toFixed(2) + '"/>';
         off += len;
         return '<li><i class="sq" style="background:' + col + '"></i><span>' + esc(c.name) + '</span><span>' + M.money(c.total) + '</span></li>';
       }).join('');
       const back = g.group === 'savings' && g.out > 0.005;
       const extra = back ? '<li class="fi-out"><i class="sq" aria-hidden="true"></i><span>Taken back out</span><span>' + M.signed(-g.out) + '</span></li><li class="fi-kept"><i class="sq" aria-hidden="true" style="background:' + GROUP_COLOR.savings + '"></i><span>Kept</span><span>' + M.money(g.kept) + '</span></li>' : '';
       const shown = back ? M.money(g.kept) + ' kept' : M.money(g.total);
-      lists += '<div class="fi-group"><p class="fi-gname" style="--gc:' + GROUP_COLOR[g.group] + '">' + esc(g.name) + '</p><p class="fi-gsum" data-pct="' + pct[gi] + '">' + pct[gi] + '% · ' + shown + '</p><ul class="fi-list">' + rows + extra + '</ul></div>';
+      lists += '<div class="fi-group"><p class="fi-gname" style="--gc:' + GROUP_COLOR[g.group] + '">' + esc(g.name) + '</p>' + (pct[gi] == null ? '<p class="fi-gsum" data-not-in-pie>' + shown + ' · not in the circle</p>' : '<p class="fi-gsum" data-pct="' + pct[gi] + '">' + pct[gi] + '% · ' + shown + '</p>') + '<ul class="fi-list">' + rows + extra + '</ul></div>';
     }
     // The total sits inside the ring, drawn as part of the picture so nothing can slide over it.
     const donut = '<div class="fi-donut"><svg viewBox="0 0 180 180" role="img" aria-label="Spent ' + M.money(P.total) + ' since ' + M.monthDay(p.start) + '"><g transform="rotate(-90 90 90)"><circle r="' + r + '" cx="90" cy="90" fill="none" class="fi-ring" stroke-width="30"/>' + arcs + '</g>' +
